@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSHealthShareUsageDescription</key>
+    <string>We read your workouts, steps, and running routes from Health to display your activity and track progress in the app.</string>
+    <key>NSHealthUpdateUsageDescription</key>
+    <string>We save your runs to Health so your fitness data stays in one place.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>We use your location to track runs, show your route on the map, and fetch local weather.</string>
+</dict>
+</plist>

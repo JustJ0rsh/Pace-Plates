@@ -1,0 +1,248 @@
+import Foundation
+
+/// Centralized prompt construction for AI fitness coaching
+/// Keeps prompts concise to avoid context window overflow
+enum AIPromptBuilder {
+    static let maxPromptChars = 3500
+    
+    // MARK: - Core Instructions
+    
+    static func baseCoachInstructions(withWebSearch: Bool) -> String {
+        if withWebSearch {
+            return "You are a creative fitness/nutrition coach. Use webSearch for factual queries and cite sources [1], [2]. Prefer exercises from the user's library when recommending workouts. Keep responses varied and helpful."
+        } else {
+            return "You are a creative fitness/nutrition coach. Provide practical, varied guidance. Prefer exercises from the user's library when recommending workouts. Keep responses concise and actionable."
+        }
+    }
+    
+    // MARK: - Conversation Prompts
+    
+    static func buildConversationPrompt(
+        goal: String,
+        question: String,
+        weightUnit: String,
+        distanceUnit: String,
+        userStats: WorkoutPlanGenerator.UserStats,
+        recentContext: [String] = [],
+        includeWebSearchGuidance: Bool = false
+    ) -> String {
+        var lines: [String] = []
+        
+        lines.append(baseCoachInstructions(withWebSearch: includeWebSearchGuidance))
+        lines.append("Goal: \(goal) | Units: \(weightUnit), \(distanceUnit)")
+        lines.append("")
+        
+        // User stats summary
+        lines.append(contentsOf: formatUserStats(userStats))
+        
+        // Include conversation summary if context was recently reset
+        if let summary = WorkoutPlanGenerator.lastConversationSummary {
+            lines.append("\n📝 Recent conversation context:")
+            lines.append(summary)
+        }
+        
+        // Recent context (avoid repetition)
+        if !recentContext.isEmpty {
+            lines.append("\nPrevious context (don't repeat):")
+            lines.append(contentsOf: recentContext.prefix(8).map { "- \(String($0.prefix(100)))" })
+        }
+        
+        // Web search guidance if enabled
+        if includeWebSearchGuidance {
+            lines.append("\nFor factual claims, use: webSearch('focused query', 3)")
+            lines.append("Cite sources naturally: 'Research shows [1]...'")
+        }
+        
+        lines.append("\nQuestion: \(question)")
+        
+        return clamp(lines.joined(separator: "\n"))
+    }
+    
+    // MARK: - Plan Generation Prompts
+    
+    static func buildPlanPrompt(
+        goal: String,
+        context: String,
+        weightUnit: String,
+        distanceUnit: String,
+        userStats: WorkoutPlanGenerator.UserStats,
+        includeWebSearchGuidance: Bool = false
+    ) -> String {
+        var lines: [String] = []
+        
+        // TEMPORARILY COMMENTED OUT: Testing @Generable guided generation instead of Markdown
+        /*
+        lines.append("Generate a creative 1-week training plan in Markdown.")
+        lines.append("Goal: \(goal) | Units: \(weightUnit), \(distanceUnit)")
+        if !context.isEmpty { lines.append("Notes: \(context)") }
+        lines.append("")
+        
+        // User stats
+        lines.append(contentsOf: formatUserStats(userStats))
+        
+        // Format guidelines
+        lines.append("")
+        lines.append("## FORMAT:")
+        lines.append("- Heading: '## This Week's Training Plan'")
+        lines.append("- Days: 'Day 1:' through 'Day 7:' — Title each day as 'Day N: [Type]' where [Type] is one of: Strength Upper, Strength Lower, Full Body Strength, Run Easy, Run Tempo, Run Intervals, Long Run, Cycling Endurance, Rowing, Swimming, Active Recovery, Rest")
+        lines.append("- Strength Items: **Exercise** — sets x reps @ weight (e.g., **Bench Press** — 4x6 @ 185 \(weightUnit))")
+        lines.append("- Strength days: include 4–6 total exercises. Aim for 2–3 compound lifts (e.g., squat/deadlift/press/row), 2–3 accessories (e.g., lunges, flyes, lateral raises, curls/extensions), and (optionally) 1 core/finisher.")
+        
+        // Running format with user's actual pace
+        if let avgPace = userStats.avgRecentPace {
+            lines.append("- Running: 'Run: X.X \(distanceUnit) — pace mm:ss per \(distanceUnit) using baseline \(avgPace), adjusted for easy/moderate/tempo/interval/long; include total time computed from distance x pace'")
+        } else {
+            lines.append("- Running: 'Run: X.X \(distanceUnit) at easy/moderate pace'")
+        }
+        
+        lines.append("- Rest days: If a day is rest, the section should be exactly 'Rest Day' or 'Active Recovery'. Do NOT add a 'Rest' line to a training day. Include 1–2 rest/recovery days in the week as appropriate.")
+        lines.append("")
+        lines.append("VARIETY: Mix rep schemes (3x5, 4x8, 3x10), intensities, and exercises")
+        lines.append("WEIGHTS: Compute and show numeric working weights in the user's unit using e1RM and recent performance. Output numbers (e.g., 3x5 @ 185), not % of e1RM. If no baseline exists, suggest a conservative start and a small progression.")
+        
+        // Cycling guidance distinct from running
+        lines.append("CYCLING: Express as duration + effort (RPE or HR zone). If adding numbers, use a speed range (e.g., 12–16 mph or 20–26 km/h). Do NOT use running-style pace (mm:ss per unit), and avoid unrealistic values like '200:30'.")
+        
+        // Running pace guidance
+        if let avgPace = userStats.avgRecentPace {
+            lines.append("")
+            lines.append("RUNNING PACE: User's recent average is \(avgPace). Use this as baseline. For each run, include an explicit pace target (mm:ss per \(distanceUnit)):")
+            lines.append("- Easy: +30–60s per \(distanceUnit) slower than baseline")
+            lines.append("- Moderate: at or near baseline")
+            lines.append("- Tempo: −10–25s per \(distanceUnit) faster than baseline")
+            lines.append("- Intervals: −20–60s per \(distanceUnit) faster than baseline")
+            lines.append("- Long run: baseline to +20s per \(distanceUnit)")
+            lines.append("If you include total time, compute it from distance × target pace and keep it consistent with the pace you provide. Avoid unrealistic times.")
+        }
+
+        // Exercise selection guidance
+        lines.append("")
+        lines.append("EXERCISE SELECTION: Use only exercises from the user's library list below when suggesting workouts. You may choose any of them, not just ones with past logs.")
+        
+        // Cardio variety across the week
+        lines.append("")
+        lines.append("CARDIO VARIETY: Rotate modalities to target different muscles and limit overuse. Mix running, cycling, rowing, swimming, stair climbing, jump rope, brisk hiking. Include at least 2 different cardio types during the week. Provide duration + effort guidance (RPE 3–8 or HR zones). For non-running cardio, avoid mm:ss pace; prefer speed ranges (mph/km/h), cadence, or stroke rate.")
+
+        // Experience-based guidance
+        lines.append("")
+        if userStats.experienceLevel == "beginner" {
+            lines.append("BEGINNER GUIDANCE:")
+            lines.append("- User is NEW TO WORKING OUT. Prioritize form, safety, and building confidence.")
+            lines.append("- Choose BEGINNER-FRIENDLY exercises: machines, bodyweight, dumbbells. Avoid complex barbell movements initially.")
+            lines.append("- Prefer exercises like: Push-Ups, Goblet Squats, Dumbbell Press, Lat Pulldowns, Leg Press, Machine exercises.")
+            lines.append("- Start with LOWER weights (40-60% estimated capacity), MODERATE volume (2-3 sets), and HIGHER reps (10-15).")
+            lines.append("- Include REST days and focus on RECOVERY. Suggest 3-4 training days per week.")
+            lines.append("- For cardio: walking, light jogging, stationary bike, swimming. Keep intensity LOW to MODERATE (RPE 3-6).")
+        } else {
+            lines.append("EXPERIENCED GUIDANCE:")
+            lines.append("- User is EXPERIENCED. You can suggest any beneficial workout including advanced techniques.")
+            lines.append("- Use a full range of exercises: compound barbell lifts, Olympic variations, advanced techniques.")
+            lines.append("- Vary intensity: include heavy (3-5 reps), moderate (6-8 reps), and volume (10-15 reps) work.")
+            lines.append("- Can handle 4-6 training days per week with proper periodization.")
+            lines.append("- For cardio: can include tempo runs, intervals, hill work, and longer endurance sessions.")
+        }
+        
+        // STRICT OUTPUT RULES
+        lines.append("")
+        lines.append("STRICT RULES:")
+        lines.append("- Strength days: include 4–6 exercises total. Aim 2–3 compound lifts + 2–3 accessories + optional 1 core/finisher.")
+        lines.append("- Sets/Reps: provide specific sets and reps for each exercise.")
+        lines.append("- Weights: output numeric working weights in \(weightUnit). Do NOT write '% of 1RM'. If no baseline, give a conservative numeric start.")
+        lines.append("- Running: include distance (\(distanceUnit)), pace as mm:ss per \(distanceUnit), and total time = distance × pace. Keep time consistent.")
+        lines.append("- Other cardio: include duration and effort; if numbers are given, use speed ranges (mph/km/h). Do not present mm:ss pace for non-running cardio.")
+        
+        if includeWebSearchGuidance {
+            lines.append("\nFor evidence-based methods, use: webSearch('training query', 3)")
+        }
+        */
+        
+        // TESTING: Simple prompt for @Generable guided generation
+        lines.append("Create a 1-week training plan.")
+        lines.append("Goal: \(goal) | Units: \(weightUnit), \(distanceUnit)")
+        if !context.isEmpty { lines.append("Context: \(context)") }
+        
+        // User stats (keep this for context)
+        lines.append(contentsOf: formatUserStats(userStats))
+        
+        // Key guidance for structured generation
+        lines.append("")
+        if userStats.experienceLevel == "beginner" {
+            lines.append("User is NEW to working out. Choose beginner-friendly exercises (machines, bodyweight, dumbbells). Start with lower weights, 2-3 sets, 10-15 reps. Include rest days.")
+        } else {
+            lines.append("User is EXPERIENCED. Include compound lifts, varied rep schemes, and 4-6 training days.")
+        }
+        
+        lines.append("Strength days: 4-6 exercises (2-3 compound lifts + 2-3 accessories).")
+        lines.append("Use exercises from library when possible. Include 1-2 rest/recovery days.")
+        
+        if let avgPace = userStats.avgRecentPace {
+            lines.append("Running baseline: \(avgPace). Adjust for easy/tempo/intervals/long runs.")
+        }
+        
+        return clamp(lines.joined(separator: "\n"))
+    }
+    
+    // MARK: - Helper Methods
+    
+    private static func formatUserStats(_ stats: WorkoutPlanGenerator.UserStats) -> [String] {
+        var lines: [String] = []
+        
+        // Experience level - very important for plan generation
+        lines.append("Experience Level: \(stats.experienceLevel == "beginner" ? "New to Working Out (Beginner)" : "Experienced")")
+        
+        if let weight = stats.latestWeight {
+            lines.append("Weight: \(String(format: "%.1f", weight)) \(stats.weightUnit)")
+        }
+        
+        if let steps = stats.todaySteps, steps > 0 {
+            lines.append("Today's steps: \(steps)")
+        }
+        
+        if stats.workoutSessions > 0 {
+            lines.append("Recent training (14d): \(stats.workoutSessions) sessions")
+            if stats.totalLifted > 0 {
+                lines.append("Volume: \(String(format: "%.0f", stats.totalLifted)) \(stats.weightUnit)")
+            }
+        }
+        
+        // Cardio summary with explicit timeframes
+        if stats.weeklyRunSessions > 0 || stats.runSessions > 0 || stats.recentHealthKitRuns > 0 {
+            let weekStr = "This week: \(stats.weeklyRunSessions) runs, \(String(format: "%.1f", stats.weeklyDistance)) \(stats.distanceUnit)"
+            lines.append("Cardio — \(weekStr)")
+            let last14 = "Last 14d: \(stats.runSessions) runs, \(String(format: "%.1f", stats.totalDistance)) \(stats.distanceUnit)"
+            lines.append(last14)
+            if stats.recentHealthKitRuns > 0 {
+                lines.append("Imported HealthKit runs (14d): \(stats.recentHealthKitRuns)")
+            }
+            if let pace = stats.avgRecentPace { lines.append("Avg pace (recent): \(pace)") }
+        }
+        
+        // Available exercises (full library)
+        if !stats.exerciseLibrary.isEmpty {
+            lines.append("\nAvailable exercises (library):")
+            // Keep list compact to fit context window
+            for name in stats.exerciseLibrary.prefix(30) {
+                lines.append("- \(name)")
+            }
+        }
+
+        if !stats.exerciseBaselines.isEmpty {
+            lines.append("\nExercise baselines (recent performance):")
+            for baseline in stats.exerciseBaselines.prefix(5) {
+                let recent = baseline.lastByReps.sorted { $0.key < $1.key }
+                    .map { "\($0.key)x@\(Int($0.value))" }
+                    .prefix(3)
+                    .joined(separator: ", ")
+                lines.append("- \(baseline.name): e1RM ~\(Int(baseline.e1rm)) \(stats.weightUnit) (\(recent))")
+            }
+        }
+        
+        return lines
+    }
+
+    
+    
+    private static func clamp(_ text: String) -> String {
+        text.count <= maxPromptChars ? text : String(text.prefix(maxPromptChars))
+    }
+}

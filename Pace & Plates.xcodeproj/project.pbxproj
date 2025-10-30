@@ -1,0 +1,619 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		4226C1812E9DED2A00908453 /* Info 2.plist in Resources */ = {isa = PBXBuildFile; fileRef = 4226C1802E9DED2A00908453 /* Info 2.plist */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		42B50D322D9DE5690082A9FA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 42B50D192D9DE5670082A9FA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 42B50D202D9DE5670082A9FA;
+			remoteInfo = WorkingOut;
+		};
+		42B50D3C2D9DE5690082A9FA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 42B50D192D9DE5670082A9FA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 42B50D202D9DE5670082A9FA;
+			remoteInfo = WorkingOut;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		4226C17A2E94A47300908453 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		4226C1802E9DED2A00908453 /* Info 2.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info 2.plist"; sourceTree = "<group>"; };
+		42B50D212D9DE5670082A9FA /* Pace & Plates.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Pace & Plates.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		42B50D312D9DE5690082A9FA /* Pace & PlatesTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Pace & PlatesTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		42B50D3B2D9DE5690082A9FA /* Pace & PlatesUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Pace & PlatesUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		42FCE1502EA875FA00334FD2 /* WeatherKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WeatherKit.framework; path = System/Library/Frameworks/WeatherKit.framework; sourceTree = SDKROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		42FCE02B2E9F216E00334FD2 /* Exceptions for "WorkingOut" folder in "Pace & Plates" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 42B50D202D9DE5670082A9FA /* Pace & Plates */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		42B50D232D9DE5670082A9FA /* WorkingOut */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				42FCE02B2E9F216E00334FD2 /* Exceptions for "WorkingOut" folder in "Pace & Plates" target */,
+			);
+			path = WorkingOut;
+			sourceTree = "<group>";
+		};
+		42B50D342D9DE5690082A9FA /* WorkingOutTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = WorkingOutTests;
+			sourceTree = "<group>";
+		};
+		42B50D3E2D9DE5690082A9FA /* WorkingOutUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = WorkingOutUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		42B50D1E2D9DE5670082A9FA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		42B50D2E2D9DE5690082A9FA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		42B50D382D9DE5690082A9FA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		42B50D182D9DE5670082A9FA = {
+			isa = PBXGroup;
+			children = (
+				42B50D232D9DE5670082A9FA /* WorkingOut */,
+				42B50D342D9DE5690082A9FA /* WorkingOutTests */,
+				42B50D3E2D9DE5690082A9FA /* WorkingOutUITests */,
+				42B50D222D9DE5670082A9FA /* Products */,
+				4226C17A2E94A47300908453 /* Info.plist */,
+				4226C1802E9DED2A00908453 /* Info 2.plist */,
+				42FCE14F2EA875FA00334FD2 /* Frameworks */,
+			);
+			sourceTree = "<group>";
+		};
+		42B50D222D9DE5670082A9FA /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				42B50D212D9DE5670082A9FA /* Pace & Plates.app */,
+				42B50D312D9DE5690082A9FA /* Pace & PlatesTests.xctest */,
+				42B50D3B2D9DE5690082A9FA /* Pace & PlatesUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		42FCE14F2EA875FA00334FD2 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				42FCE1502EA875FA00334FD2 /* WeatherKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		42B50D202D9DE5670082A9FA /* Pace & Plates */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 42B50D452D9DE5690082A9FA /* Build configuration list for PBXNativeTarget "Pace & Plates" */;
+			buildPhases = (
+				42B50D1D2D9DE5670082A9FA /* Sources */,
+				42B50D1E2D9DE5670082A9FA /* Frameworks */,
+				42B50D1F2D9DE5670082A9FA /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				42B50D232D9DE5670082A9FA /* WorkingOut */,
+			);
+			name = "Pace & Plates";
+			packageProductDependencies = (
+			);
+			productName = WorkingOut;
+			productReference = 42B50D212D9DE5670082A9FA /* Pace & Plates.app */;
+			productType = "com.apple.product-type.application";
+		};
+		42B50D302D9DE5690082A9FA /* Pace & PlatesTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 42B50D482D9DE5690082A9FA /* Build configuration list for PBXNativeTarget "Pace & PlatesTests" */;
+			buildPhases = (
+				42B50D2D2D9DE5690082A9FA /* Sources */,
+				42B50D2E2D9DE5690082A9FA /* Frameworks */,
+				42B50D2F2D9DE5690082A9FA /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				42B50D332D9DE5690082A9FA /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				42B50D342D9DE5690082A9FA /* WorkingOutTests */,
+			);
+			name = "Pace & PlatesTests";
+			packageProductDependencies = (
+			);
+			productName = WorkingOutTests;
+			productReference = 42B50D312D9DE5690082A9FA /* Pace & PlatesTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		42B50D3A2D9DE5690082A9FA /* Pace & PlatesUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 42B50D4B2D9DE5690082A9FA /* Build configuration list for PBXNativeTarget "Pace & PlatesUITests" */;
+			buildPhases = (
+				42B50D372D9DE5690082A9FA /* Sources */,
+				42B50D382D9DE5690082A9FA /* Frameworks */,
+				42B50D392D9DE5690082A9FA /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				42B50D3D2D9DE5690082A9FA /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				42B50D3E2D9DE5690082A9FA /* WorkingOutUITests */,
+			);
+			name = "Pace & PlatesUITests";
+			packageProductDependencies = (
+			);
+			productName = WorkingOutUITests;
+			productReference = 42B50D3B2D9DE5690082A9FA /* Pace & PlatesUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		42B50D192D9DE5670082A9FA /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1620;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					42B50D202D9DE5670082A9FA = {
+						CreatedOnToolsVersion = 16.2;
+					};
+					42B50D302D9DE5690082A9FA = {
+						CreatedOnToolsVersion = 16.2;
+						TestTargetID = 42B50D202D9DE5670082A9FA;
+					};
+					42B50D3A2D9DE5690082A9FA = {
+						CreatedOnToolsVersion = 16.2;
+						TestTargetID = 42B50D202D9DE5670082A9FA;
+					};
+				};
+			};
+			buildConfigurationList = 42B50D1C2D9DE5670082A9FA /* Build configuration list for PBXProject "Pace & Plates" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 42B50D182D9DE5670082A9FA;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 42B50D222D9DE5670082A9FA /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				42B50D202D9DE5670082A9FA /* Pace & Plates */,
+				42B50D302D9DE5690082A9FA /* Pace & PlatesTests */,
+				42B50D3A2D9DE5690082A9FA /* Pace & PlatesUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		42B50D1F2D9DE5670082A9FA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4226C1812E9DED2A00908453 /* Info 2.plist in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		42B50D2F2D9DE5690082A9FA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		42B50D392D9DE5690082A9FA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		42B50D1D2D9DE5670082A9FA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		42B50D2D2D9DE5690082A9FA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		42B50D372D9DE5690082A9FA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		42B50D332D9DE5690082A9FA /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 42B50D202D9DE5670082A9FA /* Pace & Plates */;
+			targetProxy = 42B50D322D9DE5690082A9FA /* PBXContainerItemProxy */;
+		};
+		42B50D3D2D9DE5690082A9FA /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 42B50D202D9DE5670082A9FA /* Pace & Plates */;
+			targetProxy = 42B50D3C2D9DE5690082A9FA /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		42B50D432D9DE5690082A9FA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = JK2CCHMR6P;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		42B50D442D9DE5690082A9FA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = JK2CCHMR6P;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		42B50D462D9DE5690082A9FA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				CODE_SIGN_ENTITLEMENTS = WorkingOut/WorkingOut.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"WorkingOut/Preview Content\"";
+				DEVELOPMENT_TEAM = JK2CCHMR6P;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WorkingOut/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "We read your workouts, distance, heart rate, VO₂ max, and related metrics to show progress and trends.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We write your running workouts, distance, and active energy to keep your Apple Health records complete.";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "We use your location to track runs even when the app is in the background.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We use your location to track your run distance on the map.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_SWIFT_FLAGS = "-DAI_FOUNDATION_AVAILABLE";
+				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOut;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		42B50D472D9DE5690082A9FA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				CODE_SIGN_ENTITLEMENTS = WorkingOut/WorkingOut.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"WorkingOut/Preview Content\"";
+				DEVELOPMENT_TEAM = JK2CCHMR6P;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WorkingOut/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "We read your workouts, distance, heart rate, VO₂ max, and related metrics to show progress and trends.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We write your running workouts, distance, and active energy to keep your Apple Health records complete.";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "We use your location to track runs even when the app is in the background.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We use your location to track your run distance on the map.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_SWIFT_FLAGS = "-DAI_FOUNDATION_AVAILABLE";
+				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOut;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		42B50D492D9DE5690082A9FA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOutTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pace & Plates.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Pace & Plates";
+			};
+			name = Debug;
+		};
+		42B50D4A2D9DE5690082A9FA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOutTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pace & Plates.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Pace & Plates";
+			};
+			name = Release;
+		};
+		42B50D4C2D9DE5690082A9FA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOutUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = WorkingOut;
+			};
+			name = Debug;
+		};
+		42B50D4D2D9DE5690082A9FA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOutUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = WorkingOut;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		42B50D1C2D9DE5670082A9FA /* Build configuration list for PBXProject "Pace & Plates" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				42B50D432D9DE5690082A9FA /* Debug */,
+				42B50D442D9DE5690082A9FA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		42B50D452D9DE5690082A9FA /* Build configuration list for PBXNativeTarget "Pace & Plates" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				42B50D462D9DE5690082A9FA /* Debug */,
+				42B50D472D9DE5690082A9FA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		42B50D482D9DE5690082A9FA /* Build configuration list for PBXNativeTarget "Pace & PlatesTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				42B50D492D9DE5690082A9FA /* Debug */,
+				42B50D4A2D9DE5690082A9FA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		42B50D4B2D9DE5690082A9FA /* Build configuration list for PBXNativeTarget "Pace & PlatesUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				42B50D4C2D9DE5690082A9FA /* Debug */,
+				42B50D4D2D9DE5690082A9FA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 42B50D192D9DE5670082A9FA /* Project object */;
+}
