@@ -74,12 +74,15 @@ struct AIHistoryDetailView: View {
     @State private var showCalendarSuccess = false
     @State private var calendarError: String? = nil
     @AppStorage("useStructuredPlanView") private var useStructuredPlanView: Bool = false
+    @AppStorage("selectedCalendarIdentifier") private var selectedCalendarIdentifier: String?
     @State private var showScheduleOptions = false
     @State private var scheduleStartTime: Date = Calendar.current.date(bySettingHour: 8, minute: 0, second: 0, of: Date()) ?? Date()
     @State private var scheduleDurationMin: Int = 60
     @State private var showTemplateSuccess = false
     @State private var showDaySelection = false
     @State private var availableWorkoutDays: [(index: Int, title: String, type: String)] = []
+    @State private var availableCalendars: [EKCalendar] = []
+    @State private var selectedCalendar: EKCalendar?
 
     var body: some View {
         ScrollView {
@@ -262,30 +265,84 @@ struct AIHistoryDetailView: View {
         .sheet(isPresented: $showShare) { ShareSheet(items: [convo.response]) }
         .sheet(isPresented: $showScheduleOptions) {
             NavigationStack {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Choose time window for scheduled workouts")
-                        .font(.headline)
-                    DatePicker("Start time", selection: $scheduleStartTime, displayedComponents: .hourAndMinute)
-                        .datePickerStyle(.wheel)
-                    HStack {
-                        Text("Duration")
-                        Spacer()
-                        Stepper(value: $scheduleDurationMin, in: 15...180, step: 15) {
-                            Text("\(scheduleDurationMin) min")
+                Form {
+                    Section {
+                        DatePicker("Start time", selection: $scheduleStartTime, displayedComponents: .hourAndMinute)
+                            .datePickerStyle(.compact)
+                        
+                        HStack {
+                            Text("Duration")
+                            Spacer()
+                            Stepper(value: $scheduleDurationMin, in: 15...180, step: 15) {
+                                Text("\(scheduleDurationMin) min")
+                            }
                         }
+                    } header: {
+                        Text("Workout Time")
                     }
-                    Spacer()
+                    
+                    Section {
+                        if availableCalendars.isEmpty {
+                            Text("Loading calendars...")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Picker("Calendar", selection: $selectedCalendar) {
+                                ForEach(availableCalendars, id: \.calendarIdentifier) { calendar in
+                                    HStack {
+                                        Circle()
+                                            .fill(Color(cgColor: calendar.cgColor))
+                                            .frame(width: 12, height: 12)
+                                        Text(calendar.title)
+                                    }
+                                    .tag(calendar as EKCalendar?)
+                                }
+                            }
+                            .pickerStyle(.navigationLink)
+                        }
+                    } header: {
+                        Text("Calendar")
+                    } footer: {
+                        Text("Events will be added to the selected calendar")
+                    }
                 }
-                .padding()
                 .navigationTitle("Schedule Options")
+                .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Cancel") { showScheduleOptions = false }
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Schedule") {
+                            // Save selected calendar
+                            if let selected = selectedCalendar {
+                                selectedCalendarIdentifier = selected.calendarIdentifier
+                            }
                             showScheduleOptions = false
                             scheduleToCalendar(convo)
+                        }
+                        .disabled(selectedCalendar == nil)
+                    }
+                }
+                .onAppear {
+                    Task {
+                        do {
+                            try await WorkoutCalendarService.shared.requestAccess()
+                            let calendars = WorkoutCalendarService.shared.getWritableCalendars()
+                            await MainActor.run {
+                                availableCalendars = calendars
+                                // Set selected calendar from saved preference or default
+                                if let savedId = selectedCalendarIdentifier,
+                                   let saved = calendars.first(where: { $0.calendarIdentifier == savedId }) {
+                                    selectedCalendar = saved
+                                } else {
+                                    selectedCalendar = calendars.first
+                                }
+                            }
+                        } catch {
+                            await MainActor.run {
+                                calendarError = error.localizedDescription
+                                showScheduleOptions = false
+                            }
                         }
                     }
                 }
@@ -363,7 +420,8 @@ struct AIHistoryDetailView: View {
                     convo,
                     startHour: hour,
                     startMinute: minute,
-                    durationMinutes: scheduleDurationMin
+                    durationMinutes: scheduleDurationMin,
+                    calendarIdentifier: selectedCalendarIdentifier
                 )
                 await MainActor.run {
                     showCalendarSuccess = true

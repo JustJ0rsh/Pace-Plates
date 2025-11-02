@@ -15,8 +15,10 @@ final class RunningSession {
     var locations: Data = Data() // Stores encoded [CLLocationCoordinate2D]
     // If imported from Health, store the HKWorkout UUID to prevent duplicates and allow deletions
     var healthWorkoutUUID: String? = nil
+    // Activity type: "running", "walking", or "hiking"
+    var activityType: String = "running"
     
-    init(id: UUID = UUID(), date: Date = Date(), distance: Double, distanceUnit: String = "km", duration: TimeInterval, calories: Double? = nil, notes: String? = nil, locations: Data? = nil, healthWorkoutUUID: String? = nil) {
+    init(id: UUID = UUID(), date: Date = Date(), distance: Double, distanceUnit: String = "km", duration: TimeInterval, calories: Double? = nil, notes: String? = nil, locations: Data? = nil, healthWorkoutUUID: String? = nil, activityType: String = "running") {
         self.id = id
         self.date = date
         self.distance = distance
@@ -26,5 +28,6 @@ final class RunningSession {
         self.notes = notes
         self.locations = locations ?? Data()
         self.healthWorkoutUUID = healthWorkoutUUID
+        self.activityType = activityType
     }
 } 

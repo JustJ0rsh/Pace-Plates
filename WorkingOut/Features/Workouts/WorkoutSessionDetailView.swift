@@ -159,15 +159,34 @@ struct WorkoutSessionDetailView: View {
                                                     editingLog = log
                                                     editingLogIsNew = false
                                                 } label: {
-                                                    HStack {
-                                                        Text("Set \(log.setNumber)")
-                                                            .foregroundColor(AppTheme.textColor)
-                                                        Spacer()
-                                                        Text("\(log.reps) reps @ \(String(format: "%.1f", log.weight)) \(log.weightUnit)")
-                                                            .foregroundStyle(.secondary)
+                                            HStack {
+                                                Text("Set \(log.setNumber)")
+                                                    .foregroundColor(AppTheme.textColor)
+                                                Spacer()
+                                                if log.isCardio {
+                                                    // Show cardio metrics
+                                                    HStack(spacing: 8) {
+                                                        if let duration = log.formattedDuration {
+                                                            Text(duration)
+                                                                .foregroundStyle(.secondary)
+                                                        }
+                                                        if let distance = log.distance, let unit = log.distanceUnit {
+                                                            Text("• \(String(format: "%.2f", distance)) \(unit)")
+                                                                .foregroundStyle(.secondary)
+                                                        }
+                                                        if let pace = log.calculatedPace {
+                                                            Text("• \(pace)")
+                                                                .foregroundStyle(.secondary)
+                                                        }
                                                     }
-                                                    .contentShape(Rectangle())
-                                                    .padding(.vertical, 6)
+                                                } else {
+                                                    // Show strength metrics
+                                                    Text("\(log.reps) reps @ \(String(format: "%.1f", log.weight)) \(log.weightUnit)")
+                                                        .foregroundStyle(.secondary)
+                                                }
+                                            }
+                                            .contentShape(Rectangle())
+                                            .padding(.vertical, 6)
                                                 }
                                                 .buttonStyle(.plain)
                                                 Button(role: .destructive) {
@@ -337,9 +356,24 @@ struct ExerciseLogRow: View {
                 }
             }
             
-            Text("\(log.reps) reps @ \(String(format: "%.1f", log.weight)) \(log.weightUnit)")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            if log.isCardio {
+                HStack(spacing: 8) {
+                    if let duration = log.formattedDuration {
+                        Text(duration)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let distance = log.distance, let unit = log.distanceUnit {
+                        Text("• \(String(format: "%.2f", distance)) \(unit)")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else {
+                Text("\(log.reps) reps @ \(String(format: "%.1f", log.weight)) \(log.weightUnit)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
         }
         .contentShape(Rectangle())
         .onTapGesture { onEdit(log) }

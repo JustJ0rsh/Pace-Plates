@@ -6,7 +6,6 @@ struct WorkoutTemplateListView: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: [SortDescriptor<WorkoutTemplate>(\.createdDate, order: .reverse)]) private var templates: [WorkoutTemplate]
     @State private var selectedTemplate: WorkoutTemplate?
-    @State private var showTemplateDetail = false
     @State private var createdSession: WorkoutSession?
     @State private var selectedExperienceLevel: String? = nil
     @State private var selectedGoal: String? = nil
@@ -131,7 +130,6 @@ struct WorkoutTemplateListView: View {
                                     ForEach(filteredBuiltInTemplates) { template in
                                         BuiltInTemplateCard(template: template) {
                                             selectedTemplate = template
-                                            showTemplateDetail = true
                                         }
                                     }
                                 }
@@ -156,7 +154,6 @@ struct WorkoutTemplateListView: View {
                                     ForEach(aiGeneratedTemplates) { template in
                                         TemplateCard(template: template) {
                                             selectedTemplate = template
-                                            showTemplateDetail = true
                                         }
                                     }
                                 }
@@ -174,13 +171,11 @@ struct WorkoutTemplateListView: View {
         .foregroundColor(AppTheme.textColor)
         .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
-        .sheet(isPresented: $showTemplateDetail) {
-            if let template = selectedTemplate {
-                NavigationStack {
-                    TemplateDetailView(template: template) { session in
-                        createdSession = session
-                        showTemplateDetail = false
-                    }
+        .sheet(item: $selectedTemplate) { template in
+            NavigationStack {
+                TemplateDetailView(template: template) { session in
+                    createdSession = session
+                    selectedTemplate = nil
                 }
             }
         }

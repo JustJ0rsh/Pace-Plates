@@ -20,6 +20,14 @@ final class HealthKitManager: ObservableObject {
         set.insert(HKObjectType.quantityType(forIdentifier: .runningSpeed)!)
         // Read workout routes so we can render maps for Apple Watch runs
         set.insert(HKSeriesType.workoutRoute())
+
+        // Vitals snapshot types
+        set.insert(HKObjectType.quantityType(forIdentifier: .restingHeartRate)!)
+        set.insert(HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN)!)
+        set.insert(HKObjectType.quantityType(forIdentifier: .oxygenSaturation)!)
+        set.insert(HKObjectType.quantityType(forIdentifier: .bodyTemperature)!)
+        set.insert(HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!)
+
         return set
     }()
 
@@ -51,7 +59,7 @@ final class HealthKitManager: ObservableObject {
     }
 
     // MARK: - Save Workout
-    func saveRunWorkout(start: Date, end: Date, distanceMeters: Double, energyBurned: Double? = nil, route: [CLLocation]? = nil) async throws {
+    func saveRunWorkout(start: Date, end: Date, distanceMeters: Double, energyBurned: Double? = nil, route: [CLLocation]? = nil, activityType: String = "running") async throws {
         let store = self.healthStore
 
         // Prepare quantities
@@ -73,9 +81,20 @@ final class HealthKitManager: ObservableObject {
             additionalSamples.append(energySample)
         }
 
-        // Define the workout configuration for a running workout
+        // Map activity type to HKWorkoutActivityType
+        let hkActivityType: HKWorkoutActivityType
+        switch activityType {
+        case "walking":
+            hkActivityType = .walking
+        case "hiking":
+            hkActivityType = .hiking
+        default: // "running"
+            hkActivityType = .running
+        }
+
+        // Define the workout configuration
         let configuration = HKWorkoutConfiguration()
-        configuration.activityType = .running
+        configuration.activityType = hkActivityType
         configuration.locationType = .outdoor
 
         // Build the workout using HKWorkoutBuilder (iOS 17+ recommended)
@@ -235,6 +254,62 @@ final class HealthKitManager: ObservableObject {
                 if let error = error { continuation.resume(throwing: error); return }
                 continuation.resume(returning: ())
             }
+        }
+    }
+
+    // MARK: - Vitals Helpers
+
+    func latestQuantitySample(for id: HKQuantityTypeIdentifier) async throws -> HKQuantitySample? {
+        guard let type = HKQuantityType.quantityType(forIdentifier: id) else { return nil }
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+        let pred = HKQuery.predicateForSamples(withStart: .distantPast, end: Date(), options: [])
+
+        return try await withCheckedThrowingContinuation { cont in
+            let q = HKSampleQuery(sampleType: type, predicate: pred, limit: 1, sortDescriptors: [sort]) { _, samples, err in
+                if let err = err { cont.resume(throwing: err); return }
+                cont.resume(returning: samples?.first as? HKQuantitySample)
+            }
+            healthStore.execute(q)
+        }
+    }
+
+    func todaySum(for id: HKQuantityTypeIdentifier, unit: HKUnit) async throws -> Double {
+        guard let type = HKQuantityType.quantityType(forIdentifier: id) else { return 0 }
+        let cal = Calendar.current
+        let start = cal.startOfDay(for: Date())
+        let pred = HKQuery.predicateForSamples(withStart: start, end: Date(), options: .strictStartDate)
+
+        return try await withCheckedThrowingContinuation { cont in
+            let q = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: pred, options: .cumulativeSum) { _, stats, err in
+                if let err = err { cont.resume(throwing: err); return }
+                let val = stats?.sumQuantity()?.doubleValue(for: unit) ?? 0
+                cont.resume(returning: val)
+            }
+            healthStore.execute(q)
+        }
+    }
+
+    func lastNightSleepDuration() async throws -> TimeInterval {
+        guard let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else { return 0 }
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let lastNightStart = cal.date(byAdding: .day, value: -1, to: today)!
+        let pred = HKQuery.predicateForSamples(withStart: lastNightStart, end: today, options: .strictEndDate)
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+
+        return try await withCheckedThrowingContinuation { cont in
+            let q = HKSampleQuery(sampleType: type, predicate: pred, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, err in
+                if let err = err { cont.resume(throwing: err); return }
+                let total = (samples as? [HKCategorySample])?
+                    .filter { $0.value == HKCategoryValueSleepAnalysis.asleepCore.rawValue
+                           || $0.value == HKCategoryValueSleepAnalysis.asleepDeep.rawValue
+                           || $0.value == HKCategoryValueSleepAnalysis.asleepREM.rawValue
+                           || $0.value == HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue
+                    }
+                    .reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) } ?? 0.0
+                cont.resume(returning: total)
+            }
+            healthStore.execute(q)
         }
     }
 }

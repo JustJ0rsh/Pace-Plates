@@ -2,15 +2,20 @@ import SwiftUI
 import CoreLocation
 import SwiftData
 
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
+
 struct ContentView: View {
     let persistenceController = PersistenceController.shared // Need access to this
     @AppStorage("didShowTutorial") private var didShowTutorial: Bool = false
     @State private var showTutorial: Bool = false
     @State private var healthAuthError: String? = nil
-    @AppStorage("measurementSystem") private var measurementSystem: String = "metric"
+    @AppStorage("measurementSystem") private var measurementSystem: String = "imperial"
     @AppStorage("weightUnit") private var weightUnit: String = "lbs"
-    @AppStorage("distanceUnit") private var distanceUnit: String = "km"
-    @AppStorage("heightUnit") private var heightUnit: String = "cm"
+    @AppStorage("distanceUnit") private var distanceUnit: String = "mi"
+    @AppStorage("heightUnit") private var heightUnit: String = "in"
+    @State private var aiAvailability: WorkoutPlanGenerator.Availability = .unknown
 
     var body: some View {
         VStack(spacing: 0) {
@@ -21,9 +26,11 @@ struct ContentView: View {
                 NavigationStack { WorkoutLogView() }
                     .tabItem { Label("Workouts", systemImage: "figure.strengthtraining.traditional") }
                 
-                // Middle tab: AI
-                NavigationStack { AIPlannerView() }
-                    .tabItem { Label("AI", systemImage: "sparkles") }
+                // Middle tab: AI (show if supported, hide if device is not eligible)
+                if shouldShowAITab() {
+                    NavigationStack { AIPlannerView() }
+                        .tabItem { Label("AI", systemImage: "sparkles") }
+                }
                 
                 // Right side
                 NavigationStack { RunLogView() }
@@ -37,21 +44,9 @@ struct ContentView: View {
             .modelContainer(persistenceController.container)
             
         }
-        .task {
-            // Defer HealthKit prompt until after tutorial is completed
-            if didShowTutorial {
-                do {
-                    // Slight delay to ensure window is on screen before presenting HK sheet
-                    try await Task.sleep(nanoseconds: 400_000_000)
-                    try await HealthKitManager.shared.requestAuthorization()
-                    // After asking for Health access, request Location so weather/routes work
-                    await requestLocationAuthorizationIfNeeded()
-                } catch {
-                    healthAuthError = error.localizedDescription
-                }
-            }
-        }
         .onAppear {
+            // Check Apple Intelligence availability
+            aiAvailability = WorkoutPlanGenerator.shared.availability()
             // Seed + cleanup the exercise library safely (idempotent)
             ExerciseLibrary.populateInitialExercises(context: persistenceController.container.mainContext)
             persistenceController.deduplicateExerciseDefinitions()
@@ -122,6 +117,49 @@ extension ContentView {
             manager.requestWhenInUseAuthorization()
         }
     }
+    
+    /// Determines if the AI tab should be shown
+    /// Returns true if device supports Apple Intelligence (even if not enabled)
+    /// Returns false if device doesn't support it at all
+    private func shouldShowAITab() -> Bool {
+        #if AI_FOUNDATION_AVAILABLE
+        if #available(iOS 26, *) {
+            #if canImport(FoundationModels)
+            let model = SystemLanguageModel.default
+            
+            switch model.availability {
+            case .available:
+                // AI is ready - show tab
+                return true
+            case .unavailable(.appleIntelligenceNotEnabled):
+                // Device supports it but user hasn't enabled - show tab with message
+                return true
+            case .unavailable(.modelNotReady):
+                // Model is downloading - show tab with waiting message
+                return true
+            case .unavailable(.deviceNotEligible):
+                // Device doesn't support Apple Intelligence - hide tab completely
+                return false
+            case .unavailable:
+                // Other unavailable reason - hide tab
+                return false
+            @unknown default:
+                return false
+            }
+            #else
+            // FoundationModels couldn't be imported - hide tab
+            return false
+            #endif
+        } else {
+            // iOS too old - hide tab
+            return false
+        }
+        #else
+        // Build flag not set - hide tab
+        return false
+        #endif
+    }
+    
     // Removed debug-only sample run feature and top banner
 }
 

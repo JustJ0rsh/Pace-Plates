@@ -2,7 +2,7 @@ import SwiftUI
 
 struct WeatherSummaryView: View {
     @StateObject private var vm = WeatherViewModel()
-    @AppStorage("measurementSystem") private var measurementSystem: String = "metric"
+    @AppStorage("measurementSystem") private var measurementSystem: String = "imperial"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {

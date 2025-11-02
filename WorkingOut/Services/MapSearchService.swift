@@ -10,12 +10,32 @@ actor MapSearchService {
     private var cache: [String: String] = [:]
     private var lastRequestAt: Date? = nil
 
-    // Allow up to ~45 requests/minute (minDelay ~1.35s between calls)
-    private let minDelay: TimeInterval = 1.35
+    // Persistent cache using UserDefaults
+    private let cacheKey = "MapSearchService.locationCache"
+    private var persistentCache: [String: String] {
+        get {
+            UserDefaults.standard.dictionary(forKey: cacheKey) as? [String: String] ?? [:]
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: cacheKey)
+        }
+    }
+
+    // Allow up to ~25 requests/minute (minDelay ~2.4s between calls) to stay well under Apple's limits
+    // Apple allows ~400 requests per 10 minutes, so we target ~150 requests per 10 minutes for safety
+    private let minDelay: TimeInterval = 4.0
 
     func reverseAddressName(near coordinate: CLLocationCoordinate2D) async -> String? {
         let key = Self.key(for: coordinate)
+
+        // Check in-memory cache first
         if let cached = cache[key] { return cached }
+
+        // Check persistent cache
+        if let cached = persistentCache[key] {
+            cache[key] = cached // Promote to in-memory cache
+            return cached
+        }
 
         // Throttle: wait if last request was too recent
         if let last = lastRequestAt {
@@ -39,6 +59,9 @@ actor MapSearchService {
             lastRequestAt = Date()
             if let item = response.mapItems.first, let name = item.name, !name.isEmpty {
                 cache[key] = name
+                var persistent = persistentCache
+                persistent[key] = name
+                self.persistentCache = persistent
                 return name
             }
         } catch {

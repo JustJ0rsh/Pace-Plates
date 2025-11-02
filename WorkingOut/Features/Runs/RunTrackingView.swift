@@ -32,6 +32,9 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
     var isRunning: Bool = false
     var pendingStartAfterAuth: Bool = false
     
+    // Activity type: "running", "walking", or "hiking"
+    var activityType: String = "running"
+    
     // Throttle for map follow updates
     var lastFollowUpdate: Date? = nil
 
@@ -41,7 +44,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
     private let smoothingWindowSeconds: TimeInterval = 20
     private let smoothingMinDistance: Double = 25 // meters
     
-    @ObservationIgnored @AppStorage("distanceUnit") var distanceUnit = "km"
+    @ObservationIgnored @AppStorage("distanceUnit") var distanceUnit = "mi"
     
     override init() {
         authorizationStatus = manager.authorizationStatus
@@ -93,7 +96,8 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         LiveActivityManager.shared.start(startDate: startDate ?? Date(),
                                          distanceMeters: 0,
                                          paceSecondsPerUnit: nil,
-                                         distanceUnit: distanceUnit)
+                                         distanceUnit: distanceUnit,
+                                         activityType: activityType)
     }
     
     func pauseRun() {
@@ -135,7 +139,8 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         return RunningSession(distance: distance / (distanceUnit == "km" ? 1000 : 1609.34), // Convert meters to selected unit
                               distanceUnit: distanceUnit,
                               duration: duration,
-                              locations: locationsData)
+                              locations: locationsData,
+                              activityType: activityType)
     }
     
     private func startTimer() {
@@ -235,6 +240,8 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
 }
 
 struct RunTrackingProView: View {
+    let activityType: String
+    
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     
@@ -391,6 +398,9 @@ struct RunTrackingProView: View {
                     runTracker.requestCurrentLocation()
                 }
                 .onAppear {
+                    // Set the activity type from the parameter
+                    runTracker.activityType = activityType
+                    
                     // Initial center if we already have a location
                     if let coord = runTracker.location?.coordinate {
                         let initialRegion = MKCoordinateRegion(center: coord,
@@ -619,6 +629,7 @@ struct RunTrackingProView: View {
 
             // Fire-and-forget: write to HealthKit (if authorized). We derive start from end - duration.
             let startTime = endTime.addingTimeInterval(-session.duration)
+            let activityType = session.activityType
             Task { @MainActor in
                 do {
                     try await HealthKitManager.shared.saveRunWorkout(
@@ -626,7 +637,8 @@ struct RunTrackingProView: View {
                         end: endTime,
                         distanceMeters: distanceMeters,
                         energyBurned: nil,
-                        route: routeSnapshot
+                        route: routeSnapshot,
+                        activityType: activityType
                     )
                     
                 } catch {
@@ -644,6 +656,7 @@ struct RunTrackingProView: View {
             runTracker.location = nil
             runTracker.startDate = nil
             runTracker.isRunning = false
+            runTracker.activityType = "running" // Reset to default
 
             shouldFollowUser = false
             isSavingRun = false

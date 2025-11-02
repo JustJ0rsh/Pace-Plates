@@ -2,9 +2,55 @@ import ActivityKit
 import WidgetKit
 import SwiftUI
 
+// MARK: - Live Activity Attributes
+@available(iOS 16.1, *)
+struct RunningActivityAttributes: ActivityAttributes {
+    public struct ContentState: Codable, Hashable {
+        var startDate: Date
+        var duration: TimeInterval
+        var distanceMeters: Double
+        var paceSecondsPerUnit: Double?
+        var distanceUnit: String // "km" or "mi"
+
+        // Computed properties for display
+        var distanceInUnits: Double {
+            distanceUnit == "km" ? distanceMeters / 1000.0 : distanceMeters / 1609.34
+        }
+
+        var formattedDuration: String {
+            let hours = Int(duration) / 3600
+            let minutes = (Int(duration) % 3600) / 60
+            let seconds = Int(duration) % 60
+
+            if hours > 0 {
+                return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+            } else {
+                return String(format: "%02d:%02d", minutes, seconds)
+            }
+        }
+
+        var formattedPace: String {
+            guard let pace = paceSecondsPerUnit, pace > 0 && pace.isFinite else {
+                return "--:--"
+            }
+            let mins = Int(pace / 60)
+            let secs = Int(pace.truncatingRemainder(dividingBy: 60))
+            return String(format: "%d:%02d", mins, secs)
+        }
+
+        var formattedDistance: String {
+            String(format: "%.2f", distanceInUnits)
+        }
+    }
+
+    var title: String
+}
+
 // MARK: - Live Activity Widget
 @available(iOS 16.1, *)
 struct RunningLiveActivity: Widget {
+    let kind: String = "Jorsh.WorkingOut.RunningWidget"
+
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: RunningActivityAttributes.self) { context in
             // Lock screen/banner UI
@@ -121,19 +167,21 @@ struct LockScreenLiveActivityView: View {
             }
             
             // Main stats
-            HStack(spacing: 20) {
+            HStack(spacing: 16) {
                 // Distance
                 VStack(alignment: .leading, spacing: 4) {
                     Label("Distance", systemImage: "arrow.right")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("\(context.state.formattedDistance)")
-                        .font(.title)
-                        .fontWeight(.bold)
-                        .monospacedDigit()
-                    Text(context.state.distanceUnit)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(context.state.formattedDistance)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .monospacedDigit()
+                        Text(context.state.distanceUnit)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 
@@ -143,7 +191,7 @@ struct LockScreenLiveActivityView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Text(context.state.formattedDuration)
-                        .font(.title)
+                        .font(.title2)
                         .fontWeight(.bold)
                         .monospacedDigit()
                 }
@@ -154,13 +202,15 @@ struct LockScreenLiveActivityView: View {
                     Label("Pace", systemImage: "speedometer")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text(context.state.formattedPace)
-                        .font(.title)
-                        .fontWeight(.bold)
-                        .monospacedDigit()
-                    Text("/\(context.state.distanceUnit)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(context.state.formattedPace)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .monospacedDigit()
+                        Text("/\(context.state.distanceUnit)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
@@ -171,12 +221,9 @@ struct LockScreenLiveActivityView: View {
     }
 }
 
-// MARK: - Widget Bundle
-@available(iOS 16.1, *)
-@main
-struct RunningWidgetBundle: WidgetBundle {
-    var body: some Widget {
-        RunningLiveActivity()
-    }
-}
+// MARK: - Widget Registration
+// Note: Live Activities don't need a WidgetBundle with @main when embedded in the app.
+// The ActivityConfiguration is automatically discovered by ActivityKit when
+// Activity.request() is called in LiveActivityManager. The widget UI is rendered
+// by the system based on this configuration.
 

@@ -54,7 +54,7 @@ final class LiveActivityManager {
 
     private init() {}
 
-    func start(startDate: Date, distanceMeters: Double, paceSecondsPerUnit: Double?, distanceUnit: String) {
+    func start(startDate: Date, distanceMeters: Double, paceSecondsPerUnit: Double?, distanceUnit: String, activityType: String = "running") {
         // End any existing activity first
         end()
         
@@ -63,7 +63,18 @@ final class LiveActivityManager {
             return
         }
         
-        let attributes = RunningActivityAttributes(title: "Active Run")
+        // Map activity type to display title
+        let titleText: String
+        switch activityType {
+        case "walking":
+            titleText = "Active Walk"
+        case "hiking":
+            titleText = "Active Hike"
+        default: // "running"
+            titleText = "Active Run"
+        }
+        
+        let attributes = RunningActivityAttributes(title: titleText)
         let content = RunningActivityAttributes.ContentState(
             startDate: startDate,
             duration: 0,
@@ -73,7 +84,8 @@ final class LiveActivityManager {
         )
         
         do {
-            let activityContent = ActivityContent(state: content, staleDate: nil)
+            let staleDate = Date().addingTimeInterval(3600) // 1 hour from now
+            let activityContent = ActivityContent(state: content, staleDate: staleDate)
             activity = try Activity.request(attributes: attributes, content: activityContent, pushType: nil)
             print("✅ Live Activity started successfully")
         } catch {
@@ -96,7 +108,8 @@ final class LiveActivityManager {
         )
         
         Task {
-            await activity.update(ActivityContent(state: content, staleDate: nil))
+            let staleDate = Date().addingTimeInterval(3600) // 1 hour from now
+            await activity.update(ActivityContent(state: content, staleDate: staleDate))
         }
     }
 
@@ -104,10 +117,8 @@ final class LiveActivityManager {
         guard let activity else { return }
         
         Task {
-            let currentState = activity.content.state
-            let finalContent = ActivityContent(state: currentState, staleDate: nil)
-            await activity.end(finalContent, dismissalPolicy: .default)
-            print("✅ Live Activity ended")
+            await activity.end(nil, dismissalPolicy: .immediate)
+            print("✅ Live Activity ended immediately")
         }
         
         self.activity = nil
@@ -121,7 +132,7 @@ final class LiveActivityManager {
 final class LiveActivityManager {
     static let shared = LiveActivityManager()
     private init() {}
-    func start(startDate: Date, distanceMeters: Double, paceSecondsPerUnit: Double?, distanceUnit: String) {}
+    func start(startDate: Date, distanceMeters: Double, paceSecondsPerUnit: Double?, distanceUnit: String, activityType: String = "running") {}
     func update(startDate: Date, duration: TimeInterval, distanceMeters: Double, paceSecondsPerUnit: Double?, distanceUnit: String) {}
     func end() {}
     var isActive: Bool { false }

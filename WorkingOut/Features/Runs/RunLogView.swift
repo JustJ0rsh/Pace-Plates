@@ -6,7 +6,7 @@ import CoreLocation
 import Charts
 
 struct RunLogView: View {
-    @AppStorage("distanceUnit") private var preferredDistanceUnit: String = "km"
+    @AppStorage("distanceUnit") private var preferredDistanceUnit: String = "mi"
     // Helper type for chart points
     private struct DailyPoint: Identifiable {
         let date: Date
@@ -19,7 +19,10 @@ struct RunLogView: View {
     
     @State private var isEditing: Bool = false
     @State private var locationCache: [UUID: String] = [:]
+    @State private var pendingLocationTasks: Set<UUID> = [] // Track active location fetch tasks
+    @State private var hasPrefetchedLocations = false // Prevent duplicate prefetching
     @State private var showRunTracking: Bool = false
+    @State private var selectedActivityType: String = "running"
     @State private var stepsToday: Int? = nil
     @State private var requestedLocationAuthOnce = false
     private let healthStore = HKHealthStore()
@@ -46,13 +49,14 @@ struct RunLogView: View {
                     // Active Run banner
                     if RunTracker.shared.isRunning || (RunTracker.shared.duration > 0 && RunTracker.shared.startDate != nil) {
                         Button {
+                            selectedActivityType = RunTracker.shared.activityType
                             showRunTracking = true
                         } label: {
                             HStack(spacing: 12) {
-                                Image(systemName: "figure.run")
+                                Image(systemName: activityIcon(for: RunTracker.shared.activityType))
                                     .foregroundStyle(.white)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("Active Run In Progress")
+                                    Text("Active \(activityName(for: RunTracker.shared.activityType)) In Progress")
                                         .font(.headline)
                                     let dur = RunTracker.shared.duration
                                     let distMeters = RunTracker.shared.distance
@@ -156,6 +160,12 @@ struct RunLogView: View {
                                     RunSessionDetailView(session: session)
                                 } label: {
                                     HStack(alignment: .top) {
+                                        // Activity type icon
+                                        Image(systemName: activityIcon(for: session.activityType))
+                                            .font(.title2)
+                                            .foregroundStyle(AppTheme.accentColor)
+                                            .frame(width: 32)
+                                        
                                         VStack(alignment: .leading) {
                                             Text(session.date.formatted(date: .abbreviated, time: .shortened))
                                                 .font(.headline)
@@ -164,7 +174,7 @@ struct RunLogView: View {
                                             Text(formatDuration(session.duration))
                                                 .font(.subheadline)
                                                 .foregroundStyle(.secondary)
-                                            if let place = locationName(for: session), !place.isEmpty {
+                                            if let place = locationCache[session.id], !place.isEmpty {
                                                 Text(place)
                                                     .font(.caption)
                                                     .foregroundStyle(.secondary)
@@ -188,6 +198,13 @@ struct RunLogView: View {
                             }
                         }
                         .floatingTile()
+                        .onAppear {
+                            prefetchLocationNames()
+                        }
+                        .onChange(of: runningSessions) {
+                            hasPrefetchedLocations = false
+                            prefetchLocationNames()
+                        }
                     }
 
                     
@@ -230,12 +247,31 @@ struct RunLogView: View {
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showRunTracking = true
+                    Menu {
+                        Button {
+                            selectedActivityType = "running"
+                            showRunTracking = true
+                        } label: {
+                            Label("Run", systemImage: "figure.run")
+                        }
+                        
+                        Button {
+                            selectedActivityType = "walking"
+                            showRunTracking = true
+                        } label: {
+                            Label("Walk", systemImage: "figure.walk")
+                        }
+                        
+                        Button {
+                            selectedActivityType = "hiking"
+                            showRunTracking = true
+                        } label: {
+                            Label("Hike", systemImage: "figure.hiking")
+                        }
                     } label: {
                         Image(systemName: "plus")
                             .font(.system(size: 18, weight: .semibold))
-                            .accessibilityLabel("Track Run")
+                            .accessibilityLabel("Track Activity")
                     }
                 }
 
@@ -250,23 +286,56 @@ struct RunLogView: View {
                         manager.requestWhenInUseAuthorization()
                     }
                 }
-                // Ensure HealthKit is authorized for routes and steps; safe if already granted
-                Task { try? await HealthKitManager.shared.requestAuthorization() }
+                // Load data (HealthKit should already be authorized from tutorial)
                 fetchTodaySteps()
                 importHealthRuns()
             }
             .sheet(isPresented: $showRunTracking) {
                 NavigationStack {
-                    RunTrackingProView()
-                        .navigationTitle("Track Run")
+                    RunTrackingProView(activityType: selectedActivityType)
+                        .navigationTitle(activityTitle(for: selectedActivityType))
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
                         .toolbarColorScheme(.dark, for: .navigationBar)
                 }
+                .id(selectedActivityType) // Force refresh when activity type changes
                 .appBackground(AppTheme.gradientRuns)
                 .foregroundColor(AppTheme.textColor)
                 .tint(AppTheme.accentColor)
             }
+        }
+    }
+    
+    private func activityTitle(for type: String) -> String {
+        switch type {
+        case "walking":
+            return "Tracking Walk"
+        case "hiking":
+            return "Tracking Hike"
+        default:
+            return "Tracking Run"
+        }
+    }
+    
+    private func activityIcon(for type: String) -> String {
+        switch type {
+        case "walking":
+            return "figure.walk"
+        case "hiking":
+            return "figure.hiking"
+        default:
+            return "figure.run"
+        }
+    }
+    
+    private func activityName(for type: String) -> String {
+        switch type {
+        case "walking":
+            return "Walk"
+        case "hiking":
+            return "Hike"
+        default:
+            return "Run"
         }
     }
     
@@ -421,19 +490,51 @@ struct RunLogView: View {
         return reduced
     }
     
-    private func locationName(for session: RunningSession) -> String? {
-        if let cached = locationCache[session.id] { return cached }
-        guard !session.locations.isEmpty,
-              let coords = try? JSONDecoder().decode([RunCoordinate].self, from: session.locations),
-              let first = coords.first?.cl else { return nil }
-        let coordinate = CLLocationCoordinate2D(latitude: first.latitude, longitude: first.longitude)
-        Task {
-            // Throttled global search to avoid PlaceRequest throttling
-            if let name = await MapSearchService.shared.reverseAddressName(near: coordinate) {
-                await MainActor.run { locationCache[session.id] = name }
+    private func prefetchLocationNames() {
+        // Prevent duplicate prefetching on the same set of sessions
+        guard !hasPrefetchedLocations || runningSessions.count != locationCache.count else { return }
+
+        // Only prefetch for sessions that don't already have cached names and aren't currently being fetched
+        let sessionsToFetch = runningSessions.filter { session in
+            locationCache[session.id] == nil && !pendingLocationTasks.contains(session.id)
+        }
+
+        // Limit concurrent requests to prevent overwhelming the service
+        let maxConcurrent = 3
+        let fetchCount = min(sessionsToFetch.count, maxConcurrent - pendingLocationTasks.count)
+
+        guard fetchCount > 0 else {
+            hasPrefetchedLocations = true
+            return
+        }
+
+        for session in sessionsToFetch.prefix(fetchCount) {
+            guard !session.locations.isEmpty,
+                  let coords = try? JSONDecoder().decode([RunCoordinate].self, from: session.locations),
+                  let first = coords.first?.cl else { continue }
+
+            pendingLocationTasks.insert(session.id)
+            let coordinate = CLLocationCoordinate2D(latitude: first.latitude, longitude: first.longitude)
+
+            Task {
+                // Throttled global search to avoid PlaceRequest throttling
+                if let name = await MapSearchService.shared.reverseAddressName(near: coordinate) {
+                    _ = await MainActor.run {
+                        locationCache[session.id] = name
+                        pendingLocationTasks.remove(session.id)
+                    }
+                } else {
+                    _ = await MainActor.run {
+                        pendingLocationTasks.remove(session.id)
+                    }
+                }
             }
         }
-        return nil
+
+        // Mark as prefetched if we've started fetching all available sessions
+        if sessionsToFetch.count <= fetchCount {
+            hasPrefetchedLocations = true
+        }
     }
 }
 
@@ -670,3 +771,4 @@ struct RunSessionDetailView: View {
         return max(met * 3.5 * kg / 200.0 * minutes, 0)
     }
 }
+

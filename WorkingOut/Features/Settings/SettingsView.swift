@@ -4,11 +4,11 @@ import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
-    @AppStorage("measurementSystem") private var measurementSystem: String = "metric" // "metric" or "imperial"
+    @AppStorage("measurementSystem") private var measurementSystem: String = "imperial" // "metric" or "imperial"
     @AppStorage("weightUnit") private var weightUnit = "lbs"
-    @AppStorage("distanceUnit") private var distanceUnit = "km"
+    @AppStorage("distanceUnit") private var distanceUnit = "mi"
     @AppStorage("weightGoal") private var weightGoal: String = "lose" // lose | maintain | gain
-    @AppStorage("heightUnit") private var heightUnit: String = "cm" // or "in"
+    @AppStorage("heightUnit") private var heightUnit: String = "in" // or "cm"
     @AppStorage("heightValue") private var heightValue: Double = 0
     @AppStorage("targetWeight") private var targetWeight: Double = 0
     @AppStorage("age") private var age: Int = 0

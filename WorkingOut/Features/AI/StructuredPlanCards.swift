@@ -65,21 +65,36 @@ private struct DayCard: View {
     }
     
     private func formatItem(_ it: Item) -> String {
+        // Strength exercise with sets/reps
         if let sets = it.sets, let reps = it.reps {
+            var base: String
             if let w = it.suggestedWeight, !w.isEmpty {
-                return "• \(it.name) — \(sets)x\(reps) @ \(w)"
+                base = "• \(it.name) — \(sets)x\(reps) @ \(w)"
             } else {
-                return "• \(it.name) — \(sets)x\(reps)"
+                base = "• \(it.name) — \(sets)x\(reps)"
             }
+            // Add notes inline if present
+            if let notes = it.notes, !notes.isEmpty {
+                base += " (\(notes))"
+            }
+            return base
         }
+        
+        // Cardio with distance
         if let d = it.distance, let u = it.distanceUnit {
             var s = "• \(it.name): \(String(format: "%.1f", d)) \(u)"
             if let p = it.pace { s += " @ \(p)" }
             if let m = it.durationMinutes { s += " (\(m) min)" }
             if let e = it.effort, !e.isEmpty { s += " — \(e)" }
+            // Add notes inline if present
+            if let notes = it.notes, !notes.isEmpty {
+                s += " (\(notes))"
+            }
             return s
         }
-        return it.notes.map { "• \(it.name): \($0)" } ?? "• \(it.name)"
+        
+        // Fallback: just name and notes
+        return it.notes.map { "• \(it.name) (\($0))" } ?? "• \(it.name)"
     }
 }
 #endif

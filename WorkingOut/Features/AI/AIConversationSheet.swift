@@ -37,11 +37,16 @@ struct AIConversationSheet: View {
     @State private var cachedBaselinePaceMinPerUnit: Double? = nil
     @State private var structuredPlanJSON: String? = nil
     @AppStorage("useStructuredPlanView") private var useStructuredPlanView: Bool = false
+    @AppStorage("selectedCalendarIdentifier") private var selectedCalendarIdentifier: String?
+    @State private var availableCalendars: [EKCalendar] = []
+    @State private var selectedCalendar: EKCalendar?
     @State private var scrollOffset: CGFloat = 0
     @State private var contentHeight: CGFloat = 0
     @State private var scrollViewHeight: CGFloat = 0
     @State private var autoFollow: Bool = true
     @State private var userIsDragging: Bool = false
+    @State private var showTemplateSuccess = false
+    @State private var createdTemplatesCount = 0
 
     init(mode: Mode, request: WorkoutPlanRequest) {
         self.mode = mode
@@ -69,11 +74,12 @@ struct AIConversationSheet: View {
                                 .overlay(alignment: .bottomTrailing) {
                                     if isStreaming {
                                         ProgressView()
-                                            .padding(12)
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            .scaleEffect(0.9)
+                                            .frame(width: 36, height: 36)
                                             .background(
                                                 Circle()
                                                     .fill(.ultraThinMaterial)
-                                                    .frame(width: 36, height: 36)
                                             )
                                             .padding(10)
                                     }
@@ -91,11 +97,12 @@ struct AIConversationSheet: View {
                                 .overlay(alignment: .bottomTrailing) {
                                     if isStreaming {
                                         ProgressView()
-                                            .padding(12)
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            .scaleEffect(0.9)
+                                            .frame(width: 36, height: 36)
                                             .background(
                                                 Circle()
                                                     .fill(.ultraThinMaterial)
-                                                    .frame(width: 36, height: 36)
                                             )
                                             .padding(10)
                                     }
@@ -114,11 +121,12 @@ struct AIConversationSheet: View {
                             .overlay(alignment: .bottomTrailing) {
                                 if isStreaming {
                                     ProgressView()
-                                        .padding(12)
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(0.9)
+                                        .frame(width: 36, height: 36)
                                         .background(
                                             Circle()
                                                 .fill(.ultraThinMaterial)
-                                                .frame(width: 36, height: 36)
                                         )
                                         .padding(10)
                                 }
@@ -178,16 +186,26 @@ struct AIConversationSheet: View {
                         .disabled(content.isEmpty)
                 }
                 
-                // Add to Calendar button (only for workout plans)
+                // Add to Calendar and Save as Templates buttons (only for workout plans)
                 if mode == .plan {
                     ToolbarItem(placement: .principal) {
-                        Button {
-                            showScheduleOptions = true
-                        } label: {
-                            Label("Schedule", systemImage: "calendar.badge.plus")
-                                .font(.subheadline)
+                        HStack(spacing: 16) {
+                            Button {
+                                saveAsTemplates()
+                            } label: {
+                                Label("Templates", systemImage: "doc.text.fill")
+                                    .font(.subheadline)
+                            }
+                            .disabled(content.isEmpty || isStreaming)
+                            
+                            Button {
+                                showScheduleOptions = true
+                            } label: {
+                                Label("Schedule", systemImage: "calendar.badge.plus")
+                                    .font(.subheadline)
+                            }
+                            .disabled(content.isEmpty || isStreaming)
                         }
-                        .disabled(content.isEmpty || isStreaming)
                     }
                 }
                 
@@ -224,32 +242,85 @@ struct AIConversationSheet: View {
         }
         .sheet(isPresented: $showScheduleOptions) {
             NavigationStack {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Choose time window for scheduled workouts")
-                        .font(.headline)
-                    DatePicker("Start time", selection: $scheduleStartTime, displayedComponents: .hourAndMinute)
-                        .datePickerStyle(.wheel)
-                    HStack {
-                        Text("Duration")
-                        Spacer()
-                        Stepper(value: $scheduleDurationMin, in: 15...180, step: 15) {
-                            Text("\(scheduleDurationMin) min")
+                Form {
+                    Section {
+                        DatePicker("Start time", selection: $scheduleStartTime, displayedComponents: .hourAndMinute)
+                            .datePickerStyle(.compact)
+                        
+                        HStack {
+                            Text("Duration")
+                            Spacer()
+                            Stepper(value: $scheduleDurationMin, in: 15...180, step: 15) {
+                                Text("\(scheduleDurationMin) min")
+                            }
                         }
+                    } header: {
+                        Text("Workout Time")
                     }
-                    Spacer()
+                    
+                    Section {
+                        if availableCalendars.isEmpty {
+                            Text("Loading calendars...")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Picker("Calendar", selection: $selectedCalendar) {
+                                ForEach(availableCalendars, id: \.calendarIdentifier) { calendar in
+                                    HStack {
+                                        Circle()
+                                            .fill(Color(cgColor: calendar.cgColor))
+                                            .frame(width: 12, height: 12)
+                                        Text(calendar.title)
+                                    }
+                                    .tag(calendar as EKCalendar?)
+                                }
+                            }
+                            .pickerStyle(.navigationLink)
+                        }
+                    } header: {
+                        Text("Calendar")
+                    } footer: {
+                        Text("Events will be added to the selected calendar")
+                    }
                 }
-                .padding()
                 .navigationTitle("Schedule Options")
+                .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Cancel") { showScheduleOptions = false }
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Schedule") {
+                            // Save selected calendar
+                            if let selected = selectedCalendar {
+                                selectedCalendarIdentifier = selected.calendarIdentifier
+                            }
                             showScheduleOptions = false
                             scheduleToCalendar()
                         }
-                        .disabled(content.isEmpty)
+                        .disabled(content.isEmpty || selectedCalendar == nil)
+                    }
+                }
+                .onAppear {
+                    Task {
+                        do {
+                            try await WorkoutCalendarService.shared.requestAccess()
+                            let calendars = WorkoutCalendarService.shared.getWritableCalendars()
+                            await MainActor.run {
+                                availableCalendars = calendars
+                                // Set selected calendar from saved preference or default
+                                if let savedId = selectedCalendarIdentifier,
+                                   let saved = calendars.first(where: { $0.calendarIdentifier == savedId }) {
+                                    selectedCalendar = saved
+                                } else {
+                                    selectedCalendar = calendars.first
+                                }
+                            }
+                        } catch {
+                            await MainActor.run {
+                                calendarError = error.localizedDescription
+                                showScheduleOptions = false
+                            }
+                        }
                     }
                 }
             }
@@ -262,6 +333,11 @@ struct AIConversationSheet: View {
             Button("OK") { }
         } message: {
             Text("Your workout plan has been added to your calendar with reminders.")
+        }
+        .alert("Saved as Templates", isPresented: $showTemplateSuccess) {
+            Button("OK") { }
+        } message: {
+            Text("\(createdTemplatesCount) workout template\(createdTemplatesCount == 1 ? "" : "s") created! Check the Templates tab in Workouts to use them.")
         }
         .alert("Calendar Access", isPresented: .constant(calendarError != nil)) {
             Button("Settings") {
@@ -818,7 +894,8 @@ struct AIConversationSheet: View {
                         tempConvo,
                         startHour: hour,
                         startMinute: minute,
-                        durationMinutes: scheduleDurationMin
+                        durationMinutes: scheduleDurationMin,
+                        calendarIdentifier: selectedCalendarIdentifier
                     )
                     await MainActor.run {
                         showCalendarSuccess = true
@@ -831,6 +908,42 @@ struct AIConversationSheet: View {
                     }
                 }
             }
+        }
+    }
+    
+    private func saveAsTemplates() {
+        // Create a temporary conversation object to parse
+        let promptText: String
+        if !request.extraContext.isEmpty {
+            promptText = "Weekly Plan: \(request.extraContext)"
+        } else {
+            let goalText = request.goal.capitalized
+            promptText = "Weekly Training Plan (\(goalText) Goal)"
+        }
+        
+        let tempConvo = AIConversation(
+            mode: mode.rawValue,
+            goal: request.goal,
+            prompt: promptText,
+            response: content,
+            model: WorkoutPlanGenerator.shared.availability() == .available ? "on-device" : "template",
+            structuredPlanJSON: structuredPlanJSON
+        )
+        
+        // Create templates from the plan
+        let templates = WorkoutTemplateService.shared.createTemplatesFromMarkdownPlan(
+            conversation: tempConvo,
+            context: modelContext
+        )
+        
+        createdTemplatesCount = templates.count
+        if createdTemplatesCount > 0 {
+            showTemplateSuccess = true
+            Haptics.notify(.success)
+        } else {
+            // No templates created (might be all rest days or parsing failed)
+            calendarError = "No workout templates could be created from this plan. Make sure the plan contains strength training exercises with sets and reps."
+            Haptics.notify(.warning)
         }
     }
     

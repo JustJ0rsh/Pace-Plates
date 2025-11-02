@@ -34,7 +34,7 @@ class BuiltInTemplateLibrary {
     static let beginnerFullBody: [BuiltInTemplateData] = [
         // Template 1: Starting Strength A (Based on Mark Rippetoe's Starting Strength)
         BuiltInTemplateData(
-            title: "Starting Strength A",
+            title: "Beginner Barbell Basics A - Squat, Bench, Deadlift",
             description: "Classic beginner barbell program focusing on the main compound lifts. Perfect for building foundational strength.",
             experienceLevel: "beginner",
             goal: "full_body_foundation",
@@ -52,7 +52,7 @@ class BuiltInTemplateLibrary {
         
         // Template 2: Starting Strength B
         BuiltInTemplateData(
-            title: "Starting Strength B",
+            title: "Beginner Barbell Basics B - Squat, Press, Clean",
             description: "Alternate day for Starting Strength program. Focuses on overhead press and pulls.",
             experienceLevel: "beginner",
             goal: "full_body_foundation",
@@ -70,7 +70,7 @@ class BuiltInTemplateLibrary {
         
         // Template 3: StrongLifts 5x5 A (Based on Mehdi's StrongLifts)
         BuiltInTemplateData(
-            title: "StrongLifts 5x5 A",
+            title: "Beginner 5x5 Program A - Squat, Bench, Row",
             description: "Simple and effective 5x5 program. Three exercises, five sets each. Linear progression.",
             experienceLevel: "beginner",
             goal: "full_body_foundation",
@@ -87,7 +87,7 @@ class BuiltInTemplateLibrary {
         
         // Template 4: StrongLifts 5x5 B
         BuiltInTemplateData(
-            title: "StrongLifts 5x5 B",
+            title: "Beginner 5x5 Program B - Squat, Press, Deadlift",
             description: "Alternate workout for StrongLifts. Overhead press and deadlifts.",
             experienceLevel: "beginner",
             goal: "full_body_foundation",
@@ -104,7 +104,7 @@ class BuiltInTemplateLibrary {
         
         // Template 5: Dumbbell Full Body
         BuiltInTemplateData(
-            title: "Dumbbell Total Body",
+            title: "Beginner Dumbbell Full Body",
             description: "Complete workout using only dumbbells. Great for home gyms or beginners.",
             experienceLevel: "beginner",
             goal: "full_body_foundation",
@@ -127,7 +127,7 @@ class BuiltInTemplateLibrary {
     static let beginnerWeightLoss: [BuiltInTemplateData] = [
         // Template 1: HIIT Basics
         BuiltInTemplateData(
-            title: "HIIT Fundamentals",
+            title: "Beginner HIIT Cardio for Fat Loss",
             description: "High-intensity interval training for beginners. Burns calories, improves cardiovascular fitness.",
             experienceLevel: "beginner",
             goal: "weight_loss",
@@ -147,7 +147,7 @@ class BuiltInTemplateLibrary {
         
         // Template 2: Metabolic Circuit
         BuiltInTemplateData(
-            title: "Fat Burning Circuit",
+            title: "Beginner Fat Burning Circuit",
             description: "Circuit training to boost metabolism. Minimal rest between exercises.",
             experienceLevel: "beginner",
             goal: "weight_loss",
@@ -167,7 +167,7 @@ class BuiltInTemplateLibrary {
         
         // Template 3: Cardio Strength Mix
         BuiltInTemplateData(
-            title: "Cardio Strength Combo",
+            title: "Beginner Cardio & Strength Mix",
             description: "Mix of cardio bursts and strength exercises. Great for calorie burn and muscle building.",
             experienceLevel: "beginner",
             goal: "weight_loss",
@@ -188,7 +188,7 @@ class BuiltInTemplateLibrary {
         
         // Template 4: Bodyweight Fat Burner
         BuiltInTemplateData(
-            title: "No Equipment Fat Burn",
+            title: "Beginner Bodyweight Fat Burner - No Equipment",
             description: "Effective fat-burning workout requiring no equipment. Do anywhere, anytime.",
             experienceLevel: "beginner",
             goal: "weight_loss",
@@ -208,7 +208,7 @@ class BuiltInTemplateLibrary {
         
         // Template 5: Beginner Tabata
         BuiltInTemplateData(
-            title: "Tabata Basics",
+            title: "Beginner Tabata Intervals - 20 Min Fat Burn",
             description: "4-minute Tabata intervals. 20 seconds work, 10 seconds rest. Maximum calorie burn.",
             experienceLevel: "beginner",
             goal: "weight_loss",
@@ -229,7 +229,7 @@ class BuiltInTemplateLibrary {
     static let beginnerHome: [BuiltInTemplateData] = [
         // Template 1: No Equipment Home Workout
         BuiltInTemplateData(
-            title: "Living Room Workout",
+            title: "Beginner Bodyweight Home Workout",
             description: "Complete workout using only your body. No equipment needed.",
             experienceLevel: "beginner",
             goal: "home_workout",
@@ -249,7 +249,7 @@ class BuiltInTemplateLibrary {
         
         // Template 2: Resistance Band Total Body
         BuiltInTemplateData(
-            title: "Resistance Band Workout",
+            title: "Beginner Resistance Band Full Body",
             description: "Full body workout using resistance bands. Portable and effective.",
             experienceLevel: "beginner",
             goal: "home_workout",
@@ -269,7 +269,7 @@ class BuiltInTemplateLibrary {
         
         // Template 3: Furniture Workout
         BuiltInTemplateData(
-            title: "Using Household Items",
+            title: "Beginner Chair & Couch Home Workout",
             description: "Creative workout using chairs, couches, and walls. Make your home your gym.",
             experienceLevel: "beginner",
             goal: "home_workout",
@@ -289,7 +289,7 @@ class BuiltInTemplateLibrary {
         
         // Template 4: Minimal Equipment Essential
         BuiltInTemplateData(
-            title: "Two Dumbbell Workout",
+            title: "Beginner Single Pair Dumbbell Workout",
             description: "Only need one pair of dumbbells. Complete full body training.",
             experienceLevel: "beginner",
             goal: "home_workout",
@@ -309,7 +309,7 @@ class BuiltInTemplateLibrary {
         
         // Template 5: Apartment-Friendly Quiet Workout
         BuiltInTemplateData(
-            title: "Silent Strength",
+            title: "Beginner Quiet Apartment Workout - No Jumping",
             description: "Low-impact workout perfect for apartments. No jumping, no noise.",
             experienceLevel: "beginner",
             goal: "home_workout",
@@ -334,7 +334,7 @@ class BuiltInTemplateLibrary {
     static let intermediateHypertrophy: [BuiltInTemplateData] = [
         // Template 1: Push Day (Based on Push/Pull/Legs split)
         BuiltInTemplateData(
-            title: "Push Day - Chest Focus",
+            title: "Intermediate Push Day - Chest, Shoulders, Triceps",
             description: "Volume-focused push workout. Chest, shoulders, triceps. Classic PPL split.",
             experienceLevel: "intermediate",
             goal: "muscle_building",
@@ -355,7 +355,7 @@ class BuiltInTemplateLibrary {
         
         // Template 2: Pull Day
         BuiltInTemplateData(
-            title: "Pull Day - Back & Biceps",
+            title: "Intermediate Pull Day - Back & Biceps",
             description: "Complete back and bicep hypertrophy workout. Multiple angles for full development.",
             experienceLevel: "intermediate",
             goal: "muscle_building",
@@ -376,7 +376,7 @@ class BuiltInTemplateLibrary {
         
         // Template 3: Leg Day
         BuiltInTemplateData(
-            title: "Leg Day - Quad Focus",
+            title: "Intermediate Leg Day - Quads, Glutes, Hamstrings",
             description: "High-volume leg workout emphasizing quads. Progressive overload on squats.",
             experienceLevel: "intermediate",
             goal: "muscle_building",
@@ -397,7 +397,7 @@ class BuiltInTemplateLibrary {
         
         // Template 4: Upper Body Power
         BuiltInTemplateData(
-            title: "Upper Power & Hypertrophy",
+            title: "Intermediate Upper Body Power & Size",
             description: "Combined power and volume for upper body. Best of both worlds.",
             experienceLevel: "intermediate",
             goal: "muscle_building",
@@ -418,7 +418,7 @@ class BuiltInTemplateLibrary {
         
         // Template 5: Chest & Triceps
         BuiltInTemplateData(
-            title: "Chest & Triceps Hypertrophy",
+            title: "Intermediate Chest & Triceps Muscle Building",
             description: "Classic chest and tri day. Multiple angles for complete development.",
             experienceLevel: "intermediate",
             goal: "muscle_building",
@@ -439,7 +439,7 @@ class BuiltInTemplateLibrary {
         
         // Template 6: Back & Biceps
         BuiltInTemplateData(
-            title: "Back & Biceps Mass Builder",
+            title: "Intermediate Back & Biceps Muscle Building",
             description: "High volume back and bicep workout. Width and thickness focus.",
             experienceLevel: "intermediate",
             goal: "muscle_building",
@@ -463,7 +463,7 @@ class BuiltInTemplateLibrary {
     static let intermediateStrength: [BuiltInTemplateData] = [
         // Template 1: 5/3/1 Squat (Based on Jim Wendler's 5/3/1)
         BuiltInTemplateData(
-            title: "5/3/1 Squat Day",
+            title: "Intermediate 5/3/1 Squat Strength Day",
             description: "Jim Wendler's proven 5/3/1 program for squats. Progressive strength building.",
             experienceLevel: "intermediate",
             goal: "strength_gains",
@@ -484,7 +484,7 @@ class BuiltInTemplateLibrary {
         
         // Template 2: 5/3/1 Bench
         BuiltInTemplateData(
-            title: "5/3/1 Bench Press Day",
+            title: "Intermediate 5/3/1 Bench Press Strength Day",
             description: "5/3/1 bench press progression with assistance work.",
             experienceLevel: "intermediate",
             goal: "strength_gains",
@@ -505,7 +505,7 @@ class BuiltInTemplateLibrary {
         
         // Template 3: Texas Method Squat (Based on Texas Method)
         BuiltInTemplateData(
-            title: "Texas Method - Volume Squat",
+            title: "Intermediate Texas Method Volume Squat - 5x5",
             description: "Texas Method volume day. 5x5 at 90% of 5RM. Proven intermediate program.",
             experienceLevel: "intermediate",
             goal: "strength_gains",
@@ -525,7 +525,7 @@ class BuiltInTemplateLibrary {
         
         // Template 4: Westside for Skinny Bastards (Based on Joe DeFranco's program)
         BuiltInTemplateData(
-            title: "Max Effort Upper",
+            title: "Intermediate Max Effort Upper Body Strength",
             description: "Westside-inspired max effort day. Work up to heavy triple.",
             experienceLevel: "intermediate",
             goal: "strength_gains",
@@ -545,7 +545,7 @@ class BuiltInTemplateLibrary {
         
         // Template 5: Max Effort Lower
         BuiltInTemplateData(
-            title: "Max Effort Lower Body",
+            title: "Intermediate Max Effort Lower Body Strength",
             description: "Lower body max effort. Work to heavy single, double, or triple.",
             experienceLevel: "intermediate",
             goal: "strength_gains",
@@ -570,7 +570,7 @@ class BuiltInTemplateLibrary {
     static let advancedPowerlifting: [BuiltInTemplateData] = [
         // Template 1: Sheiko Squat Day (Based on Boris Sheiko programs)
         BuiltInTemplateData(
-            title: "Sheiko - Heavy Squat",
+            title: "Advanced Powerlifting - Sheiko Heavy Squat",
             description: "High-volume Russian powerlifting program. Multiple working sets at varying intensities.",
             experienceLevel: "advanced",
             goal: "powerlifting",
@@ -590,7 +590,7 @@ class BuiltInTemplateLibrary {
         
         // Template 2: Smolov Squat Cycle
         BuiltInTemplateData(
-            title: "Smolov Base Cycle - Week 1",
+            title: "Advanced Powerlifting - Smolov Squat Cycle",
             description: "Brutal Russian squat program. 4 squat days per week, high volume and intensity.",
             experienceLevel: "advanced",
             goal: "powerlifting",
@@ -608,7 +608,7 @@ class BuiltInTemplateLibrary {
         
         // Template 3: Conjugate Method - Max Effort Squat
         BuiltInTemplateData(
-            title: "Conjugate Max Effort - Squat",
+            title: "Advanced Powerlifting - Westside Max Effort Squat",
             description: "Westside Barbell conjugate method. Work to max, then volume work.",
             experienceLevel: "advanced",
             goal: "powerlifting",
@@ -628,7 +628,7 @@ class BuiltInTemplateLibrary {
         
         // Template 4: Conjugate Dynamic Effort - Bench
         BuiltInTemplateData(
-            title: "Conjugate Dynamic Effort - Bench",
+            title: "Advanced Powerlifting - Westside Speed Bench",
             description: "Speed bench day. 8-10 sets of 3 reps at 50-60% with bands or chains.",
             experienceLevel: "advanced",
             goal: "powerlifting",
@@ -648,7 +648,7 @@ class BuiltInTemplateLibrary {
         
         // Template 5: Bulgarian Method - Squat
         BuiltInTemplateData(
-            title: "Bulgarian Method - Daily Max",
+            title: "Advanced Powerlifting - Bulgarian Daily Max Squat",
             description: "Work up to daily max squat, then back-off sets. Advanced training only.",
             experienceLevel: "advanced",
             goal: "powerlifting",

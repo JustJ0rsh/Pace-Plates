@@ -55,15 +55,39 @@ final class WorkoutPlanGenerator {
     func availability() -> Availability {
         #if AI_FOUNDATION_AVAILABLE
         if #available(iOS 26, *) {
-            // Query the platform's model availability if the SDK is present.
-            // Example (replace with exact API when linking):
-            // let status = SystemLanguageModel.default.availability
-            // return status == .available ? .available : .unavailable
-            return .available
+            #if canImport(FoundationModels)
+            // Use the real Apple Intelligence API to check availability
+            let model = SystemLanguageModel.default
+            
+            switch model.availability {
+            case .available:
+                // Apple Intelligence is available and enabled
+                return .available
+            case .unavailable(.deviceNotEligible):
+                // Device doesn't support Apple Intelligence
+                return .unavailable
+            case .unavailable(.appleIntelligenceNotEnabled):
+                // Apple Intelligence is supported but not enabled in Settings
+                return .unavailable
+            case .unavailable(.modelNotReady):
+                // Model is downloading or not ready yet
+                return .unavailable
+            case .unavailable:
+                // Any other unavailable reason
+                return .unavailable
+            @unknown default:
+                return .unavailable
+            }
+            #else
+            // Build flag is set but FoundationModels couldn't be imported
+            return .unavailable
+            #endif
         } else {
+            // iOS version too old (< iOS 26)
             return .unavailable
         }
         #else
+        // Build flag not set - device doesn't support it or build config excludes it
         return .unavailable
         #endif
     }

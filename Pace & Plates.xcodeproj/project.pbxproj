@@ -7,10 +7,20 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		420B3EEA2EB3E28400F73922 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 420B3EE92EB3E28400F73922 /* WidgetKit.framework */; };
+		420B3EEC2EB3E28400F73922 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 420B3EEB2EB3E28400F73922 /* SwiftUI.framework */; };
+		420B3EFD2EB3E28600F73922 /* RunningWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 420B3EE82EB3E28400F73922 /* RunningWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		4226C1812E9DED2A00908453 /* Info 2.plist in Resources */ = {isa = PBXBuildFile; fileRef = 4226C1802E9DED2A00908453 /* Info 2.plist */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		420B3EFB2EB3E28600F73922 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 42B50D192D9DE5670082A9FA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 420B3EE72EB3E28400F73922;
+			remoteInfo = RunningWidgetExtension;
+		};
 		42B50D322D9DE5690082A9FA /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 42B50D192D9DE5670082A9FA /* Project object */;
@@ -27,7 +37,24 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		420B3F022EB3E28600F73922 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				420B3EFD2EB3E28600F73922 /* RunningWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		420B3EE82EB3E28400F73922 /* RunningWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RunningWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		420B3EE92EB3E28400F73922 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		420B3EEB2EB3E28400F73922 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		4226C17A2E94A47300908453 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		4226C1802E9DED2A00908453 /* Info 2.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info 2.plist"; sourceTree = "<group>"; };
 		42B50D212D9DE5670082A9FA /* Pace & Plates.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Pace & Plates.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -37,6 +64,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		420B3F012EB3E28600F73922 /* Exceptions for "RunningWidget" folder in "RunningWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 420B3EE72EB3E28400F73922 /* RunningWidgetExtension */;
+		};
 		42FCE02B2E9F216E00334FD2 /* Exceptions for "WorkingOut" folder in "Pace & Plates" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -47,6 +81,14 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		420B3EED2EB3E28400F73922 /* RunningWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				420B3F012EB3E28600F73922 /* Exceptions for "RunningWidget" folder in "RunningWidgetExtension" target */,
+			);
+			path = RunningWidget;
+			sourceTree = "<group>";
+		};
 		42B50D232D9DE5670082A9FA /* WorkingOut */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -68,6 +110,15 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		420B3EE52EB3E28400F73922 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				420B3EEC2EB3E28400F73922 /* SwiftUI.framework in Frameworks */,
+				420B3EEA2EB3E28400F73922 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		42B50D1E2D9DE5670082A9FA /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -98,6 +149,7 @@
 				42B50D232D9DE5670082A9FA /* WorkingOut */,
 				42B50D342D9DE5690082A9FA /* WorkingOutTests */,
 				42B50D3E2D9DE5690082A9FA /* WorkingOutUITests */,
+				420B3EED2EB3E28400F73922 /* RunningWidget */,
 				42B50D222D9DE5670082A9FA /* Products */,
 				4226C17A2E94A47300908453 /* Info.plist */,
 				4226C1802E9DED2A00908453 /* Info 2.plist */,
@@ -111,6 +163,7 @@
 				42B50D212D9DE5670082A9FA /* Pace & Plates.app */,
 				42B50D312D9DE5690082A9FA /* Pace & PlatesTests.xctest */,
 				42B50D3B2D9DE5690082A9FA /* Pace & PlatesUITests.xctest */,
+				420B3EE82EB3E28400F73922 /* RunningWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -119,6 +172,8 @@
 			isa = PBXGroup;
 			children = (
 				42FCE1502EA875FA00334FD2 /* WeatherKit.framework */,
+				420B3EE92EB3E28400F73922 /* WidgetKit.framework */,
+				420B3EEB2EB3E28400F73922 /* SwiftUI.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -126,6 +181,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		420B3EE72EB3E28400F73922 /* RunningWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 420B3EFE2EB3E28600F73922 /* Build configuration list for PBXNativeTarget "RunningWidgetExtension" */;
+			buildPhases = (
+				420B3EE42EB3E28400F73922 /* Sources */,
+				420B3EE52EB3E28400F73922 /* Frameworks */,
+				420B3EE62EB3E28400F73922 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				420B3EED2EB3E28400F73922 /* RunningWidget */,
+			);
+			name = RunningWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = RunningWidgetExtension;
+			productReference = 420B3EE82EB3E28400F73922 /* RunningWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		42B50D202D9DE5670082A9FA /* Pace & Plates */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 42B50D452D9DE5690082A9FA /* Build configuration list for PBXNativeTarget "Pace & Plates" */;
@@ -133,10 +210,12 @@
 				42B50D1D2D9DE5670082A9FA /* Sources */,
 				42B50D1E2D9DE5670082A9FA /* Frameworks */,
 				42B50D1F2D9DE5670082A9FA /* Resources */,
+				420B3F022EB3E28600F73922 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				420B3EFC2EB3E28600F73922 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				42B50D232D9DE5670082A9FA /* WorkingOut */,
@@ -201,9 +280,12 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1620;
+				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
+					420B3EE72EB3E28400F73922 = {
+						CreatedOnToolsVersion = 26.0.1;
+					};
 					42B50D202D9DE5670082A9FA = {
 						CreatedOnToolsVersion = 16.2;
 					};
@@ -234,11 +316,19 @@
 				42B50D202D9DE5670082A9FA /* Pace & Plates */,
 				42B50D302D9DE5690082A9FA /* Pace & PlatesTests */,
 				42B50D3A2D9DE5690082A9FA /* Pace & PlatesUITests */,
+				420B3EE72EB3E28400F73922 /* RunningWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		420B3EE62EB3E28400F73922 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		42B50D1F2D9DE5670082A9FA /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -264,6 +354,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		420B3EE42EB3E28400F73922 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		42B50D1D2D9DE5670082A9FA /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -288,6 +385,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		420B3EFC2EB3E28600F73922 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 420B3EE72EB3E28400F73922 /* RunningWidgetExtension */;
+			targetProxy = 420B3EFB2EB3E28600F73922 /* PBXContainerItemProxy */;
+		};
 		42B50D332D9DE5690082A9FA /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 42B50D202D9DE5670082A9FA /* Pace & Plates */;
@@ -301,6 +403,70 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		420B3EFF2EB3E28600F73922 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = RunningWidget/RunningWidgetExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JK2CCHMR6P;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RunningWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RunningWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.3;
+				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOut.RunningWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		420B3F002EB3E28600F73922 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = RunningWidget/RunningWidgetExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JK2CCHMR6P;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RunningWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RunningWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.3;
+				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOut.RunningWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		42B50D432D9DE5690082A9FA /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -439,6 +605,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = WorkingOut/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Pace & Plates";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "We read your workouts, distance, heart rate, VO₂ max, and related metrics to show progress and trends.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We write your running workouts, distance, and active energy to keep your Apple Health records complete.";
@@ -454,7 +621,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.3;
 				OTHER_SWIFT_FLAGS = "-DAI_FOUNDATION_AVAILABLE";
 				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOut;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -480,6 +647,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = WorkingOut/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Pace & Plates";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "We read your workouts, distance, heart rate, VO₂ max, and related metrics to show progress and trends.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We write your running workouts, distance, and active energy to keep your Apple Health records complete.";
@@ -495,7 +663,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.3;
 				OTHER_SWIFT_FLAGS = "-DAI_FOUNDATION_AVAILABLE";
 				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOut;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -577,6 +745,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		420B3EFE2EB3E28600F73922 /* Build configuration list for PBXNativeTarget "RunningWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				420B3EFF2EB3E28600F73922 /* Debug */,
+				420B3F002EB3E28600F73922 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		42B50D1C2D9DE5670082A9FA /* Build configuration list for PBXProject "Pace & Plates" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

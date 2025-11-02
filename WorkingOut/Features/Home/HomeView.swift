@@ -15,7 +15,7 @@ struct HomeView: View {
     @Query(sort: [SortDescriptor<WorkoutSession>(\.date, order: .reverse)]) private var workoutSessions: [WorkoutSession]
     @AppStorage("weightUnit") private var preferredWeightUnit = "lbs"
     @AppStorage("streakMode") private var streakMode: String = "daily"
-    @AppStorage("distanceUnit") private var distanceUnit: String = "km"
+    @AppStorage("distanceUnit") private var distanceUnit: String = "mi"
     
     @State private var selectedChartTab: ChartTab = .volume
 
@@ -352,23 +352,77 @@ struct HomeView: View {
             streakMode = "daily"
         }
     }
-
-    private var streakLabel: some View {
-        Text(streakDisplayText)
-            .font(.caption)
-            .foregroundStyle(AppTheme.textColor.opacity(0.85))
+    
+    @ViewBuilder
+    private var streakCard: some View {
+        HStack(alignment: .center, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Current Streak")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(streakDisplayText)
+                    .font(.headline)
+                    .foregroundColor(AppTheme.textColor)
+            }
+            Spacer()
+            Button(action: toggleStreakMode) {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                    Text(streakMode == "daily" ? "Daily" : "Weekly")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(AppTheme.accentColor.opacity(0.2))
+                .foregroundColor(AppTheme.accentColor)
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .floatingTile()
     }
     
     @ViewBuilder
-    private var streakToggleRow: some View {
-        HStack {
-            Spacer()
-            Button(action: toggleStreakMode) {
-                streakLabel
+    private var recentActivityCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Recent Activity")
+                .font(.headline)
+                .foregroundColor(AppTheme.textColor)
+
+            if let lastWorkout = workoutSessions.first {
+                HStack(spacing: 10) {
+                    Image(systemName: "figure.strengthtraining.traditional")
+                        .foregroundColor(AppTheme.accentColor)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Last Workout")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(lastWorkout.date.formatted(date: .abbreviated, time: .shortened))
+                            .font(.subheadline)
+                    }
+                }
+            } else {
+                Text("No workouts logged yet")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            .buttonStyle(.plain)
-            Spacer()
+
+            if let lastRun = runningSessions.first {
+                Divider().opacity(0.2)
+                HStack(spacing: 10) {
+                    Image(systemName: "figure.run")
+                        .foregroundColor(AppTheme.accentColor)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Last Run")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(lastRun.date.formatted(date: .abbreviated, time: .shortened))
+                            .font(.subheadline)
+                    }
+                }
+            }
         }
+        .floatingTile()
     }
     
     // MARK: Body
@@ -381,27 +435,12 @@ struct HomeView: View {
                     // Weather summary tile
                     WeatherSummaryView()
 
-                    streakToggleRow
-                    
-                    // Recent Activity Summary
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Recent Activity")
-                            .font(.headline)
-                        if let lastWorkout = workoutSessions.first {
-                            HStack(spacing: 8) {
-                                Image(systemName: "figure.strengthtraining.traditional")
-                                Text("Last Workout: \(lastWorkout.date.formatted(date: .abbreviated, time: .shortened))")
-                            }
-                        }
-                        if let lastRun = runningSessions.first {
-                            HStack(spacing: 8) {
-                                Image(systemName: "figure.run")
-                                Text("Last Run: \(lastRun.date.formatted(date: .abbreviated, time: .shortened))")
-                            }
-                        }
-                    }
-                    .foregroundColor(AppTheme.textColor)
-                    
+                    streakCard
+
+                    recentActivityCard
+
+                    VitalsSnapshotView()
+
                     // Floating Charts Card with Tabs
                     VStack(spacing: 12) {
                         // Segmented control to switch charts

@@ -21,6 +21,20 @@
                ReferencedContainer = "container:Pace &amp; Plates.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "420B3EE72EB3E28400F73922"
+               BuildableName = "RunningWidgetExtension.appex"
+               BlueprintName = "RunningWidgetExtension"
+               ReferencedContainer = "container:Pace &amp; Plates.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction

@@ -71,7 +71,7 @@ struct Item: Codable, Equatable {
     @Guide(description: "An optional suggested working weight with unit, e.g. '185 lbs'.")
     let suggestedWeight: String?
 
-    @Guide(description: "Any short note or intensity guidance.")
+    @Guide(description: "Brief technique cue or form reminder to display inline with the exercise, e.g. 'Keep elbows tucked' or 'Control the descent'. Should be concise and directly describe HOW to perform this specific exercise correctly.")
     let notes: String?
 
     // Optional cardio structure
