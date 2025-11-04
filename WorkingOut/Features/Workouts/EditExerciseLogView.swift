@@ -47,6 +47,26 @@ struct EditExerciseLogView: View {
         _heartRateText = State(initialValue: log.avgHeartRate != nil ? String(log.avgHeartRate!) : "")
     }
     
+    @AppStorage("weightUnit") private var preferredWeightUnit = "lbs"
+    
+    private func latestBodyWeight(preferredUnit: String) -> Double? {
+        var fd = FetchDescriptor<WeightEntry>(sortBy: [SortDescriptor(\.date, order: .reverse)])
+        fd.fetchLimit = 1
+        if let entry = try? modelContext.fetch(fd).first {
+            let kg = entry.weightUnit == "kg" ? entry.weight : (entry.weight / 2.20462)
+            return preferredUnit == "kg" ? kg : kg * 2.20462
+        }
+        return nil
+    }
+    
+    private func isCalisthenics(_ name: String) -> Bool {
+        let lower = name.lowercased()
+        let keywords = ["push-up", "push ups", "push-ups", "pull-up", "pull ups", "pull-ups", "chin-up", "chin ups", "dips", "plank", "bodyweight", "sit-up", "crunch", "burpee", "mountain climber", "pushups", "pullups"]
+        if keywords.contains(where: { lower.contains($0) }) { return true }
+        let direct = Set(["Push-Ups", "Knee Push-Ups", "Wall Push-Ups", "Assisted Pull-Ups", "Pull-Ups", "Plank", "Bodyweight Squats"]) 
+        return direct.contains(name)
+    }
+    
     // Helper to detect if this is a cardio exercise
     private var isCardioExercise: Bool {
         guard let name = log.exerciseName?.lowercased() else { return false }
@@ -199,6 +219,13 @@ struct EditExerciseLogView: View {
                     }
                 } else {
                     repsFocused = true
+                }
+                // Auto-fill bodyweight for calisthenics sets with empty weight
+                if !isCardioExercise, (Double(weightText) ?? 0) <= 0, let name = log.exerciseName, isCalisthenics(name) {
+                    if let bw = latestBodyWeight(preferredUnit: preferredWeightUnit) {
+                        weightText = String(format: "%.1f", bw)
+                        weightUnit = preferredWeightUnit
+                    }
                 }
             }
             .sheet(isPresented: Binding(get: { historyExerciseName != nil }, set: { if !$0 { historyExerciseName = nil } })) {

@@ -13,7 +13,7 @@ struct AddExerciseView: View {
     @State private var showingAddCustomExercise = false
     @State private var newExerciseName = ""
     @State private var selectedMuscleGroup = "Chest"
-    private let muscleGroups = ["Chest", "Back", "Legs", "Shoulders", "Arms", "Core", "Cardio"]
+    private let muscleGroups = ["Chest", "Back", "Legs", "Shoulders", "Arms", "Forearms", "Core", "Cardio"]
     @State private var historyExerciseName: String? = nil
 
     init(workoutSession: WorkoutSession, onAdd: ((ExerciseLog) -> Void)? = nil) {
@@ -209,6 +209,26 @@ struct AddExerciseView: View {
         return result
     }
 
+    @AppStorage("weightUnit") private var preferredWeightUnit = "lbs"
+
+    private func latestBodyWeight(preferredUnit: String) -> Double? {
+        var fd = FetchDescriptor<WeightEntry>(sortBy: [SortDescriptor(\.date, order: .reverse)])
+        fd.fetchLimit = 1
+        if let entry = try? modelContext.fetch(fd).first {
+            let kg = entry.weightUnit == "kg" ? entry.weight : (entry.weight / 2.20462)
+            return preferredUnit == "kg" ? kg : kg * 2.20462
+        }
+        return nil
+    }
+
+    private func isCalisthenics(_ name: String) -> Bool {
+        let lower = name.lowercased()
+        let keywords = ["push-up", "push ups", "push-ups", "pull-up", "pull ups", "pull-ups", "chin-up", "chin ups", "dips", "plank", "bodyweight", "sit-up", "crunch", "burpee", "mountain climber", "pushups", "pullups"]
+        if keywords.contains(where: { lower.contains($0) }) { return true }
+        let direct = Set(["Push-Ups", "Knee Push-Ups", "Wall Push-Ups", "Assisted Pull-Ups", "Pull-Ups", "Plank", "Bodyweight Squats"]) 
+        return direct.contains(name)
+    }
+
     private func addExercise(_ exercise: ExerciseDefinition) {
         let allLogs = workoutSession.exerciseLogs ?? []
         
@@ -228,9 +248,15 @@ struct AddExerciseView: View {
             exerciseOrder = (allLogs.map { $0.exerciseOrder }.max() ?? -1) + 1
         }
 
+        var defaultWeight: Double = 0
+        if isCalisthenics(exercise.name), let bw = latestBodyWeight(preferredUnit: preferredWeightUnit) {
+            defaultWeight = bw
+        }
+
         let log = ExerciseLog(
             reps: 0, // Default values, user edits later
-            weight: 0,
+            weight: defaultWeight,
+            weightUnit: preferredWeightUnit,
             setNumber: nextSetNumber,
             exerciseName: exercise.name,
             exerciseOrder: exerciseOrder

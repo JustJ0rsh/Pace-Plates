@@ -62,10 +62,13 @@ struct ContentView: View {
                     print("❌ Failed to seed built-in templates: \(error)")
                 }
             }
-            
+
             if !didShowTutorial {
                 showTutorial = true
             }
+            // Schedule weekly reminders if enabled
+            ReminderService.scheduleIfEnabled()
+
             // No banner; we'll prompt for HK when appropriate
             // Align unit preferences to the global measurement selection
             if measurementSystem == "imperial" {
@@ -77,6 +80,9 @@ struct ContentView: View {
                 if distanceUnit != "km" { distanceUnit = "km" }
                 if heightUnit != "cm" { heightUnit = "cm" }
             }
+
+            // Auto re-authenticate Game Center silently on app launch (presents if needed only once)
+            GameCenterService.ensureAuthenticated { _ in }
         }
         .alert("Health Access Issue", isPresented: Binding(get: { healthAuthError != nil }, set: { if !$0 { healthAuthError = nil } })) {
             Button("OK", role: .cancel) { healthAuthError = nil }

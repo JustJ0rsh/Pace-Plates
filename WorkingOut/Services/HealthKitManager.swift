@@ -84,12 +84,11 @@ final class HealthKitManager: ObservableObject {
         // Map activity type to HKWorkoutActivityType
         let hkActivityType: HKWorkoutActivityType
         switch activityType {
-        case "walking":
-            hkActivityType = .walking
-        case "hiking":
-            hkActivityType = .hiking
-        default: // "running"
-            hkActivityType = .running
+        case "walking": hkActivityType = .walking
+        case "hiking": hkActivityType = .hiking
+        case "cycling": hkActivityType = .cycling
+        case "rowing": hkActivityType = .rowing
+        default: hkActivityType = .running
         }
 
         // Define the workout configuration
@@ -153,14 +152,20 @@ final class HealthKitManager: ObservableObject {
     }
 
     // MARK: - Queries
-    func fetchRecentRuns(limit: Int = 25) async throws -> [HKWorkout] {
-        let predicate = HKQuery.predicateForWorkouts(with: .running)
+    func fetchRecentRuns(limit: Int = 50) async throws -> [HKWorkout] {
         let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
         return try await withCheckedThrowingContinuation { continuation in
-            let query = HKSampleQuery(sampleType: .workoutType(), predicate: predicate, limit: limit, sortDescriptors: [sort]) { _, samples, error in
+            let query = HKSampleQuery(sampleType: .workoutType(), predicate: nil, limit: limit, sortDescriptors: [sort]) { _, samples, error in
                 if let error = error { continuation.resume(throwing: error); return }
                 let workouts = (samples as? [HKWorkout]) ?? []
-                continuation.resume(returning: workouts)
+                let filtered = workouts.filter { w in
+                    w.workoutActivityType == .running ||
+                    w.workoutActivityType == .walking ||
+                    w.workoutActivityType == .hiking ||
+                    w.workoutActivityType == .cycling ||
+                    w.workoutActivityType == .rowing
+                }
+                continuation.resume(returning: filtered)
             }
             self.healthStore.execute(query)
         }

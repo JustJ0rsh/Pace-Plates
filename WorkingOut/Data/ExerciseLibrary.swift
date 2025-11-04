@@ -39,6 +39,11 @@ struct ExerciseLibrary {
         ("Machine Bicep Curls", "Arms"),
         ("Tricep Pushdowns (Cable)", "Arms"),
         ("Overhead Tricep Extension (Dumbbell)", "Arms"),
+
+        // Forearms - Beginner
+        ("Wrist Curls", "Forearms"),
+        ("Reverse Wrist Curls", "Forearms"),
+        ("Farmer's Carry", "Forearms"),
         
         // Core - Beginner
         ("Plank", "Core"),
@@ -118,6 +123,11 @@ struct ExerciseLibrary {
         ("Concentration Curls", "Arms"),
         ("Reverse Grip Curls", "Arms"),
         ("Dips", "Arms"),
+
+        // Forearms
+        ("Wrist Curls", "Forearms"),
+        ("Reverse Wrist Curls", "Forearms"),
+        ("Farmer's Carry", "Forearms"),
         
         // Core
         ("Crunches", "Core"),

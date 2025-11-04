@@ -16,9 +16,11 @@ struct SettingsView: View {
     @AppStorage("experienceLevel") private var experienceLevel: String = "beginner" // "beginner" or "experienced"
     @AppStorage("allowAIWebSearch") private var allowAIWebSearch: Bool = false
     @AppStorage("useStructuredPlanView") private var useStructuredPlanView: Bool = false
+    @AppStorage("enableWeeklyWeightReminder") private var enableWeeklyWeightReminder: Bool = false
     @FocusState private var ageFocused: Bool
     @FocusState private var heightFocused: Bool
     @FocusState private var goalWeightFocused: Bool
+    @State private var showHeightPicker: Bool = false
     
     var body: some View {
         NavigationStack {
@@ -66,22 +68,30 @@ struct SettingsView: View {
                             .focused($ageFocused)
                     }
 
-                    HStack {
-                        Text("Height")
-                        Spacer()
-                        TextField("0", value: $heightValue, format: .number)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(maxWidth: 100)
-                            .focused($heightFocused)
-                        Text(heightUnit)
-                            .foregroundStyle(.secondary)
+                    Button {
+                        showHeightPicker = true
+                    } label: {
+                        HStack {
+                            Text("Height")
+                            Spacer()
+                            if heightUnit == "in" {
+                                let totalInches = Int(round(heightValue))
+                                let feet = max(0, totalInches / 12)
+                                let inches = max(0, min(11, totalInches % 12))
+                                Text("\(feet)′ \(inches)″").foregroundStyle(.secondary)
+                            } else {
+                                Text(String(format: "%.1f", heightValue)).foregroundStyle(.secondary)
+                                Text("cm").foregroundStyle(.secondary)
+                            }
+                        }
                     }
+                    .buttonStyle(.plain)
+                    .sheet(isPresented: $showHeightPicker) { HeightPickerSheet(heightUnit: $heightUnit, heightValue: $heightValue) }
 
                     HStack {
                         Text("Goal Weight")
                         Spacer()
-                        TextField("0", value: $targetWeight, format: .number)
+                        TextField("0", value: $targetWeight, format: .number.precision(.fractionLength(0...1)))
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
                             .frame(maxWidth: 100)
@@ -125,6 +135,26 @@ struct SettingsView: View {
                             Text("Display saved plans as interactive cards when structured data is available. Note: New plan generation uses proven Markdown format for reliability.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                Section("Reminders") {
+                    Toggle(isOn: $enableWeeklyWeightReminder) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Weekly Weight Reminder")
+                            Text("Sends a reminder every Monday at 9:00 to log your weight.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .onChange(of: enableWeeklyWeightReminder) { _, newValue in
+                        if newValue {
+                            ReminderService.scheduleIfEnabled()
+                            alertMessage = "Weekly reminder scheduled. You can change it in Settings > Notifications."
+                            showAlert = true
+                        } else {
+                            ReminderService.cancelWeeklyWeightReminder()
                         }
                     }
                 }
@@ -319,16 +349,68 @@ extension SettingsView {
         }
         // Profile height value stored in AppStorage
         if system == "imperial" {
-            heightValue = heightValue / 2.54 // cm -> in
+            heightValue = (heightValue / 2.54).rounded() // cm -> in, nearest inch
             heightUnit = "in"
-            // Convert goal weight kg -> lbs
-            targetWeight = targetWeight * 2.20462
+            // Convert goal weight kg -> lbs (1 dec)
+            targetWeight = ((targetWeight * 2.20462) * 10).rounded() / 10.0
         } else {
-            heightValue = heightValue * 2.54 // in -> cm
+            heightValue = ((heightValue * 2.54) * 10).rounded() / 10.0 // in -> cm, 1 dec
             heightUnit = "cm"
-            // Convert goal weight lbs -> kg
-            targetWeight = targetWeight / 2.20462
+            // Convert goal weight lbs -> kg (1 dec)
+            targetWeight = ((targetWeight / 2.20462) * 10).rounded() / 10.0
         }
         try? modelContext.save()
+    }
+
+    // MARK: - Height Picker
+    private struct HeightPickerSheet: View {
+        @Binding var heightUnit: String
+        @Binding var heightValue: Double
+        @Environment(\.dismiss) private var dismiss
+        @State private var feet: Int = 5
+        @State private var inches: Int = 9
+        @State private var cmInt: Int = 175
+        @State private var cmDec: Int = 0
+        var body: some View {
+            NavigationStack {
+                VStack(spacing: 0) {
+                    if heightUnit == "in" {
+                        HStack(spacing: 0) {
+                            Picker("Feet", selection: $feet) { ForEach(3...8, id: \.self) { Text("\($0) ft") } }
+                                .pickerStyle(.wheel)
+                            Picker("Inches", selection: $inches) { ForEach(0...11, id: \.self) { Text("\($0) in") } }
+                                .pickerStyle(.wheel)
+                        }
+                        .frame(height: 200)
+                        .onChange(of: feet) { _,_ in applyImperial() }
+                        .onChange(of: inches) { _,_ in applyImperial() }
+                        .onAppear { loadImperial() }
+                    } else {
+                        HStack(spacing: 0) {
+                            Picker("Centimeters", selection: $cmInt) { ForEach(120...230, id: \.self) { Text("\($0)") } }
+                                .pickerStyle(.wheel)
+                            Picker("Decimal", selection: $cmDec) { ForEach(0...9, id: \.self) { Text(".\($0)") } }
+                                .pickerStyle(.wheel)
+                        }
+                        .frame(height: 200)
+                        .onChange(of: cmInt) { _,_ in applyMetric() }
+                        .onChange(of: cmDec) { _,_ in applyMetric() }
+                        .onAppear { loadMetric() }
+                    }
+                    Spacer(minLength: 0)
+                }
+                .navigationTitle("Height")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            }
+        }
+        private func loadImperial() {
+            let f = Int(floor(heightValue / 12.0))
+            let i = Int(round(heightValue - Double(f) * 12.0))
+            feet = max(3, min(8, f)); inches = max(0, min(11, i))
+        }
+        private func applyImperial() { heightValue = Double(max(0, feet)) * 12.0 + Double(max(0, min(11, inches))) }
+        private func loadMetric() { let v = max(0, heightValue); cmInt = Int(floor(v)); cmDec = min(9, max(0, Int(round((v - floor(v)) * 10)))) }
+        private func applyMetric() { heightValue = Double(cmInt) + Double(cmDec) / 10.0 }
     }
 }

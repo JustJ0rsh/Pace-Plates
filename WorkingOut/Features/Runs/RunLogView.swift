@@ -268,6 +268,20 @@ struct RunLogView: View {
                         } label: {
                             Label("Hike", systemImage: "figure.hiking")
                         }
+                        
+                        Button {
+                            selectedActivityType = "cycling"
+                            showRunTracking = true
+                        } label: {
+                            Label("Cycle", systemImage: "bicycle")
+                        }
+                        
+                        Button {
+                            selectedActivityType = "rowing"
+                            showRunTracking = true
+                        } label: {
+                            Label("Row", systemImage: "figure.rower")
+                        }
                     } label: {
                         Image(systemName: "plus")
                             .font(.system(size: 18, weight: .semibold))
@@ -323,6 +337,10 @@ struct RunLogView: View {
             return "figure.walk"
         case "hiking":
             return "figure.hiking"
+        case "cycling":
+            return "bicycle"
+        case "rowing":
+            return "figure.rower"
         default:
             return "figure.run"
         }
@@ -423,7 +441,16 @@ struct RunLogView: View {
                 guard HealthKitManager.shared.isAuthorized else { return }
                 let workouts = try await HealthKitManager.shared.fetchRecentRuns(limit: limit)
                 for w in workouts {
-                    guard w.workoutActivityType == .running else { continue }
+                    // Map HK activity to our string type
+                    let activityType: String
+                    switch w.workoutActivityType {
+                    case .running: activityType = "running"
+                    case .walking: activityType = "walking"
+                    case .hiking: activityType = "hiking"
+                    case .cycling: activityType = "cycling"
+                    case .rowing: activityType = "rowing"
+                    default: continue
+                    }
                     let end = w.endDate
                     let duration = w.duration
                     let meters = w.totalDistance?.doubleValue(for: .meter()) ?? 0
@@ -439,6 +466,7 @@ struct RunLogView: View {
                     // Attempt to match a similar local run (e.g., tracked via phone) and attach the UUID
                     if let similar = findSimilarRun(endDate: end, duration: duration, distance: value, unit: unit) {
                         similar.healthWorkoutUUID = uuidStr
+                        similar.activityType = activityType
                         if let kcal = try? await HealthKitManager.shared.activeEnergyKilocalories(for: w), kcal > 0 {
                             similar.calories = kcal
                         }
@@ -457,7 +485,7 @@ struct RunLogView: View {
                             let coords = reduced.map { RunCoordinate(latitude: $0.coordinate.latitude, longitude: $0.coordinate.longitude) }
                             routeData = try? JSONEncoder().encode(coords)
                         }
-                        let model = RunningSession(date: end, distance: value, distanceUnit: unit, duration: duration, calories: (kcal ?? 0) > 0 ? kcal : nil, notes: nil, locations: routeData, healthWorkoutUUID: uuidStr)
+                        let model = RunningSession(date: end, distance: value, distanceUnit: unit, duration: duration, calories: (kcal ?? 0) > 0 ? kcal : nil, notes: nil, locations: routeData, healthWorkoutUUID: uuidStr, activityType: activityType)
                         modelContext.insert(model)
                     }
                 }
@@ -771,4 +799,3 @@ struct RunSessionDetailView: View {
         return max(met * 3.5 * kg / 200.0 * minutes, 0)
     }
 }
-

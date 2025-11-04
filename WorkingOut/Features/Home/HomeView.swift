@@ -476,6 +476,12 @@ struct HomeView: View {
             .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    NavigationLink(destination: CommunityView()) {
+                        Image(systemName: "person.3.fill")
+                    }
+                    .accessibilityLabel("Community")
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink(destination: SettingsView()) {
                         Image(systemName: "gear")
