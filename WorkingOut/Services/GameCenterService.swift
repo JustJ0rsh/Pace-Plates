@@ -7,12 +7,12 @@ import UIKit
 
 enum Leaderboards {
     // Replace these IDs with your App Store Connect leaderboard identifiers
-    static let maxBench = "max_bench"
-    static let maxSquat = "max_squat"
-    static let maxDeadlift = "max_deadlift"
-    static let bestSessionVolume = "best_session_volume"
-    static let longestRunMeters = "longest_run_m"
-    static let fastest5kSeconds = "fastest_5k_s"
+    static let maxBench = "Bench"
+    static let maxSquat = "Squat"
+    static let maxDeadlift = "Deadlift"
+    static let bestSessionVolume = "Best_Session_Volume"
+    static let longestRunMeters = "Longest_Run"
+    static let fastest5kSeconds = "Fastest_Run"
 }
 
 struct GameCenterService {
@@ -61,9 +61,10 @@ struct GameCenterService {
     }
 
     @available(iOS 14.0, *)
-    private static func submitInt(_ value: Int, leaderboardID: String) {
+    private static func submitInt(_ value: Int, leaderboardID: String, completion: @escaping (Error?) -> Void) {
         GKLeaderboard.submitScore(value, context: 0, player: GKLocalPlayer.local, leaderboardIDs: [leaderboardID]) { error in
             if let error { print("GK submit error (\(leaderboardID)): \(error.localizedDescription)") }
+            completion(error)
         }
     }
 
@@ -105,11 +106,15 @@ struct GameCenterService {
     static func maxWeight(for names: [String], context: ModelContext, preferredUnit: String) -> Double? {
         let fd = FetchDescriptor<ExerciseLog>()
         let logs = (try? context.fetch(fd)) ?? []
-        let nameSet = Set(names.map { $0.lowercased() })
+        let needles = names.map { $0.lowercased() }
         var bestKg: Double = 0
         for l in logs {
-            let lname = (l.exerciseName ?? "").lowercased()
-            if nameSet.contains(lname) {
+            // Only consider strength sets for lift PRs
+            if (l.exerciseType ?? "strength").lowercased() == "cardio" { continue }
+            // Prefer the snapshot exerciseName; fall back to the linked definition's name
+            let rawName = (l.exerciseName?.isEmpty == false ? l.exerciseName : l.exerciseDefinition?.name) ?? ""
+            let lname = rawName.lowercased()
+            if needles.contains(where: { lname.contains($0) }) {
                 let kg = l.weightUnit == "kg" ? l.weight : (l.weight / 2.20462)
                 if kg > bestKg { bestKg = kg }
             }
@@ -123,8 +128,10 @@ struct GameCenterService {
         var best: Double = 0
         for s in sessions {
             let volKg = (s.exerciseLogs ?? []).reduce(0.0) { acc, log in
+                // Only count strength sets into session volume
+                if (log.exerciseType ?? "strength").lowercased() == "cardio" { return acc }
                 let kg = log.weightUnit == "kg" ? log.weight : (log.weight / 2.20462)
-                return acc + Double(log.reps) * kg
+                return acc + Double(max(0, log.reps)) * max(0, kg)
             }
             if volKg > best { best = volKg }
         }
@@ -132,40 +139,108 @@ struct GameCenterService {
     }
 
     static func longestRunMeters(context: ModelContext) -> Double? {
+        // Include both dedicated RunningSession entries and cardio logs saved inside workouts
         let runs: [RunningSession] = (try? context.fetch(FetchDescriptor<RunningSession>())) ?? []
-        let meters = runs.map { $0.distanceUnit == "mi" ? ($0.distance * 1609.34) : ($0.distance * 1000.0) }.max() ?? 0
+        let runMetersFromSessions = runs.map { r -> Double in
+            let unit = r.distanceUnit.lowercased()
+            if unit.contains("mi") { return r.distance * 1609.34 }
+            return r.distance * 1000.0
+        }
+        let logs: [ExerciseLog] = (try? context.fetch(FetchDescriptor<ExerciseLog>())) ?? []
+        // Heuristic: treat cardio logs whose name suggests running as runs
+        let runMetersFromLogs = logs.compactMap { log -> Double? in
+            guard (log.exerciseType ?? "").lowercased() == "cardio" else { return nil }
+            let name = ((log.exerciseName?.isEmpty == false ? log.exerciseName : log.exerciseDefinition?.name) ?? "").lowercased()
+            let looksLikeRun = ["run", "jog", "tread"].contains(where: { name.contains($0) })
+            guard looksLikeRun, let d = log.distance, let unit = log.distanceUnit?.lowercased(), d > 0 else { return nil }
+            return unit.contains("mi") ? (d * 1609.34) : (d * 1000.0)
+        }
+        let meters = max(runMetersFromSessions.max() ?? 0, runMetersFromLogs.max() ?? 0)
         return meters > 0 ? meters : nil
     }
 
     static func fastest5kSeconds(context: ModelContext) -> Double? {
+        // Compute from RunningSession plus cardio logs that look like runs
         let runs: [RunningSession] = (try? context.fetch(FetchDescriptor<RunningSession>())) ?? []
         var best: Double = .greatestFiniteMagnitude
         for r in runs {
-            let km = r.distanceUnit == "mi" ? (r.distance * 1.60934) : r.distance
+            let unit = r.distanceUnit.lowercased()
+            let km = unit.contains("mi") ? (r.distance * 1.60934) : r.distance
             guard km > 0, r.duration > 0 else { continue }
             let factor = 5.0 / km
             let est = r.duration * factor
             if est < best { best = est }
         }
+        let logs: [ExerciseLog] = (try? context.fetch(FetchDescriptor<ExerciseLog>())) ?? []
+        for log in logs {
+            guard (log.exerciseType ?? "").lowercased() == "cardio" else { continue }
+            let name = ((log.exerciseName?.isEmpty == false ? log.exerciseName : log.exerciseDefinition?.name) ?? "").lowercased()
+            let looksLikeRun = ["run", "jog", "tread"].contains(where: { name.contains($0) })
+            guard looksLikeRun, let d = log.distance, let unit = log.distanceUnit?.lowercased(), d > 0, let sec = log.durationSeconds, sec > 0 else { continue }
+            let km = unit.contains("mi") ? (d * 1.60934) : d
+            let est = Double(sec) * (5.0 / km)
+            if est < best { best = est }
+        }
         return best == .greatestFiniteMagnitude ? nil : best
     }
 
-    static func submitAllMetrics(context: ModelContext, preferredUnit: String) {
+    static func submitAllMetrics(context: ModelContext, preferredUnit: String, completion: (([String: Error?]) -> Void)? = nil) {
         #if canImport(GameKit)
         ensureAuthenticated { ok in
             guard ok else { print("GK submit aborted: not authenticated"); return }
             if #available(iOS 14.0, *) {
-                if let bench = maxWeight(for: ["bench press", "incline bench press", "decline bench press"], context: context, preferredUnit: preferredUnit) { submitInt(scaledInt(bench, scale: 100), leaderboardID: Leaderboards.maxBench) }
-                if let squat = maxWeight(for: ["squats", "front squats"], context: context, preferredUnit: preferredUnit) { submitInt(scaledInt(squat, scale: 100), leaderboardID: Leaderboards.maxSquat) }
-                if let deadlift = maxWeight(for: ["deadlifts"], context: context, preferredUnit: preferredUnit) { submitInt(scaledInt(deadlift, scale: 100), leaderboardID: Leaderboards.maxDeadlift) }
-                if let volume = bestSessionVolume(context: context, preferredUnit: preferredUnit) { submitInt(scaledInt(volume, scale: 1), leaderboardID: Leaderboards.bestSessionVolume) }
-                if let longest = longestRunMeters(context: context) { submitInt(scaledInt(longest, scale: 1), leaderboardID: Leaderboards.longestRunMeters) }
-                if let fastest = fastest5kSeconds(context: context) { submitInt(scaledInt(fastest, scale: 1), leaderboardID: Leaderboards.fastest5kSeconds) }
+                var results: [String: Error?] = [:]
+                let group = DispatchGroup()
+
+                func push(_ label: String, value: Double?, scale: Double, id: String) {
+                    guard let v = value else { results[label] = NSError(domain: "GameCenter", code: -1, userInfo: [NSLocalizedDescriptionKey: "No value"]); return }
+                    group.enter()
+                    submitInt(scaledInt(v, scale: scale), leaderboardID: id) { err in
+                        results[label] = err
+                        group.leave()
+                    }
+                }
+
+                push("Max Bench", value: maxWeight(for: ["bench press", "incline bench press", "decline bench press", "barbell bench press", "dumbbell bench press", "bench"], context: context, preferredUnit: preferredUnit), scale: 100, id: Leaderboards.maxBench)
+                push("Max Squat", value: maxWeight(for: ["squat", "squats", "back squat", "barbell back squat", "front squat", "front squats"], context: context, preferredUnit: preferredUnit), scale: 100, id: Leaderboards.maxSquat)
+                push("Max Deadlift", value: maxWeight(for: ["deadlift", "deadlifts", "barbell deadlift", "romanian deadlift", "rdl"], context: context, preferredUnit: preferredUnit), scale: 100, id: Leaderboards.maxDeadlift)
+                push("Best Session Volume", value: bestSessionVolume(context: context, preferredUnit: preferredUnit), scale: 1, id: Leaderboards.bestSessionVolume)
+                push("Longest Run (m)", value: longestRunMeters(context: context), scale: 1, id: Leaderboards.longestRunMeters)
+                push("Fastest 5K (s)", value: fastest5kSeconds(context: context), scale: 1, id: Leaderboards.fastest5kSeconds)
+
+                group.notify(queue: .main) {
+                    completion?(results)
+                }
             } else {
                 // Older iOS versions fallback omitted; app targets modern iOS
             }
         }
         #endif
     }
-}
 
+    // MARK: - Verify scores helper (loads local player's scores for boards)
+    @available(iOS 14.0, *)
+    static func fetchMyScores(completion: @escaping ([String: Int?], Error?) -> Void) {
+        ensureAuthenticated { ok in
+            guard ok else { completion([:], NSError(domain: "GameCenter", code: -2, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"])) ; return }
+            let ids = [Leaderboards.maxBench, Leaderboards.maxSquat, Leaderboards.maxDeadlift, Leaderboards.bestSessionVolume, Leaderboards.longestRunMeters, Leaderboards.fastest5kSeconds]
+            GKLeaderboard.loadLeaderboards(IDs: ids) { boards, error in
+                if let error { completion([:], error); return }
+                guard let boards else { completion([:], nil); return }
+                var results: [String: Int?] = [:]
+                let group = DispatchGroup()
+                for b in boards {
+                    group.enter()
+                    b.loadEntries(for: .global, timeScope: .allTime, range: NSRange(location: 1, length: 1)) { local, _, _, err in
+                        let key = b.baseLeaderboardID
+                        if let err { results[key] = nil; print("Load entry error for \(key): \(err.localizedDescription)") }
+                        else if let score = local?.score { results[key] = score }
+                        else { results[key] = nil }
+                        group.leave()
+                    }
+                }
+                group.notify(queue: .main) { completion(results, nil) }
+            }
+        }
+    }
+}

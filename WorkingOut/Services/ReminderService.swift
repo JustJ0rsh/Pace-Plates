@@ -3,6 +3,9 @@ import UserNotifications
 
 enum ReminderService {
     private static let weightReminderID = "weekly_weight_reminder"
+    private static let weekdayKey = "reminderWeekday"
+    private static let hourKey = "reminderHour"
+    private static let minuteKey = "reminderMinute"
 
     static func requestAuthorization(completion: @escaping (Bool) -> Void) {
         let center = UNUserNotificationCenter.current()
@@ -37,6 +40,11 @@ enum ReminderService {
         UNUserNotificationCenter.current().add(req) { error in
             if let error { print("Reminder schedule error: \(error.localizedDescription)") }
         }
+        // Persist chosen schedule
+        let d = UserDefaults.standard
+        d.set(weekday, forKey: weekdayKey)
+        d.set(hour, forKey: hourKey)
+        d.set(minute, forKey: minuteKey)
     }
 
     static func cancelWeeklyWeightReminder() {
@@ -47,11 +55,16 @@ enum ReminderService {
         let enabled = UserDefaults.standard.bool(forKey: "enableWeeklyWeightReminder")
         if enabled {
             requestAuthorization { ok in
-                if ok { scheduleWeeklyWeightReminder() }
+                if ok {
+                    let d = UserDefaults.standard
+                    let weekday = d.integer(forKey: weekdayKey) == 0 ? 2 : d.integer(forKey: weekdayKey)
+                    let hour = d.object(forKey: hourKey) as? Int ?? 9
+                    let minute = d.object(forKey: minuteKey) as? Int ?? 0
+                    scheduleWeeklyWeightReminder(weekday: weekday, hour: hour, minute: minute)
+                }
             }
         } else {
             cancelWeeklyWeightReminder()
         }
     }
 }
-

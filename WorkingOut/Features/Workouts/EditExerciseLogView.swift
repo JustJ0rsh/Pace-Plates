@@ -69,9 +69,17 @@ struct EditExerciseLogView: View {
     
     // Helper to detect if this is a cardio exercise
     private var isCardioExercise: Bool {
-        guard let name = log.exerciseName?.lowercased() else { return false }
-        let cardioKeywords = ["run", "jog", "bike", "cycle", "swim", "row", "elliptical", "cardio", "treadmill", "stair"]
-        return cardioKeywords.contains(where: { name.contains($0) }) || log.exerciseType == "cardio"
+        guard let raw = log.exerciseName, !raw.isEmpty else { return log.exerciseType == "cardio" }
+        let name = raw.lowercased()
+        // Broad cardio indicators
+        let cardioTokens = ["run", "jog", "bike", "cycle", "swim", "elliptical", "cardio", "treadmill", "stair", "rowing", "rower", "erg", "ergometer", "concept2", "assault bike", "airdyne", "spin"]
+        let looksCardio = cardioTokens.contains(where: { name.contains($0) })
+        // Common strength "row" exercises that should NOT be treated as cardio
+        let strengthRowTokens = [" row", "rows", "barbell row", "bent over row", "bent-over row", "pendlay row", "t-bar row", "dumbbell row", "one-arm row", "one arm row", "seated row", "cable row", "inverted row"]
+        let isStrengthRow = strengthRowTokens.contains(where: { name.contains($0) }) && !name.contains("rowing") && !name.contains("rower")
+        // Respect explicit type if already set to cardio; otherwise infer
+        if log.exerciseType == "cardio" { return !isStrengthRow }
+        return looksCardio && !isStrengthRow
     }
 
     var body: some View {

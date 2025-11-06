@@ -18,6 +18,7 @@ struct WorkoutSessionDetailView: View {
     @State private var saveWorkItem: DispatchWorkItem? = nil
     @State private var showingAddExercise: Bool = false
     @FocusState private var notesFocused: Bool
+    @AppStorage("weightUnit") private var weightUnit: String = "lbs"
     // Avoid storing/staging ExerciseDefinition references for UI
     
     init(session: WorkoutSession) {
@@ -272,6 +273,8 @@ struct WorkoutSessionDetailView: View {
                 session.title = titleText
             }
             try? modelContext.save()
+            // Auto-submit leaderboards after saving
+            GameCenterService.submitAllMetrics(context: modelContext, preferredUnit: weightUnit)
         }
     }
     

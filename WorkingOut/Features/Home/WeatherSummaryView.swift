@@ -50,7 +50,10 @@ struct WeatherSummaryView: View {
         .padding(.vertical, 12)
         .background(AppTheme.secondaryBackgroundColor)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .onAppear { vm.fetch() }
+        .onAppear {
+            // Throttle initial fetch slightly to avoid contention with other stores at app startup
+            Task { try? await Task.sleep(nanoseconds: 300_000_000); vm.fetch() }
+        }
     }
 }
 

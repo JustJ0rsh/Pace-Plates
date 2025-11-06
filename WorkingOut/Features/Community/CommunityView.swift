@@ -19,19 +19,48 @@ struct CommunityView: View {
                         Text("Compete on lifts, volume, and running.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
+                        VStack(alignment: .leading) {
+                            Text("Max Bench • Squat • Deadlift")
+                            Text("Best Session Volume")
+                            Text("Longest Run • Fastest 5K")
+                        }
+                        .font(.subheadline)
                         HStack {
-                            VStack(alignment: .leading) {
-                                Text("Max Bench • Squat • Deadlift")
-                                Text("Best Session Volume")
-                                Text("Longest Run • Fastest 5K")
-                            }
-                            .font(.subheadline)
-                            Spacer()
-                            Button { signInTapped() } label: { Label("Sign In", systemImage: "gamecontroller") }
+                            if GKLocalPlayer.local.isAuthenticated {
+                                Text("Signed in as \(GKLocalPlayer.local.displayName)")
+                                    .font(.footnote).foregroundStyle(.secondary)
+                            } else {
+                                Text("Not signed into Game Center")
+                                    .font(.footnote).foregroundStyle(.orange)
+                                Spacer()
+                                Button {
+                                    // Prompt to enable Game Center
+                                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                                        UIApplication.shared.open(url)
+                                    }
+                                } label: { Label("Open Settings", systemImage: "gear") }
                                 .buttonStyle(.bordered)
+                            }
                         }
                         Button {
-                            GameCenterService.submitAllMetrics(context: modelContext, preferredUnit: weightUnit)
+                            GameCenterService.submitAllMetrics(context: modelContext, preferredUnit: weightUnit) { results in
+                                var lines: [String] = []
+                                for (label, err) in results.sorted(by: { $0.key < $1.key }) {
+                                    lines.append("\(label): \(err == nil ? "OK" : (err!.localizedDescription))")
+                                }
+                                // After submit, verify scores we see for this player
+                                if #available(iOS 14.0, *) {
+                                    GameCenterService.fetchMyScores { scores, _ in
+                                        var verify: [String] = ["— My Scores —"]
+                                        for (id, val) in scores.sorted(by: { $0.key < $1.key }) {
+                                            verify.append("\(id): \(val != nil ? String(val!) : "None")")
+                                        }
+                                        showSignInError = (lines + verify).joined(separator: "\n")
+                                    }
+                                } else {
+                                    showSignInError = lines.joined(separator: "\n")
+                                }
+                            }
                         } label: { Label("Update Leaderboards", systemImage: "arrow.triangle.2.circlepath") }
                         .buttonStyle(.borderedProminent)
                         Button { presentLeaderboards() } label: { Label("View Leaderboards", systemImage: "list.number") }
@@ -56,6 +85,14 @@ struct CommunityView: View {
                 if #available(iOS 14.0, *) {
                     GKAccessPoint.shared.location = .topLeading
                     GKAccessPoint.shared.isActive = true
+                }
+                // Auto-authenticate on entering Community
+                GameCenterService.ensureAuthenticated { ok in
+                    if !ok {
+                        DispatchQueue.main.async {
+                            showSignInError = "Please enable Game Center in Settings and sign in."
+                        }
+                    }
                 }
                 #endif
             }

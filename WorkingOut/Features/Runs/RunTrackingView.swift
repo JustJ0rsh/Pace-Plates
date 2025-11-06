@@ -251,6 +251,7 @@ struct RunTrackingProView: View {
     @State private var showingSettingsPrompt = false
     
     @State private var isSavingRun: Bool = false
+    @AppStorage("weightUnit") private var weightUnit: String = "lbs"
     
     // NEW: Map camera / region state
     @State private var cameraPosition: MapCameraPosition = .automatic
@@ -660,6 +661,8 @@ struct RunTrackingProView: View {
 
             shouldFollowUser = false
             isSavingRun = false
+            // Auto-submit leaderboards after saving
+            GameCenterService.submitAllMetrics(context: modelContext, preferredUnit: weightUnit)
             dismiss()
         } catch {
             

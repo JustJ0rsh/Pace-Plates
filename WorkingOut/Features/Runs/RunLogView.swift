@@ -400,32 +400,47 @@ struct RunLogView: View {
     }
 
     private func estimatedCalories(for session: RunningSession) -> Double {
-        // Estimate calories using MET based on speed and latest weight
+        // Estimate calories using MET based on modality & speed with simple heuristics.
         let hours = max(session.duration / 3600.0, 0.0001)
-        // speed in mph
         let miles = (session.distanceUnit == "mi") ? session.distance : session.distance / 1.60934
         let mph = miles / hours
         let met: Double = {
-            switch mph {
-            case ..<2.5: return 2.5
-            case 2.5..<3.0: return 3.3
-            case 3.0..<3.5: return 3.8
-            case 3.5..<4.0: return 4.3
-            case 4.0..<5.0: return 5.0
-            case 5.0..<5.5: return 8.3
-            case 5.5..<6.0: return 9.0
-            case 6.0..<7.0: return 9.8
-            case 7.0..<8.0: return 11.0
-            case 8.0..<9.0: return 11.8
-            case 9.0..<10.0: return 12.8
-            default: return 14.5
+            switch session.activityType {
+            case "cycling":
+                switch mph {
+                case ..<10: return 4.0
+                case 10..<12: return 6.0
+                case 12..<14: return 8.0
+                case 14..<16: return 10.0
+                case 16..<19: return 12.0
+                default: return 16.0
+                }
+            case "rowing":
+                switch mph { // mph proxy for intensity; rowing usually slower speeds
+                case ..<3: return 4.0
+                case 3..<4.5: return 7.0
+                default: return 10.0
+                }
+            default: // running/walking/hiking
+                switch mph {
+                case ..<2.5: return 2.5
+                case 2.5..<3.0: return 3.3
+                case 3.0..<3.5: return 3.8
+                case 3.5..<4.0: return 4.3
+                case 4.0..<5.0: return 5.0
+                case 5.0..<5.5: return 8.3
+                case 5.5..<6.0: return 9.0
+                case 6.0..<7.0: return 9.8
+                case 7.0..<8.0: return 11.0
+                case 8.0..<9.0: return 11.8
+                case 9.0..<10.0: return 12.8
+                default: return 14.5
+                }
             }
         }()
         let kg = latestWeightKg() ?? 70.0
         let minutes = session.duration / 60.0
-        // kcal/min = MET * 3.5 * kg / 200
-        let kcal = met * 3.5 * kg / 200.0 * minutes
-        return max(kcal, 0)
+        return max(met * 3.5 * kg / 200.0 * minutes, 0)
     }
     
     private func caloriesFor(_ session: RunningSession) -> Double {

@@ -21,6 +21,11 @@ struct SettingsView: View {
     @FocusState private var heightFocused: Bool
     @FocusState private var goalWeightFocused: Bool
     @State private var showHeightPicker: Bool = false
+    // Reminder prefs
+    @AppStorage("reminderWeekday") private var reminderWeekday: Int = 2
+    @AppStorage("reminderHour") private var reminderHour: Int = 9
+    @AppStorage("reminderMinute") private var reminderMinute: Int = 0
+    @State private var reminderTime: Date = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date()) ?? Date()
     
     var body: some View {
         NavigationStack {
@@ -143,7 +148,7 @@ struct SettingsView: View {
                     Toggle(isOn: $enableWeeklyWeightReminder) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Weekly Weight Reminder")
-                            Text("Sends a reminder every Monday at 9:00 to log your weight.")
+                            Text("Reminds you to log your weight weekly.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
@@ -151,11 +156,33 @@ struct SettingsView: View {
                     .onChange(of: enableWeeklyWeightReminder) { _, newValue in
                         if newValue {
                             ReminderService.scheduleIfEnabled()
-                            alertMessage = "Weekly reminder scheduled. You can change it in Settings > Notifications."
-                            showAlert = true
                         } else {
                             ReminderService.cancelWeeklyWeightReminder()
                         }
+                    }
+
+                    if enableWeeklyWeightReminder {
+                        // Day and time pickers
+                        Picker("Day", selection: $reminderWeekday) {
+                            Text("Sun").tag(1)
+                            Text("Mon").tag(2)
+                            Text("Tue").tag(3)
+                            Text("Wed").tag(4)
+                            Text("Thu").tag(5)
+                            Text("Fri").tag(6)
+                            Text("Sat").tag(7)
+                        }
+                        .onChange(of: reminderWeekday) { _, _ in
+                            ReminderService.scheduleWeeklyWeightReminder(weekday: reminderWeekday, hour: reminderHour, minute: reminderMinute)
+                        }
+
+                        DatePicker("Time", selection: $reminderTime, displayedComponents: .hourAndMinute)
+                            .onChange(of: reminderTime) { _, newTime in
+                                let comps = Calendar.current.dateComponents([.hour, .minute], from: newTime)
+                                reminderHour = comps.hour ?? 9
+                                reminderMinute = comps.minute ?? 0
+                                ReminderService.scheduleWeeklyWeightReminder(weekday: reminderWeekday, hour: reminderHour, minute: reminderMinute)
+                            }
                     }
                 }
 

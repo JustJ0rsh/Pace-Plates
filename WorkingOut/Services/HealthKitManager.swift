@@ -13,6 +13,8 @@ final class HealthKitManager: ObservableObject {
         set.insert(HKObjectType.workoutType())
         set.insert(HKObjectType.quantityType(forIdentifier: .heartRate)!)
         set.insert(HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning)!)
+        if let t = HKObjectType.quantityType(forIdentifier: .distanceCycling) { set.insert(t) }
+        if let t = HKObjectType.quantityType(forIdentifier: .distanceRowing) { set.insert(t) }
         set.insert(HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!)
         set.insert(HKObjectType.quantityType(forIdentifier: .stepCount)!)
         set.insert(HKObjectType.quantityType(forIdentifier: .vo2Max)!)
@@ -35,6 +37,8 @@ final class HealthKitManager: ObservableObject {
         var set = Set<HKSampleType>()
         set.insert(HKObjectType.workoutType())
         set.insert(HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning)!)
+        if let t = HKObjectType.quantityType(forIdentifier: .distanceCycling) { set.insert(t) }
+        if let t = HKObjectType.quantityType(forIdentifier: .distanceRowing) { set.insert(t) }
         set.insert(HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!)
         return set
     }()
@@ -63,7 +67,13 @@ final class HealthKitManager: ObservableObject {
         let store = self.healthStore
 
         // Prepare quantities
-        let distanceType = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning)!
+        let distanceType: HKQuantityType = {
+            switch activityType {
+            case "cycling": return HKQuantityType.quantityType(forIdentifier: .distanceCycling)!
+            case "rowing": return HKQuantityType.quantityType(forIdentifier: .distanceRowing)!
+            default: return HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning)!
+            }
+        }()
         let distanceQuantity = HKQuantity(unit: .meter(), doubleValue: distanceMeters)
         let distanceSample = HKQuantitySample(type: distanceType,
                                               quantity: distanceQuantity,
