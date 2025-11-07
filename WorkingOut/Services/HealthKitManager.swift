@@ -169,11 +169,12 @@ final class HealthKitManager: ObservableObject {
                 if let error = error { continuation.resume(throwing: error); return }
                 let workouts = (samples as? [HKWorkout]) ?? []
                 let filtered = workouts.filter { w in
-                    w.workoutActivityType == .running ||
-                    w.workoutActivityType == .walking ||
-                    w.workoutActivityType == .hiking ||
-                    w.workoutActivityType == .cycling ||
-                    w.workoutActivityType == .rowing
+                    switch w.workoutActivityType {
+                    case .running, .walking, .hiking, .cycling, .rowing, .elliptical, .stairClimbing:
+                        return true
+                    default:
+                        return false
+                    }
                 }
                 continuation.resume(returning: filtered)
             }

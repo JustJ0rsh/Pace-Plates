@@ -102,6 +102,8 @@ class PersistenceController {
             ExerciseLibrary.populateInitialExercises(context: context)
             try? context.save()
         }
+        // Reclassify arm exercises to Biceps/Triceps when possible
+        reclassifyArmExercises()
     }
     
     // Remove duplicated exercise definitions (same name + muscle group),
@@ -148,6 +150,28 @@ class PersistenceController {
     func fetchExerciseDefinitions() -> [ExerciseDefinition] {
         let descriptor = FetchDescriptor<ExerciseDefinition>()
         return (try? container.mainContext.fetch(descriptor)) ?? []
+    }
+
+    // Split legacy "Arms" group into "Biceps" and "Triceps" when names match
+    private func reclassifyArmExercises() {
+        let context = container.mainContext
+        let fd = FetchDescriptor<ExerciseDefinition>(predicate: #Predicate { $0.muscleGroup == "Arms" })
+        guard let defs = try? context.fetch(fd), !defs.isEmpty else { return }
+        let bicepsNames: Set<String> = [
+            "bicep curls", "dumbbell bicep curls", "machine bicep curls",
+            "hammer curls", "preacher curls", "concentration curls", "reverse grip curls"
+        ]
+        let tricepsNames: Set<String> = [
+            "tricep pushdowns", "tricep pushdowns (cable)", "tricep extensions",
+            "overhead tricep extension (dumbbell)", "skull crushers", "close grip bench press", "dips"
+        ]
+        var changed = false
+        for d in defs {
+            let key = d.name.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            if bicepsNames.contains(key) { d.muscleGroup = "Biceps"; changed = true; continue }
+            if tricepsNames.contains(key) { d.muscleGroup = "Triceps"; changed = true; continue }
+        }
+        if changed { try? context.save() }
     }
     
     // MARK: - Workout Session Methods

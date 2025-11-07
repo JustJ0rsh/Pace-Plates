@@ -34,11 +34,11 @@ struct ExerciseLibrary {
         ("Lateral Raises (Light)", "Shoulders"),
         ("Front Raises (Light)", "Shoulders"),
         
-        // Arms - Beginner
-        ("Dumbbell Bicep Curls", "Arms"),
-        ("Machine Bicep Curls", "Arms"),
-        ("Tricep Pushdowns (Cable)", "Arms"),
-        ("Overhead Tricep Extension (Dumbbell)", "Arms"),
+        // Arms - Beginner (split into Biceps / Triceps)
+        ("Dumbbell Bicep Curls", "Biceps"),
+        ("Machine Bicep Curls", "Biceps"),
+        ("Tricep Pushdowns (Cable)", "Triceps"),
+        ("Overhead Tricep Extension (Dumbbell)", "Triceps"),
 
         // Forearms - Beginner
         ("Wrist Curls", "Forearms"),
@@ -112,17 +112,17 @@ struct ExerciseLibrary {
         ("Face Pulls", "Shoulders"),
         ("Cable Lateral Raises", "Shoulders"),
         
-        // Arms
-        ("Bicep Curls", "Arms"),
-        ("Hammer Curls", "Arms"),
-        ("Preacher Curls", "Arms"),
-        ("Tricep Pushdowns", "Arms"),
-        ("Tricep Extensions", "Arms"),
-        ("Skull Crushers", "Arms"),
-        ("Close Grip Bench Press", "Arms"),
-        ("Concentration Curls", "Arms"),
-        ("Reverse Grip Curls", "Arms"),
-        ("Dips", "Arms"),
+        // Arms (split)
+        ("Bicep Curls", "Biceps"),
+        ("Hammer Curls", "Biceps"),
+        ("Preacher Curls", "Biceps"),
+        ("Concentration Curls", "Biceps"),
+        ("Reverse Grip Curls", "Biceps"),
+        ("Tricep Pushdowns", "Triceps"),
+        ("Tricep Extensions", "Triceps"),
+        ("Skull Crushers", "Triceps"),
+        ("Close Grip Bench Press", "Triceps"),
+        ("Dips", "Triceps"),
 
         // Forearms
         ("Wrist Curls", "Forearms"),

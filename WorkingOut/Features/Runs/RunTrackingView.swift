@@ -661,8 +661,6 @@ struct RunTrackingProView: View {
 
             shouldFollowUser = false
             isSavingRun = false
-            // Auto-submit leaderboards after saving
-            GameCenterService.submitAllMetrics(context: modelContext, preferredUnit: weightUnit)
             dismiss()
         } catch {
             

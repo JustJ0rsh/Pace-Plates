@@ -341,6 +341,10 @@ struct RunLogView: View {
             return "bicycle"
         case "rowing":
             return "figure.rower"
+        case "elliptical":
+            return "figure.core.training"
+        case "stairStepper", "stairClimbing":
+            return "figure.stairs"
         default:
             return "figure.run"
         }
@@ -352,6 +356,16 @@ struct RunLogView: View {
             return "Walk"
         case "hiking":
             return "Hike"
+        case "cycling":
+            return "Cycle"
+        case "rowing":
+            return "Row"
+        case "elliptical":
+            return "Elliptical"
+        case "stairStepper":
+            return "Stair Stepper"
+        case "stairClimbing":
+            return "Stair Climbing"
         default:
             return "Run"
         }
@@ -421,6 +435,10 @@ struct RunLogView: View {
                 case 3..<4.5: return 7.0
                 default: return 10.0
                 }
+            case "elliptical":
+                return 5.5 // moderate effort constant when distance may be 0
+            case "stairStepper", "stairClimbing":
+                return 8.0 // vigorous effort constant when distance may be 0
             default: // running/walking/hiking
                 switch mph {
                 case ..<2.5: return 2.5
@@ -452,8 +470,7 @@ struct RunLogView: View {
     private func importHealthRuns(limit: Int = 30) {
         Task { @MainActor in
             do {
-                // Ensure we have permission
-                guard HealthKitManager.shared.isAuthorized else { return }
+                // Try to fetch recent workouts (will no-op if not authorized)
                 let workouts = try await HealthKitManager.shared.fetchRecentRuns(limit: limit)
                 for w in workouts {
                     // Map HK activity to our string type
@@ -464,6 +481,8 @@ struct RunLogView: View {
                     case .hiking: activityType = "hiking"
                     case .cycling: activityType = "cycling"
                     case .rowing: activityType = "rowing"
+                    case .elliptical: activityType = "elliptical"
+                    case .stairClimbing: activityType = "stairClimbing"
                     default: continue
                     }
                     let end = w.endDate

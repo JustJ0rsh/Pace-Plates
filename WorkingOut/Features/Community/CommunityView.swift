@@ -1,8 +1,4 @@
 import SwiftUI
-#if canImport(GameKit)
-import GameKit
-import UIKit
-#endif
 import SwiftData
 
 struct CommunityView: View {
@@ -14,57 +10,12 @@ struct CommunityView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Leaderboards") {
+                // Community landing; leaderboards disabled in no-Game Center branch
+                Section("Community") {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Compete on lifts, volume, and running.")
+                        Text("Groups and challenges coming soon.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
-                        VStack(alignment: .leading) {
-                            Text("Max Bench • Squat • Deadlift")
-                            Text("Best Session Volume")
-                            Text("Longest Run • Fastest 5K")
-                        }
-                        .font(.subheadline)
-                        HStack {
-                            if GKLocalPlayer.local.isAuthenticated {
-                                Text("Signed in as \(GKLocalPlayer.local.displayName)")
-                                    .font(.footnote).foregroundStyle(.secondary)
-                            } else {
-                                Text("Not signed into Game Center")
-                                    .font(.footnote).foregroundStyle(.orange)
-                                Spacer()
-                                Button {
-                                    // Prompt to enable Game Center
-                                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                                        UIApplication.shared.open(url)
-                                    }
-                                } label: { Label("Open Settings", systemImage: "gear") }
-                                .buttonStyle(.bordered)
-                            }
-                        }
-                        Button {
-                            GameCenterService.submitAllMetrics(context: modelContext, preferredUnit: weightUnit) { results in
-                                var lines: [String] = []
-                                for (label, err) in results.sorted(by: { $0.key < $1.key }) {
-                                    lines.append("\(label): \(err == nil ? "OK" : (err!.localizedDescription))")
-                                }
-                                // After submit, verify scores we see for this player
-                                if #available(iOS 14.0, *) {
-                                    GameCenterService.fetchMyScores { scores, _ in
-                                        var verify: [String] = ["— My Scores —"]
-                                        for (id, val) in scores.sorted(by: { $0.key < $1.key }) {
-                                            verify.append("\(id): \(val != nil ? String(val!) : "None")")
-                                        }
-                                        showSignInError = (lines + verify).joined(separator: "\n")
-                                    }
-                                } else {
-                                    showSignInError = lines.joined(separator: "\n")
-                                }
-                            }
-                        } label: { Label("Update Leaderboards", systemImage: "arrow.triangle.2.circlepath") }
-                        .buttonStyle(.borderedProminent)
-                        Button { presentLeaderboards() } label: { Label("View Leaderboards", systemImage: "list.number") }
-                            .buttonStyle(.bordered)
                     }
                 }
 
@@ -77,80 +28,17 @@ struct CommunityView: View {
             .navigationTitle("Community")
             .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
-            .alert("Game Center", isPresented: Binding(get: { showSignInError != nil }, set: { if !$0 { showSignInError = nil } })) {
+            .alert("Notice", isPresented: Binding(get: { showSignInError != nil }, set: { if !$0 { showSignInError = nil } })) {
                 Button("OK", role: .cancel) {}
             } message: { Text(showSignInError ?? "") }
-            .onAppear {
-                #if canImport(GameKit)
-                if #available(iOS 14.0, *) {
-                    GKAccessPoint.shared.location = .topLeading
-                    GKAccessPoint.shared.isActive = true
-                }
-                // Auto-authenticate on entering Community
-                GameCenterService.ensureAuthenticated { ok in
-                    if !ok {
-                        DispatchQueue.main.async {
-                            showSignInError = "Please enable Game Center in Settings and sign in."
-                        }
-                    }
-                }
-                #endif
-            }
-            .onDisappear {
-                #if canImport(GameKit)
-                if #available(iOS 14.0, *) {
-                    GKAccessPoint.shared.isActive = false
-                }
-                #endif
-            }
+            .onAppear { }
+            .onDisappear { }
         }
     }
 
-    private func signInTapped() {
-        #if canImport(GameKit)
-        if GKLocalPlayer.local.isAuthenticated {
-            showSignInError = "Already signed in as \(GKLocalPlayer.local.displayName)."
-            return
-        }
-        isAuthenticating = true
-        GameCenterService.ensureAuthenticated { ok in
-            isAuthenticating = false
-            if ok {
-                if #available(iOS 14.0, *) {
-                    GKAccessPoint.shared.location = .topLeading
-                    GKAccessPoint.shared.isActive = true
-                }
-            } else {
-                showSignInError = "Please sign in to Game Center in Settings > Game Center, then return here."
-            }
-        }
-        #else
-        showSignInError = "GameKit not available on this build."
-        #endif
-    }
+    private func signInTapped() { showSignInError = "Leaderboards are disabled on this branch." }
 
-    private func presentLeaderboards() {
-        #if canImport(GameKit)
-        if !GKLocalPlayer.local.isAuthenticated {
-            GameCenterService.ensureAuthenticated { ok in
-                DispatchQueue.main.async {
-                    if ok { presentLeaderboards() } else { showSignInError = "Sign into Game Center first." }
-                }
-            }
-            return
-        }
-        if #available(iOS 26, *) {
-            // Use overlay on newer iOS; if service is unavailable, show a hint
-            GKAccessPoint.shared.location = .topLeading
-            GKAccessPoint.shared.isActive = true
-            if !GKAccessPoint.shared.isPresentingGameCenter {
-                GKAccessPoint.shared.trigger(handler: { })
-            }
-        } else {
-            GameCenterService.presentLeaderboardsDashboardLegacy()
-        }
-        #endif
-    }
+    private func presentLeaderboards() { }
 }
 
 private struct GroupsPlaceholderView: View {
@@ -180,7 +68,7 @@ private struct ChallengesPlaceholderView: View {
             Text("Compete on max lifts, volume, or running with weekly and monthly challenges.")
                 .font(.subheadline).multilineTextAlignment(.center).foregroundStyle(.secondary)
             Spacer()
-            ContentUnavailableView("Coming Soon", systemImage: "flag.checkered", description: Text("Leaderboards, streaks, trophies via Game Center."))
+            ContentUnavailableView("Coming Soon", systemImage: "flag.checkered", description: Text("Leaderboards, streaks, and trophies."))
             Spacer()
         }
         .padding()

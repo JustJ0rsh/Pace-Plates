@@ -335,23 +335,14 @@ struct HomeView: View {
     private var streakDisplayText: String {
         let isWeekly: Bool = (streakMode == "weekly")
         let count: Int = isWeekly ? activityWeeklyStreakWeeks : activityDailyStreakDays
-
-        let unitSingular: String = isWeekly ? "week" : "day"
-        let unitPlural: String = unitSingular + "s"
-        let unit: String = (count == 1) ? unitSingular : unitPlural
-
-        return String(count) + "-" + unit + " streak"
+        // Always use singular word per requirement
+        if isWeekly { return "\(count) Week Streak" }
+        return "\(count) Day Streak"
     }
     
     // MARK: Helpers to reduce type-check complexity in body
 
-    private func toggleStreakMode() {
-        if streakMode == "daily" {
-            streakMode = "weekly"
-        } else {
-            streakMode = "daily"
-        }
-    }
+    @State private var showStreakCalendar: Bool = false
     
     @ViewBuilder
     private var streakCard: some View {
@@ -365,21 +356,36 @@ struct HomeView: View {
                     .foregroundColor(AppTheme.textColor)
             }
             Spacer()
-            Button(action: toggleStreakMode) {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                    Text(streakMode == "daily" ? "Daily" : "Weekly")
-                        .font(.subheadline.weight(.semibold))
+            HStack(spacing: 8) {
+                Button(action: { showStreakCalendar = true }) {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 16, weight: .semibold))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(AppTheme.accentColor.opacity(0.2))
+                        .foregroundColor(AppTheme.accentColor)
+                        .clipShape(Capsule())
+                        .accessibilityLabel("Calendar")
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(AppTheme.accentColor.opacity(0.2))
-                .foregroundColor(AppTheme.accentColor)
-                .clipShape(Capsule())
+                .buttonStyle(.plain)
+
+                Button(action: { streakMode = (streakMode == "weekly") ? "daily" : "weekly" }) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 16, weight: .semibold))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(AppTheme.accentColor.opacity(0.2))
+                        .foregroundColor(AppTheme.accentColor)
+                        .clipShape(Capsule())
+                        .accessibilityLabel(streakMode == "weekly" ? "Switch to day streak" : "Switch to week streak")
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
         .floatingTile()
+        .sheet(isPresented: $showStreakCalendar) {
+            NavigationStack { StreakCalendarView() }
+        }
     }
     
     @ViewBuilder

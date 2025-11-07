@@ -13,7 +13,8 @@ struct AddExerciseView: View {
     @State private var showingAddCustomExercise = false
     @State private var newExerciseName = ""
     @State private var selectedMuscleGroup = "Chest"
-    private let muscleGroups = ["Chest", "Back", "Legs", "Shoulders", "Arms", "Forearms", "Core", "Cardio"]
+    // Include Biceps/Triceps sub-groups so users can file arms more precisely
+    private let muscleGroups = ["Chest", "Back", "Legs", "Shoulders", "Biceps", "Triceps", "Forearms", "Core", "Cardio"]
     @State private var historyExerciseName: String? = nil
 
     init(workoutSession: WorkoutSession, onAdd: ((ExerciseLog) -> Void)? = nil) {

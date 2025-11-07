@@ -51,6 +51,9 @@ struct ContentView: View {
             ExerciseLibrary.populateInitialExercises(context: persistenceController.container.mainContext)
             persistenceController.deduplicateExerciseDefinitions()
             persistenceController.ensureDefaultExercisesPresent()
+            // Ensure legacy arm exercises are reclassified to Biceps/Triceps
+            // (idempotent)
+            
             
             // Seed built-in workout templates (idempotent)
             Task { @MainActor in
@@ -81,8 +84,7 @@ struct ContentView: View {
                 if heightUnit != "cm" { heightUnit = "cm" }
             }
 
-            // Auto re-authenticate Game Center silently on app launch (presents if needed only once)
-            GameCenterService.ensureAuthenticated { _ in }
+            // Game Center disabled on this branch
         }
         .alert("Health Access Issue", isPresented: Binding(get: { healthAuthError != nil }, set: { if !$0 { healthAuthError = nil } })) {
             Button("OK", role: .cancel) { healthAuthError = nil }

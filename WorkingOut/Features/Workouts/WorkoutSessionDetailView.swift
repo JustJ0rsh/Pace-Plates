@@ -273,8 +273,6 @@ struct WorkoutSessionDetailView: View {
                 session.title = titleText
             }
             try? modelContext.save()
-            // Auto-submit leaderboards after saving
-            GameCenterService.submitAllMetrics(context: modelContext, preferredUnit: weightUnit)
         }
     }
     
