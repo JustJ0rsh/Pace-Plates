@@ -1,0 +1,736 @@
+{
+  "meta" : {
+    "version" : "2024-11-15"
+  },
+  "resources" : {
+    "achievementImages" : {
+      "streak_day_30-en-US" : [
+        {
+          "localID" : "streak_day_30-en-US",
+          "url" : "en-US\/AchievementImage-streak_day_30-en-US.png"
+        }
+      ]
+    },
+    "achievementLocalizations" : {
+      "streak_day_30" : [
+        {
+          "afterEarnedDescription" : "30 Days in a Row of Workouts",
+          "beforeEarnedDescription" : "30 Days in a Row of Workouts",
+          "locale" : "en-US",
+          "localID" : "streak_day_30-en-US",
+          "name" : "Streak Day 30"
+        }
+      ],
+      "streak_days_007" : [
+        {
+          "afterEarnedDescription" : "You worked out 7 days in a row.",
+          "beforeEarnedDescription" : "Work out 7 days in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_days_007-en-US",
+          "name" : "7-Day Streak"
+        }
+      ],
+      "streak_days_014" : [
+        {
+          "afterEarnedDescription" : "You worked out 14 days in a row.",
+          "beforeEarnedDescription" : "Work out 14 days in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_days_014-en-US",
+          "name" : "14-Day Streak"
+        }
+      ],
+      "streak_days_030" : [
+        {
+          "afterEarnedDescription" : "You worked out 30 days in a row.",
+          "beforeEarnedDescription" : "Work out 30 days in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_days_030-en-US",
+          "name" : "30-Day Streak"
+        }
+      ],
+      "streak_days_060" : [
+        {
+          "afterEarnedDescription" : "You worked out 60 days in a row.",
+          "beforeEarnedDescription" : "Work out 60 days in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_days_060-en-US",
+          "name" : "60-Day Streak"
+        }
+      ],
+      "streak_days_090" : [
+        {
+          "afterEarnedDescription" : "You worked out 90 days in a row.",
+          "beforeEarnedDescription" : "Work out 90 days in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_days_090-en-US",
+          "name" : "90-Day Streak"
+        }
+      ],
+      "streak_days_120" : [
+        {
+          "afterEarnedDescription" : "You worked out 120 days in a row.",
+          "beforeEarnedDescription" : "Work out 120 days in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_days_120-en-US",
+          "name" : "120-Day Streak"
+        }
+      ],
+      "streak_days_150" : [
+        {
+          "afterEarnedDescription" : "You worked out 150 days in a row.",
+          "beforeEarnedDescription" : "Work out 150 days in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_days_150-en-US",
+          "name" : "150-Day Streak"
+        }
+      ],
+      "streak_days_180" : [
+        {
+          "afterEarnedDescription" : "You worked out 180 days in a row.",
+          "beforeEarnedDescription" : "Work out 180 days in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_days_180-en-US",
+          "name" : "180-Day Streak"
+        }
+      ],
+      "streak_days_210" : [
+        {
+          "afterEarnedDescription" : "You worked out 210 days in a row.",
+          "beforeEarnedDescription" : "Work out 210 days in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_days_210-en-US",
+          "name" : "210-Day Streak"
+        }
+      ],
+      "streak_days_240" : [
+        {
+          "afterEarnedDescription" : "You worked out 240 days in a row.",
+          "beforeEarnedDescription" : "Work out 240 days in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_days_240-en-US",
+          "name" : "240-Day Streak"
+        }
+      ],
+      "streak_days_270" : [
+        {
+          "afterEarnedDescription" : "You worked out 270 days in a row.",
+          "beforeEarnedDescription" : "Work out 270 days in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_days_270-en-US",
+          "name" : "270-Day Streak"
+        }
+      ],
+      "streak_days_300" : [
+        {
+          "afterEarnedDescription" : "You worked out 300 days in a row.",
+          "beforeEarnedDescription" : "Work out 300 days in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_days_300-en-US",
+          "name" : "300-Day Streak"
+        }
+      ],
+      "streak_days_330" : [
+        {
+          "afterEarnedDescription" : "You worked out 330 days in a row.",
+          "beforeEarnedDescription" : "Work out 330 days in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_days_330-en-US",
+          "name" : "330-Day Streak"
+        }
+      ],
+      "streak_days_365" : [
+        {
+          "afterEarnedDescription" : "You worked out 365 days in a row.",
+          "beforeEarnedDescription" : "Work out 365 days in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_days_365-en-US",
+          "name" : "365-Day Streak"
+        }
+      ],
+      "streak_weeks_004" : [
+        {
+          "afterEarnedDescription" : "You worked out 4 weeks in a row.",
+          "beforeEarnedDescription" : "Work out 4 weeks in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_weeks_004-en-US",
+          "name" : "4-Week Streak"
+        }
+      ],
+      "streak_weeks_008" : [
+        {
+          "afterEarnedDescription" : "You worked out 8 weeks in a row.",
+          "beforeEarnedDescription" : "Work out 8 weeks in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_weeks_008-en-US",
+          "name" : "8-Week Streak"
+        }
+      ],
+      "streak_weeks_012" : [
+        {
+          "afterEarnedDescription" : "You worked out 12 weeks in a row.",
+          "beforeEarnedDescription" : "Work out 12 weeks in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_weeks_012-en-US",
+          "name" : "12-Week Streak"
+        }
+      ],
+      "streak_weeks_016" : [
+        {
+          "afterEarnedDescription" : "You worked out 16 weeks in a row.",
+          "beforeEarnedDescription" : "Work out 16 weeks in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_weeks_016-en-US",
+          "name" : "16-Week Streak"
+        }
+      ],
+      "streak_weeks_020" : [
+        {
+          "afterEarnedDescription" : "You worked out 20 weeks in a row.",
+          "beforeEarnedDescription" : "Work out 20 weeks in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_weeks_020-en-US",
+          "name" : "20-Week Streak"
+        }
+      ],
+      "streak_weeks_024" : [
+        {
+          "afterEarnedDescription" : "You worked out 24 weeks in a row.",
+          "beforeEarnedDescription" : "Work out 24 weeks in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_weeks_024-en-US",
+          "name" : "24-Week Streak"
+        }
+      ],
+      "streak_weeks_028" : [
+        {
+          "afterEarnedDescription" : "You worked out 28 weeks in a row.",
+          "beforeEarnedDescription" : "Work out 28 weeks in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_weeks_028-en-US",
+          "name" : "28-Week Streak"
+        }
+      ],
+      "streak_weeks_032" : [
+        {
+          "afterEarnedDescription" : "You worked out 32 weeks in a row.",
+          "beforeEarnedDescription" : "Work out 32 weeks in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_weeks_032-en-US",
+          "name" : "32-Week Streak"
+        }
+      ],
+      "streak_weeks_036" : [
+        {
+          "afterEarnedDescription" : "You worked out 36 weeks in a row.",
+          "beforeEarnedDescription" : "Work out 36 weeks in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_weeks_036-en-US",
+          "name" : "36-Week Streak"
+        }
+      ],
+      "streak_weeks_040" : [
+        {
+          "afterEarnedDescription" : "You worked out 40 weeks in a row.",
+          "beforeEarnedDescription" : "Work out 40 weeks in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_weeks_040-en-US",
+          "name" : "40-Week Streak"
+        }
+      ],
+      "streak_weeks_044" : [
+        {
+          "afterEarnedDescription" : "You worked out 44 weeks in a row.",
+          "beforeEarnedDescription" : "Work out 44 weeks in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_weeks_044-en-US",
+          "name" : "44-Week Streak"
+        }
+      ],
+      "streak_weeks_048" : [
+        {
+          "afterEarnedDescription" : "You worked out 48 weeks in a row.",
+          "beforeEarnedDescription" : "Work out 48 weeks in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_weeks_048-en-US",
+          "name" : "48-Week Streak"
+        }
+      ],
+      "streak_weeks_052" : [
+        {
+          "afterEarnedDescription" : "You worked out 52 weeks in a row.",
+          "beforeEarnedDescription" : "Work out 52 weeks in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_weeks_052-en-US",
+          "name" : "52-Week Streak"
+        }
+      ],
+      "streak_weeks_054" : [
+        {
+          "afterEarnedDescription" : "You worked out 54 weeks in a row.",
+          "beforeEarnedDescription" : "Work out 54 weeks in a row.",
+          "locale" : "en-US",
+          "localID" : "streak_weeks_054-en-US",
+          "name" : "54-Week Streak"
+        }
+      ]
+    },
+    "achievements" : [
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 10,
+        "referenceName" : "7-Day Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_days_007"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 10,
+        "referenceName" : "14-Day Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_days_014"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 10,
+        "referenceName" : "30-Day Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_days_030"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 10,
+        "referenceName" : "60-Day Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_days_060"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 15,
+        "referenceName" : "90-Day Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_days_090"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 15,
+        "referenceName" : "120-Day Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_days_120"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 15,
+        "referenceName" : "150-Day Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_days_150"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 20,
+        "referenceName" : "180-Day Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_days_180"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 20,
+        "referenceName" : "210-Day Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_days_210"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 20,
+        "referenceName" : "240-Day Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_days_240"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 20,
+        "referenceName" : "270-Day Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_days_270"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 25,
+        "referenceName" : "300-Day Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_days_300"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 25,
+        "referenceName" : "330-Day Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_days_330"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 50,
+        "referenceName" : "365-Day Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_days_365"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 10,
+        "referenceName" : "4-Week Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_weeks_004"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 10,
+        "referenceName" : "8-Week Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_weeks_008"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 10,
+        "referenceName" : "12-Week Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_weeks_012"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 15,
+        "referenceName" : "16-Week Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_weeks_016"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 15,
+        "referenceName" : "20-Week Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_weeks_020"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 15,
+        "referenceName" : "24-Week Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_weeks_024"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 15,
+        "referenceName" : "28-Week Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_weeks_028"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 20,
+        "referenceName" : "32-Week Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_weeks_032"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 20,
+        "referenceName" : "36-Week Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_weeks_036"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 20,
+        "referenceName" : "40-Week Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_weeks_040"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 20,
+        "referenceName" : "44-Week Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_weeks_044"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 25,
+        "referenceName" : "48-Week Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_weeks_048"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 25,
+        "referenceName" : "52-Week Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_weeks_052"
+      },
+      {
+        "activityProperties" : {
+
+        },
+        "archived" : false,
+        "points" : 25,
+        "referenceName" : "54-Week Streak",
+        "repeatable" : true,
+        "showBeforeEarned" : true,
+        "vendorIdentifier" : "streak_weeks_054"
+      }
+    ],
+    "leaderboardLocalizations" : {
+      "Bench" : [
+        {
+          "formatterOverride" : "INTEGER",
+          "formatterSuffix" : "lbs",
+          "formatterSuffixSingular" : "lb",
+          "locale" : "en-US",
+          "localID" : "Bench-en-US",
+          "name" : "Bench"
+        }
+      ],
+      "Best_Session_Volume" : [
+        {
+          "formatterOverride" : "INTEGER",
+          "formatterSuffix" : "lbs",
+          "formatterSuffixSingular" : "lb",
+          "locale" : "en-US",
+          "localID" : "Best_Session_Volume-en-US",
+          "name" : "Best Session Volume"
+        }
+      ],
+      "Deadlift" : [
+        {
+          "formatterOverride" : "INTEGER",
+          "formatterSuffix" : "lbs",
+          "formatterSuffixSingular" : "lb",
+          "locale" : "en-US",
+          "localID" : "Deadlift-en-US",
+          "name" : "Deadlift"
+        }
+      ],
+      "Fastest_Run" : [
+        {
+          "formatterOverride" : "DECIMAL_POINT_2_PLACE",
+          "formatterSuffix" : "Minutes",
+          "formatterSuffixSingular" : "Minute",
+          "locale" : "en-US",
+          "localID" : "Fastest_Run-en-US",
+          "name" : "Fastest Run"
+        }
+      ],
+      "Longest_Run" : [
+        {
+          "formatterOverride" : "DECIMAL_POINT_2_PLACE",
+          "formatterSuffix" : "Miles",
+          "formatterSuffixSingular" : "Mile",
+          "locale" : "en-US",
+          "localID" : "Longest_Run-en-US",
+          "name" : "Longest Run"
+        }
+      ],
+      "Squat" : [
+        {
+          "formatterOverride" : "INTEGER",
+          "formatterSuffix" : "lbs",
+          "formatterSuffixSingular" : "lb",
+          "locale" : "en-US",
+          "localID" : "Squat-en-US",
+          "name" : "Squat"
+        }
+      ]
+    },
+    "leaderboards" : [
+      {
+        "archived" : false,
+        "defaultFormatter" : "INTEGER",
+        "recurrenceDuration" : "PT168H",
+        "recurrenceRule" : "FREQ=DAILY;INTERVAL=7",
+        "recurrenceStartDate" : "2025-11-09T06:00:00Z",
+        "referenceName" : "Bench",
+        "scoreRangeEnd" : null,
+        "scoreRangeStart" : null,
+        "scoreSortType" : "DESC",
+        "submissionType" : "BEST_SCORE",
+        "vendorIdentifier" : "Bench",
+        "visibility" : "SHOW_FOR_ALL"
+      },
+      {
+        "archived" : false,
+        "defaultFormatter" : "INTEGER",
+        "recurrenceDuration" : "PT168H",
+        "recurrenceRule" : "FREQ=DAILY;INTERVAL=7",
+        "recurrenceStartDate" : "2025-11-09T06:00:00Z",
+        "referenceName" : "Squat",
+        "scoreRangeEnd" : null,
+        "scoreRangeStart" : null,
+        "scoreSortType" : "DESC",
+        "submissionType" : "BEST_SCORE",
+        "vendorIdentifier" : "Squat",
+        "visibility" : "SHOW_FOR_ALL"
+      },
+      {
+        "archived" : false,
+        "defaultFormatter" : "INTEGER",
+        "recurrenceDuration" : "PT168H",
+        "recurrenceRule" : "FREQ=DAILY;INTERVAL=7",
+        "recurrenceStartDate" : "2025-11-09T06:00:00Z",
+        "referenceName" : "Deadlift",
+        "scoreRangeEnd" : null,
+        "scoreRangeStart" : null,
+        "scoreSortType" : "DESC",
+        "submissionType" : "BEST_SCORE",
+        "vendorIdentifier" : "Deadlift",
+        "visibility" : "SHOW_FOR_ALL"
+      },
+      {
+        "archived" : false,
+        "defaultFormatter" : "INTEGER",
+        "recurrenceDuration" : "PT168H",
+        "recurrenceRule" : "FREQ=DAILY;INTERVAL=7",
+        "recurrenceStartDate" : "2025-11-09T06:00:00Z",
+        "referenceName" : "Best Session Volume",
+        "scoreRangeEnd" : null,
+        "scoreRangeStart" : null,
+        "scoreSortType" : "DESC",
+        "submissionType" : "BEST_SCORE",
+        "vendorIdentifier" : "Best_Session_Volume",
+        "visibility" : "SHOW_FOR_ALL"
+      },
+      {
+        "archived" : false,
+        "defaultFormatter" : "DECIMAL_POINT_2_PLACE",
+        "recurrenceDuration" : "PT168H",
+        "recurrenceRule" : "FREQ=DAILY;INTERVAL=7",
+        "recurrenceStartDate" : "2025-11-09T06:00:00Z",
+        "referenceName" : "Longest Run",
+        "scoreRangeEnd" : null,
+        "scoreRangeStart" : null,
+        "scoreSortType" : "DESC",
+        "submissionType" : "BEST_SCORE",
+        "vendorIdentifier" : "Longest_Run",
+        "visibility" : "SHOW_FOR_ALL"
+      },
+      {
+        "archived" : false,
+        "defaultFormatter" : "DECIMAL_POINT_2_PLACE",
+        "recurrenceDuration" : "PT168H",
+        "recurrenceRule" : "FREQ=DAILY;INTERVAL=7",
+        "recurrenceStartDate" : "2025-11-09T06:00:00Z",
+        "referenceName" : "Fastest Run",
+        "scoreRangeEnd" : null,
+        "scoreRangeStart" : null,
+        "scoreSortType" : "ASC",
+        "submissionType" : "BEST_SCORE",
+        "vendorIdentifier" : "Fastest_Run",
+        "visibility" : "SHOW_FOR_ALL"
+      }
+    ]
+  }
+}

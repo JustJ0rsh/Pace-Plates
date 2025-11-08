@@ -10,7 +10,7 @@ struct CommunityView: View {
     var body: some View {
         NavigationStack {
             List {
-                // Community landing; leaderboards disabled in no-Game Center branch
+                // Community landing
                 Section("Community") {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Groups and challenges coming soon.")
@@ -22,6 +22,16 @@ struct CommunityView: View {
                 Section("Groups & Challenges") {
                     NavigationLink { GroupsPlaceholderView() } label: { Label("My Groups", systemImage: "person.3.fill") }
                     NavigationLink { ChallengesPlaceholderView() } label: { Label("Challenges", systemImage: "flag.checkered") }
+                }
+
+                Section("Game Center") {
+                    Button {
+                        GameCenterService.shared.presentLeaderboards()
+                    } label: { Label("Leaderboards", systemImage: "rosette") }
+
+                    Button {
+                        GameCenterService.shared.presentAchievements()
+                    } label: { Label("Achievements", systemImage: "trophy.fill") }
                 }
             }
             .listStyle(.insetGrouped)

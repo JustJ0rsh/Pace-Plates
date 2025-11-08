@@ -10,6 +10,7 @@
 		420B3EEA2EB3E28400F73922 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 420B3EE92EB3E28400F73922 /* WidgetKit.framework */; };
 		420B3EEC2EB3E28400F73922 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 420B3EEB2EB3E28400F73922 /* SwiftUI.framework */; };
 		420B3EFD2EB3E28600F73922 /* RunningWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 420B3EE82EB3E28400F73922 /* RunningWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		420B40FF2EBDA73900F73922 /* GameCenterResources.gamekit in Resources */ = {isa = PBXBuildFile; fileRef = 420B40FE2EBDA73900F73922 /* GameCenterResources.gamekit */; };
 		4226C1812E9DED2A00908453 /* Info 2.plist in Resources */ = {isa = PBXBuildFile; fileRef = 4226C1802E9DED2A00908453 /* Info 2.plist */; };
 /* End PBXBuildFile section */
 
@@ -55,6 +56,7 @@
 		420B3EE82EB3E28400F73922 /* RunningWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RunningWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		420B3EE92EB3E28400F73922 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		420B3EEB2EB3E28400F73922 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		420B40FE2EBDA73900F73922 /* GameCenterResources.gamekit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = GameCenterResources.gamekit; sourceTree = "<group>"; };
 		4226C17A2E94A47300908453 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		4226C1802E9DED2A00908453 /* Info 2.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info 2.plist"; sourceTree = "<group>"; };
 		42B50D212D9DE5670082A9FA /* Pace & Plates.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Pace & Plates.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -146,6 +148,7 @@
 		42B50D182D9DE5670082A9FA = {
 			isa = PBXGroup;
 			children = (
+				420B40FE2EBDA73900F73922 /* GameCenterResources.gamekit */,
 				42B50D232D9DE5670082A9FA /* WorkingOut */,
 				42B50D342D9DE5690082A9FA /* WorkingOutTests */,
 				42B50D3E2D9DE5690082A9FA /* WorkingOutUITests */,
@@ -333,6 +336,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				420B40FF2EBDA73900F73922 /* GameCenterResources.gamekit in Resources */,
 				4226C1812E9DED2A00908453 /* Info 2.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -607,10 +611,15 @@
 				INFOPLIST_FILE = WorkingOut/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Pace & Plates";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "We read your workouts, distance, heart rate, VO₂ max, and related metrics to show progress and trends.";
-				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We write your running workouts, distance, and active energy to keep your Apple Health records complete.";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "We add your training plan to your Calendar and need full access to create events and reminders for workouts.";
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "We add your training plan to your Calendar and set reminders for workouts.";
+				INFOPLIST_KEY_NSCalendarsWriteOnlyAccessUsageDescription = "We add your training plan to your Calendar and set reminders for workouts.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "We read your workouts, steps, and running routes from Health to display your activity and track progress in the app.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We save your runs to Health so your fitness data stays in one place.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "We use your location to track runs even when the app is in the background.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We use your location to track your run distance on the map.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We use your location to track runs, show your route on the map, and fetch local weather.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
+				INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -649,10 +658,15 @@
 				INFOPLIST_FILE = WorkingOut/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Pace & Plates";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "We read your workouts, distance, heart rate, VO₂ max, and related metrics to show progress and trends.";
-				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We write your running workouts, distance, and active energy to keep your Apple Health records complete.";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "We add your training plan to your Calendar and need full access to create events and reminders for workouts.";
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "We add your training plan to your Calendar and set reminders for workouts.";
+				INFOPLIST_KEY_NSCalendarsWriteOnlyAccessUsageDescription = "We add your training plan to your Calendar and set reminders for workouts.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "We read your workouts, steps, and running routes from Health to display your activity and track progress in the app.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We save your runs to Health so your fitness data stays in one place.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "We use your location to track runs even when the app is in the background.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We use your location to track your run distance on the map.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We use your location to track runs, show your route on the map, and fetch local weather.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
+				INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

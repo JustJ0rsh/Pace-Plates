@@ -273,6 +273,15 @@ struct WorkoutSessionDetailView: View {
                 session.title = titleText
             }
             try? modelContext.save()
+
+            // Report Game Center leaderboards for strength PRs and session volume
+            GameCenterService.shared.reportStrengthForSession(
+                exerciseLogs: session.exerciseLogs,
+                preferredWeightUnit: weightUnit
+            )
+
+            // Update streak achievements (daily and weekly)
+            StreakService.refreshAndReport(using: modelContext)
         }
     }
     

@@ -84,7 +84,10 @@ struct ContentView: View {
                 if heightUnit != "cm" { heightUnit = "cm" }
             }
 
-            // Game Center disabled on this branch
+            // Authenticate Game Center (presents system sign-in if needed), then refresh streak achievements once.
+            GameCenterService.shared.authenticate { _ in
+                StreakService.refreshAndReport(using: persistenceController.container.mainContext)
+            }
         }
         .alert("Health Access Issue", isPresented: Binding(get: { healthAuthError != nil }, set: { if !$0 { healthAuthError = nil } })) {
             Button("OK", role: .cancel) { healthAuthError = nil }

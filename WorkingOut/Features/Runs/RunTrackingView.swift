@@ -626,7 +626,7 @@ struct RunTrackingProView: View {
         modelContext.insert(session)
         do {
             try modelContext.save()
-            
+
 
             // Fire-and-forget: write to HealthKit (if authorized). We derive start from end - duration.
             let startTime = endTime.addingTimeInterval(-session.duration)
@@ -641,11 +641,21 @@ struct RunTrackingProView: View {
                         route: routeSnapshot,
                         activityType: activityType
                     )
-                    
+
                 } catch {
-                    
+
                 }
             }
+
+            // Report Game Center leaderboards (Longest Run, Fastest Run)
+            GameCenterService.shared.reportRunStats(
+                distance: session.distance,
+                distanceUnit: session.distanceUnit,
+                duration: session.duration
+            )
+
+            // Update streak achievements (daily and weekly)
+            StreakService.refreshAndReport(using: modelContext)
 
             // End Live Activity (if any)
             LiveActivityManager.shared.end()
