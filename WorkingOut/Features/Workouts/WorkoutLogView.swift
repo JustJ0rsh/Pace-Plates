@@ -12,6 +12,8 @@ struct WorkoutLogView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: [SortDescriptor<WorkoutSession>(\.date, order: .reverse)]) private var workoutSessions: [WorkoutSession]
     @State private var newSessionToOpen: WorkoutSession? = nil
+    @State private var pastSessionID: UUID? = nil
+    @State private var newlyCreatedSessionID: UUID? = nil
     @State private var isEditing: Bool = false
     @State private var showTemplates: Bool = false
     @AppStorage("weightUnit") private var preferredWeightUnit = "lbs"
@@ -200,8 +202,21 @@ struct WorkoutLogView: View {
                             Label("Templates", systemImage: "doc.text.fill")
                         }
                         
-                        Button(action: addWorkoutSession) {
-                            Label("New Workout", systemImage: "plus")
+                        Menu {
+                            Button {
+                                addWorkoutSession()
+                            } label: {
+                                Label("New Workout", systemImage: "plus")
+                            }
+                            Button {
+                                addPastWorkoutSession()
+                            } label: {
+                                Label("Add Past Workout", systemImage: "calendar")
+                            }
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .imageScale(.large)
+                                .accessibilityLabel("Add Workout")
                         }
                     }
                 }
@@ -216,7 +231,11 @@ struct WorkoutLogView: View {
                 }
             }
             .navigationDestination(item: $newSessionToOpen) { session in
-                WorkoutSessionDetailView(session: session)
+                WorkoutSessionDetailView(
+                    session: session,
+                    allowDateEdit: session.id == pastSessionID,
+                    isNewSession: session.id == newlyCreatedSessionID
+                )
             }
         }
     }
@@ -228,6 +247,17 @@ struct WorkoutLogView: View {
         modelContext.insert(newSession)
         try? modelContext.save()
         // Trigger navigation to the new session's detail view
+        newlyCreatedSessionID = newSession.id
+        pastSessionID = nil
+        newSessionToOpen = newSession
+    }
+
+    private func addPastWorkoutSession() {
+        let newSession = WorkoutSession()
+        modelContext.insert(newSession)
+        try? modelContext.save()
+        newlyCreatedSessionID = newSession.id
+        pastSessionID = newSession.id
         newSessionToOpen = newSession
     }
 

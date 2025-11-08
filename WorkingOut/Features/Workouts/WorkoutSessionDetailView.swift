@@ -10,6 +10,8 @@ struct WorkoutSessionDetailView: View {
     
     @Environment(\.modelContext) private var modelContext
     let session: WorkoutSession
+    let allowDateEdit: Bool
+    let isNewSession: Bool
     @State private var notes: String
     @State private var titleText: String
     @State private var notesBuffer: String
@@ -17,12 +19,16 @@ struct WorkoutSessionDetailView: View {
     @State private var editingLogIsNew: Bool = false
     @State private var saveWorkItem: DispatchWorkItem? = nil
     @State private var showingAddExercise: Bool = false
+    @State private var showingDatePicker: Bool = false
     @FocusState private var notesFocused: Bool
+    @State private var didEditTitle: Bool = false
     @AppStorage("weightUnit") private var weightUnit: String = "lbs"
     // Avoid storing/staging ExerciseDefinition references for UI
     
-    init(session: WorkoutSession) {
+    init(session: WorkoutSession, allowDateEdit: Bool = false, isNewSession: Bool = false) {
         self.session = session
+        self.allowDateEdit = allowDateEdit
+        self.isNewSession = isNewSession
         let initialNotes = session.notes ?? ""
         _notes = State(initialValue: initialNotes)
         _notesBuffer = State(initialValue: initialNotes)
@@ -61,11 +67,24 @@ struct WorkoutSessionDetailView: View {
                                         try? modelContext.save()
                                     }
                                 }
+                                didEditTitle = true
                                 saveWorkItem = work
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
                             }
                     }
-                    Text("Date: \(session.date.formatted())")
+                    HStack(spacing: 8) {
+                        Text("Date: \(session.date.formatted())")
+                        if allowDateEdit {
+                            Button {
+                                showingDatePicker = true
+                            } label: {
+                                Image(systemName: "calendar")
+                                    .imageScale(.medium)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Change Date")
+                        }
+                    }
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Notes")
                             .font(.subheadline)
@@ -222,6 +241,25 @@ struct WorkoutSessionDetailView: View {
             .padding(.horizontal, AppTheme.padding)
         }
         .onTapGesture { notesFocused = false; dismissKeyboard() }
+        .sheet(isPresented: $showingDatePicker) {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Select Workout Date").font(.headline)
+                DatePicker("Date", selection: Binding(get: { session.date }, set: { newValue in
+                    session.date = newValue
+                    try? modelContext.save()
+                }), displayedComponents: [.date])
+                .datePickerStyle(.graphical)
+                .tint(AppTheme.accentColor)
+                HStack {
+                    Spacer()
+                    Button("Done") { showingDatePicker = false }
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding()
+            .presentationDetents([.medium])
+            .presentationBackground(AppTheme.backgroundColor)
+        }
         .appBackground(AppTheme.gradientWorkouts)
         .ignoresSafeArea(.keyboard) // Fill behind the keyboard to avoid dark gap
         .scrollDismissesKeyboard(.immediately)
@@ -269,7 +307,8 @@ struct WorkoutSessionDetailView: View {
             if session.notes != notesBuffer {
                 session.notes = notesBuffer
             }
-            if session.title != titleText {
+            // Only persist title if user actually edited it; avoid writing fallback "Gym Session" for brand-new sessions
+            if didEditTitle, session.title != titleText {
                 session.title = titleText
             }
             try? modelContext.save()
@@ -282,6 +321,19 @@ struct WorkoutSessionDetailView: View {
 
             // Update streak achievements (daily and weekly)
             StreakService.refreshAndReport(using: modelContext)
+
+            // If this was just created and contains no meaningful data, delete it instead of leaving an empty session behind
+            if isNewSession {
+                let hasExercises = !((session.exerciseLogs ?? []).isEmpty)
+                let hasNotes = !(notesBuffer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                let titleTrim = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
+                // Consider title meaningful only if user edited it and it's non-empty
+                let hasTitle = didEditTitle && !titleTrim.isEmpty
+                if !(hasExercises || hasNotes || hasTitle) {
+                    modelContext.delete(session)
+                    try? modelContext.save()
+                }
+            }
         }
     }
     

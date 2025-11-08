@@ -1,4 +1,5 @@
 import SwiftUI
+import GameKit
 import CoreLocation
 import SwiftData
 
@@ -88,6 +89,8 @@ struct ContentView: View {
             GameCenterService.shared.authenticate { _ in
                 StreakService.refreshAndReport(using: persistenceController.container.mainContext)
             }
+            // Ensure the Game Center access point dot is hidden by default
+            GKAccessPoint.shared.isActive = false
         }
         .alert("Health Access Issue", isPresented: Binding(get: { healthAuthError != nil }, set: { if !$0 { healthAuthError = nil } })) {
             Button("OK", role: .cancel) { healthAuthError = nil }

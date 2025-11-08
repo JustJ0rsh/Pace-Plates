@@ -6,6 +6,7 @@ final class GameCenterService: NSObject {
     static let shared = GameCenterService()
 
     private(set) var isAuthenticated: Bool = GKLocalPlayer.local.isAuthenticated
+    private var apObserver: NSKeyValueObservation? = nil
 
     private override init() { }
 
@@ -32,9 +33,7 @@ final class GameCenterService: NSObject {
             return
         }
 
-        GKAccessPoint.shared.location = .topTrailing
-        GKAccessPoint.shared.isActive = true
-        GKAccessPoint.shared.trigger(state: .leaderboards, handler: {})
+        presentAccessPoint(state: .leaderboards)
     }
 
     func presentAchievements(from presenter: UIViewController? = nil) {
@@ -45,9 +44,7 @@ final class GameCenterService: NSObject {
             return
         }
 
-        GKAccessPoint.shared.location = .topTrailing
-        GKAccessPoint.shared.isActive = true
-        GKAccessPoint.shared.trigger(state: .achievements, handler: {})
+        presentAccessPoint(state: .achievements)
     }
 
     // MARK: - Score Reporting
@@ -174,5 +171,27 @@ final class GameCenterService: NSObject {
         }
         return nil
     }
-}
 
+    // Ensure Access Point dot is shown only during presentation and restored afterward
+    private func presentAccessPoint(state: GKGameCenterViewControllerState) {
+        let ap = GKAccessPoint.shared
+        ap.location = .topTrailing
+        let previous = ap.isActive
+        ap.isActive = true
+
+        // Clean up any previous observer
+        apObserver?.invalidate()
+        apObserver = ap.observe(\.isPresentingGameCenter, options: [.new]) { [weak self] _, change in
+            guard let presenting = change.newValue else { return }
+            if presenting == false {
+                DispatchQueue.main.async {
+                    GKAccessPoint.shared.isActive = previous
+                }
+                self?.apObserver?.invalidate()
+                self?.apObserver = nil
+            }
+        }
+
+        ap.trigger(state: state, handler: {})
+    }
+}
