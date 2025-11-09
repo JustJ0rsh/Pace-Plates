@@ -61,6 +61,32 @@ struct WorkoutTemplateListView: View {
                 ScrollView {
                     VStack(spacing: 20) {
                         
+                        let aiFirst = (WorkoutPlanGenerator.shared.availability() == .available)
+
+                        // MARK: - AI Generated Templates (if available and preferred first)
+                        if aiFirst && !aiGeneratedTemplates.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Image(systemName: "sparkles")
+                                        .foregroundColor(.purple)
+                                    Text("AI Generated")
+                                        .font(.title2)
+                                        .fontWeight(.bold)
+                                    Spacer()
+                                }
+                                .padding(.horizontal, AppTheme.padding)
+
+                                VStack(spacing: 12) {
+                                    ForEach(aiGeneratedTemplates) { template in
+                                        TemplateCard(template: template) {
+                                            selectedTemplate = template
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal, AppTheme.padding)
+                            }
+                        }
+
                         // MARK: - Built-In Templates Section
                         if !builtInTemplates.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
@@ -137,8 +163,8 @@ struct WorkoutTemplateListView: View {
                             }
                         }
                         
-                        // MARK: - AI Generated Templates Section
-                        if !aiGeneratedTemplates.isEmpty {
+                        // MARK: - AI Generated Templates Section (fallback when not first)
+                        if !aiFirst && !aiGeneratedTemplates.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
                                 HStack {
                                     Image(systemName: "sparkles")
@@ -230,19 +256,16 @@ struct BuiltInTemplateCard: View {
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
-                            
+                            // Difficulty label instead of stars
                             if let difficulty = template.difficulty {
-                                HStack(spacing: 2) {
-                                    ForEach(0..<difficulty, id: \.self) { _ in
-                                        Image(systemName: "star.fill")
-                                            .font(.system(size: 8))
-                                    }
-                                    ForEach(difficulty..<5, id: \.self) { _ in
-                                        Image(systemName: "star")
-                                            .font(.system(size: 8))
-                                    }
-                                }
-                                .foregroundColor(.orange)
+                                let label = difficultyLabel(for: difficulty)
+                                Text(label)
+                                    .font(.caption2)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(difficultyColor(for: difficulty).opacity(0.2))
+                                    .foregroundColor(difficultyColor(for: difficulty))
+                                    .clipShape(Capsule())
                             }
                             
                             Text("\(template.exercises?.count ?? 0) exercises")
@@ -281,6 +304,22 @@ struct BuiltInTemplateCard: View {
             )
         }
         .buttonStyle(.plain)
+    }
+
+    private func difficultyLabel(for value: Int) -> String {
+        switch value {
+        case ..<3: return "Easy"
+        case 3: return "Medium"
+        default: return "Hard"
+        }
+    }
+
+    private func difficultyColor(for value: Int) -> Color {
+        switch value {
+        case ..<3: return .green
+        case 3: return .orange
+        default: return .red
+        }
     }
 }
 
@@ -492,4 +531,3 @@ struct ExerciseTemplateRow: View {
     }
     .modelContainer(PersistenceController.preview.container)
 }
-

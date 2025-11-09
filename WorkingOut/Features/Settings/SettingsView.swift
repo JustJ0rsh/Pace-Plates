@@ -120,7 +120,7 @@ struct SettingsView: View {
                         Text("Version")
                             .foregroundColor(AppTheme.textColor)
                         Spacer()
-                        Text("1.0.0")
+                        Text("1.4.1")
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -215,9 +215,7 @@ struct SettingsView: View {
                     } label: {
                         Label("Delete All Data", systemImage: "trash.slash")
                     }
-                    NavigationLink {
-                        PrivacyPolicyView()
-                    } label: {
+                    Link(destination: URL(string: "https://github.com/JustJ0rsh/Pace-Plates/blob/main/Privacy%20Policy")!) {
                         Label("Privacy Policy", systemImage: "doc.text")
                     }
                 }

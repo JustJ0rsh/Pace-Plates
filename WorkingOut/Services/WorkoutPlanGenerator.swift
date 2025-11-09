@@ -193,17 +193,16 @@ final class WorkoutPlanGenerator {
                         // Choose session type based on whether web search is enabled and relevant
                         let useToolSession = shouldUseWebSearch(for: request.extraContext)
 
-                        // Use a fresh, ephemeral session per request to prevent context accumulation
-                        // that can overflow the model's context window.
+                        // Prefer prewarmed, reusable sessions to avoid asset reload overhead
                         let session: LanguageModelSession = await MainActor.run {
                             if useToolSession {
-                                let tools: [any Tool] = [WebSearchTool()]
-                                return LanguageModelSession(
-                                    tools: tools,
-                                    instructions: "You are a concise fitness/nutrition coach. Use webSearch for factual queries and cite sources. Keep answers brief and helpful."
+                                if self.toolEnabledSession == nil { Task { await self.prewarmToolSessionIfNeeded() } }
+                                return self.toolEnabledSession ?? self.basicSession ?? LanguageModelSession(
+                                    instructions: "You are a concise fitness/nutrition coach. Keep answers short, safe, and practical."
                                 )
                             } else {
-                                return LanguageModelSession(
+                                if self.basicSession == nil { Task { await self.prewarmIfPossible() } }
+                                return self.basicSession ?? LanguageModelSession(
                                     instructions: "You are a concise fitness/nutrition coach. Keep answers short, safe, and practical."
                                 )
                             }
@@ -265,15 +264,15 @@ final class WorkoutPlanGenerator {
                                         responseText = String(describing: response)
                                     }
 
-                                    // Stream the enhanced response
+                                    // Stream the enhanced response (larger chunks, smaller delay)
                                     var currentIndex = responseText.startIndex
                                     while currentIndex < responseText.endIndex {
-                                        let chunkSize = min(40, responseText.distance(from: currentIndex, to: responseText.endIndex))
+                                        let chunkSize = min(120, responseText.distance(from: currentIndex, to: responseText.endIndex))
                                         let endIndex = responseText.index(currentIndex, offsetBy: chunkSize)
                                         let chunk = String(responseText[currentIndex..<endIndex])
                                         continuation.yield(chunk)
                                         currentIndex = endIndex
-                                        try? await Task.sleep(nanoseconds: 12_000_000) // 12ms
+                                        try? await Task.sleep(nanoseconds: 2_000_000)
                                     }
 
                         continuation.finish()
@@ -317,14 +316,12 @@ final class WorkoutPlanGenerator {
                                 // Stream the response as chunks for UI compatibility
                                 var currentIndex = responseText.startIndex
                                 while currentIndex < responseText.endIndex {
-                                    let chunkSize = min(30, responseText.distance(from: currentIndex, to: responseText.endIndex))
+                                    let chunkSize = min(160, responseText.distance(from: currentIndex, to: responseText.endIndex))
                                     let endIndex = responseText.index(currentIndex, offsetBy: chunkSize)
                                     let chunk = String(responseText[currentIndex..<endIndex])
                                     continuation.yield(chunk)
                                     currentIndex = endIndex
-
-                                    // Small delay for streaming effect
-                                    try? await Task.sleep(nanoseconds: 8_000_000) // 8ms for conversation
+                                    try? await Task.sleep(nanoseconds: 2_000_000)
                                 }
 
                                 continuation.finish()
@@ -700,14 +697,14 @@ final class WorkoutPlanGenerator {
                                 // Stream the response as chunks for UI compatibility
                                 var currentIndex = responseText.startIndex
                                 while currentIndex < responseText.endIndex {
-                                    let chunkSize = min(50, responseText.distance(from: currentIndex, to: responseText.endIndex))
+                                    let chunkSize = min(160, responseText.distance(from: currentIndex, to: responseText.endIndex))
                                     let endIndex = responseText.index(currentIndex, offsetBy: chunkSize)
                                     let chunk = String(responseText[currentIndex..<endIndex])
                                     continuation.yield(chunk)
                                     currentIndex = endIndex
 
-                                    // Small delay for streaming effect
-                                    try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
+                                    // Smaller delay for better perceived latency
+                                    try? await Task.sleep(nanoseconds: 2_000_000) // 2ms
                                 }
 
                                 print("✅ Streaming complete, finishing continuation")

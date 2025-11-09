@@ -18,11 +18,31 @@ struct WorkoutLogView: View {
     @State private var showTemplates: Bool = false
     @AppStorage("weightUnit") private var preferredWeightUnit = "lbs"
     
-    // Last 7 days chart domain
+    // Filters
+    private enum TimeRange: String, CaseIterable, Identifiable {
+        case days7 = "7 Days"
+        case month1 = "1 Month"
+        case months6 = "6 Months"
+        case year1 = "1 Year"
+        var id: String { rawValue }
+        var days: Int {
+            switch self {
+            case .days7: return 7
+            case .month1: return 30
+            case .months6: return 180
+            case .year1: return 365
+            }
+        }
+    }
+    @State private var selectedCategory: String = "All"
+    @State private var selectedRange: TimeRange = .days7
+    
+    // Dynamic chart domain
     private var last7DaysDomain: ClosedRange<Date> {
         let cal = Calendar.current
         let todayStart = cal.startOfDay(for: Date())
-        let start = cal.date(byAdding: .day, value: -6, to: todayStart) ?? todayStart
+        let days = max(1, selectedRange.days - 1)
+        let start = cal.date(byAdding: .day, value: -days, to: todayStart) ?? todayStart
         let end = cal.date(byAdding: .day, value: 1, to: todayStart) ?? todayStart
         return start...end
     }
@@ -53,6 +73,10 @@ struct WorkoutLogView: View {
                         // Compute per-session total volume (sum of reps * weight per exercise), converted to preferred unit
                         let perSession: [(date: Date, volume: Double)] = workoutSessions.map { session in
                             let total = (session.exerciseLogs ?? []).reduce(0.0) { acc, log in
+                                if selectedCategory != "All" {
+                                    let group = (log.exerciseDefinition?.muscleGroup ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                                    if group != selectedCategory { return acc }
+                                }
                                 let weightInPreferred = convertWeight(log.weight, from: log.weightUnit, to: preferredWeightUnit)
                                 return acc + (Double(log.reps) * weightInPreferred)
                             }
@@ -77,9 +101,38 @@ struct WorkoutLogView: View {
                         let yLowerV = max(0, minV - padV)
                         let yUpperV = maxV + padV
 
-                        // Use last 7 days fixed domain
-
                         VStack(alignment: .leading, spacing: 8) {
+                            // Filters above the chart
+                            HStack(spacing: 8) {
+                                Menu {
+                                    Button("All") { selectedCategory = "All" }
+                                    ForEach(availableCategories(), id: \.self) { cat in
+                                        Button(cat) { selectedCategory = cat }
+                                    }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "line.3.horizontal.decrease.circle")
+                                        Text(selectedCategory)
+                                    }
+                                    .padding(8)
+                                    .background(AppTheme.secondaryBackgroundColor)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                }
+
+                                Menu {
+                                    ForEach(TimeRange.allCases) { r in
+                                        Button(r.rawValue) { selectedRange = r }
+                                    }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "calendar")
+                                        Text(selectedRange.rawValue)
+                                    }
+                                    .padding(8)
+                                    .background(AppTheme.secondaryBackgroundColor)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                }
+                            }
                             Text("Total Weight Lifted per Day")
                                 .font(.headline)
                                 .foregroundStyle(AppTheme.textColor)
@@ -294,5 +347,16 @@ struct WorkoutLogView: View {
             endPoint: .bottomTrailing
         )
         return gradient.ignoresSafeArea(.container, edges: .all)
+    }
+
+    private func availableCategories() -> [String] {
+        var set: Set<String> = []
+        for s in workoutSessions {
+            for l in (s.exerciseLogs ?? []) {
+                let g = (l.exerciseDefinition?.muscleGroup ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                if !g.isEmpty { set.insert(g) }
+            }
+        }
+        return set.sorted()
     }
 }

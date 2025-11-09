@@ -52,6 +52,8 @@ struct ContentView: View {
             ExerciseLibrary.populateInitialExercises(context: persistenceController.container.mainContext)
             persistenceController.deduplicateExerciseDefinitions()
             persistenceController.ensureDefaultExercisesPresent()
+            // Unify synonymous exercise names without losing user history
+            persistenceController.unifySynonymousExerciseDefinitions()
             // Ensure legacy arm exercises are reclassified to Biceps/Triceps
             // (idempotent)
             

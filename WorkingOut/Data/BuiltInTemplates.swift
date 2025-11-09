@@ -570,7 +570,7 @@ class BuiltInTemplateLibrary {
     static let advancedPowerlifting: [BuiltInTemplateData] = [
         // Template 1: Sheiko Squat Day (Based on Boris Sheiko programs)
         BuiltInTemplateData(
-            title: "Advanced Powerlifting - Sheiko Heavy Squat",
+            title: "Powerlifting (Advanced) – Sheiko Heavy Squat Day",
             description: "High-volume Russian powerlifting program. Multiple working sets at varying intensities.",
             experienceLevel: "advanced",
             goal: "powerlifting",
@@ -590,7 +590,7 @@ class BuiltInTemplateLibrary {
         
         // Template 2: Smolov Squat Cycle
         BuiltInTemplateData(
-            title: "Advanced Powerlifting - Smolov Squat Cycle",
+            title: "Powerlifting (Advanced) – Smolov Squat Cycle",
             description: "Brutal Russian squat program. 4 squat days per week, high volume and intensity.",
             experienceLevel: "advanced",
             goal: "powerlifting",
@@ -608,7 +608,7 @@ class BuiltInTemplateLibrary {
         
         // Template 3: Conjugate Method - Max Effort Squat
         BuiltInTemplateData(
-            title: "Advanced Powerlifting - Westside Max Effort Squat",
+            title: "Powerlifting (Advanced) – Westside Max Effort Squat",
             description: "Westside Barbell conjugate method. Work to max, then volume work.",
             experienceLevel: "advanced",
             goal: "powerlifting",
@@ -628,7 +628,7 @@ class BuiltInTemplateLibrary {
         
         // Template 4: Conjugate Dynamic Effort - Bench
         BuiltInTemplateData(
-            title: "Advanced Powerlifting - Westside Speed Bench",
+            title: "Powerlifting (Advanced) – Westside Speed Bench",
             description: "Speed bench day. 8-10 sets of 3 reps at 50-60% with bands or chains.",
             experienceLevel: "advanced",
             goal: "powerlifting",
@@ -648,7 +648,7 @@ class BuiltInTemplateLibrary {
         
         // Template 5: Bulgarian Method - Squat
         BuiltInTemplateData(
-            title: "Advanced Powerlifting - Bulgarian Daily Max Squat",
+            title: "Powerlifting (Advanced) – Bulgarian Daily Max Squat",
             description: "Work up to daily max squat, then back-off sets. Advanced training only.",
             experienceLevel: "advanced",
             goal: "powerlifting",
@@ -675,4 +675,3 @@ class BuiltInTemplateLibrary {
         intermediateStrength +
         advancedPowerlifting
 }
-

@@ -29,13 +29,33 @@ struct RunLogView: View {
     @State private var pendingDeleteIndex: Int? = nil
     @State private var showDeleteConfirm: Bool = false
     
+    // Filters
+    private enum TimeRange: String, CaseIterable, Identifiable {
+        case days7 = "7 Days"
+        case month1 = "1 Month"
+        case months6 = "6 Months"
+        case year1 = "1 Year"
+        var id: String { rawValue }
+        var days: Int {
+            switch self {
+            case .days7: return 7
+            case .month1: return 30
+            case .months6: return 180
+            case .year1: return 365
+            }
+        }
+    }
+    @State private var runSelectedRange: TimeRange = .days7
+    @State private var runActivityFilter: String = "All"
     
     
-    // Last 7 days domain
+    
+    // Dynamic domain based on selected range
     private var last7DaysDomain: ClosedRange<Date> {
         let calendar = Calendar.current
         let todayStart = calendar.startOfDay(for: Date())
-        let start = calendar.date(byAdding: .day, value: -6, to: todayStart) ?? todayStart
+        let days = max(1, runSelectedRange.days - 1)
+        let start = calendar.date(byAdding: .day, value: -days, to: todayStart) ?? todayStart
         // Upper bound is start of tomorrow to make the X-axis inclusive of today
         let endExclusive = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? todayStart
         return start...endExclusive
@@ -79,7 +99,12 @@ struct RunLogView: View {
                                         
                     // Unified Runs tile (header + chart or placeholder)
                     let calendar = Calendar.current
-                    let grouped: [Date: Double] = Dictionary(grouping: runningSessions, by: { session in
+                    // Apply activity filter first if set
+                    let filteredSessions: [RunningSession] = runningSessions.filter { s in
+                        if runActivityFilter == "All" { return true }
+                        return s.activityType == keyForActivity(runActivityFilter)
+                    }
+                    let grouped: [Date: Double] = Dictionary(grouping: filteredSessions, by: { session in
                         calendar.startOfDay(for: session.date)
                     }).mapValues { sessions in
                         sessions.reduce(0) { $0 + $1.distance }
@@ -99,6 +124,37 @@ struct RunLogView: View {
 
                     // Always show the Runs tile header; render chart or placeholder
                     VStack(alignment: .leading, spacing: 8) {
+                        // Filters
+                        HStack(spacing: 8) {
+                            Menu {
+                                Button("All") { runActivityFilter = "All" }
+                                ForEach(activityFilterOptions(), id: \.self) { label in
+                                    Button(label) { runActivityFilter = label }
+                                }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "line.3.horizontal.decrease.circle")
+                                    Text(runActivityFilter)
+                                }
+                                .padding(8)
+                                .background(AppTheme.secondaryBackgroundColor)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                            }
+
+                            Menu {
+                                ForEach(TimeRange.allCases) { r in
+                                    Button(r.rawValue) { runSelectedRange = r }
+                                }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "calendar")
+                                    Text(runSelectedRange.rawValue)
+                                }
+                                .padding(8)
+                                .background(AppTheme.secondaryBackgroundColor)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                            }
+                        }
                         // Header row with steps count on the right
                         HStack(spacing: 8) {
                             Text("Total Distance Per Day")
@@ -331,6 +387,23 @@ struct RunLogView: View {
         }
     }
     
+    private func activityFilterOptions() -> [String] {
+        ["Running", "Walking", "Hiking", "Cycling", "Rowing", "Elliptical", "Stair Climbing"]
+    }
+
+    private func keyForActivity(_ label: String) -> String {
+        switch label.lowercased() {
+        case "running": return "running"
+        case "walking": return "walking"
+        case "hiking": return "hiking"
+        case "cycling": return "cycling"
+        case "rowing": return "rowing"
+        case "elliptical": return "elliptical"
+        case "stair climbing": return "stairClimbing"
+        default: return "running"
+        }
+    }
+
     private func activityIcon(for type: String) -> String {
         switch type {
         case "walking":

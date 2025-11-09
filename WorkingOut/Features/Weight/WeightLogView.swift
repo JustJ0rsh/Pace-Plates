@@ -10,11 +10,30 @@ struct WeightLogView: View {
     @AppStorage("weightGoal") private var weightGoal: String = "lose" // "gain" or "lose"
     @AppStorage("weightUnit") private var preferredWeightUnit = "lbs"
     
-    // Last 7 days domain for chart X-axis
+    // Time filter
+    private enum TimeRange: String, CaseIterable, Identifiable {
+        case days7 = "7 Days"
+        case month1 = "1 Month"
+        case months6 = "6 Months"
+        case year1 = "1 Year"
+        var id: String { rawValue }
+        var days: Int {
+            switch self {
+            case .days7: return 7
+            case .month1: return 30
+            case .months6: return 180
+            case .year1: return 365
+            }
+        }
+    }
+    @State private var selectedRange: TimeRange = .days7
+    
+    // Dynamic domain for chart X-axis based on selected filter
     private var last7DaysDomain: ClosedRange<Date> {
         let cal = Calendar.current
         let todayStart = cal.startOfDay(for: Date())
-        let start = cal.date(byAdding: .day, value: -6, to: todayStart) ?? todayStart
+        let days = max(1, selectedRange.days - 1)
+        let start = cal.date(byAdding: .day, value: -days, to: todayStart) ?? todayStart
         let end = cal.date(byAdding: .day, value: 1, to: todayStart) ?? todayStart
         return start...end
     }
@@ -33,6 +52,23 @@ struct WeightLogView: View {
                     // Chart Tile (unified header style)
                     VStack(alignment: .leading, spacing: 8) {
                         if !weightEntries.isEmpty {
+                            // Filters row
+                            HStack(spacing: 8) {
+                                Menu {
+                                    ForEach(TimeRange.allCases) { r in
+                                        Button(r.rawValue) { selectedRange = r }
+                                    }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "calendar")
+                                        Text(selectedRange.rawValue)
+                                    }
+                                    .padding(8)
+                                    .background(AppTheme.secondaryBackgroundColor)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                }
+                                Spacer(minLength: 0)
+                            }
                             HStack(spacing: 8) {
                                 Image(systemName: "scalemass")
                                     .foregroundStyle(AppTheme.textColor)
@@ -196,4 +232,3 @@ struct WeightLogView: View {
         return (sorted, convertedWeights, yLower, yUpper, latest, oldest)
     }
 } 
-

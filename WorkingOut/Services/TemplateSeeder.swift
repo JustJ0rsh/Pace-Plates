@@ -18,6 +18,8 @@ class TemplateSeeder {
         // Check if already seeded
         if hasSeeded(context: context) {
             print("✅ Built-in templates already seeded")
+            // Run idempotent rename/migration pass for advanced template names
+            try? await renameAdvancedTemplateTitlesIfNeeded(context: context)
             return
         }
         
@@ -71,6 +73,8 @@ class TemplateSeeder {
         UserDefaults.standard.set(true, forKey: "hasSeededBuiltInTemplates_v1")
         
         print("✅ Successfully seeded \(count) built-in workout templates")
+        // Apply any post-seed migrations (e.g., title renames)
+        try? await renameAdvancedTemplateTitlesIfNeeded(context: context)
     }
     
     /// Force reseed (for development/testing)
@@ -95,3 +99,27 @@ class TemplateSeeder {
     }
 }
 
+// MARK: - Lightweight migrations
+extension TemplateSeeder {
+    /// Rename advanced template titles to clearer names. Safe to call multiple times.
+    func renameAdvancedTemplateTitlesIfNeeded(context: ModelContext) async throws {
+        let mapping: [String: String] = [
+            "Advanced Powerlifting - Sheiko Heavy Squat": "Powerlifting (Advanced) – Sheiko Heavy Squat Day",
+            "Advanced Powerlifting - Smolov Squat Cycle": "Powerlifting (Advanced) – Smolov Squat Cycle",
+            "Advanced Powerlifting - Westside Max Effort Squat": "Powerlifting (Advanced) – Westside Max Effort Squat",
+            "Advanced Powerlifting - Westside Speed Bench": "Powerlifting (Advanced) – Westside Speed Bench",
+            "Advanced Powerlifting - Bulgarian Daily Max Squat": "Powerlifting (Advanced) – Bulgarian Daily Max Squat"
+        ]
+        if mapping.isEmpty { return }
+        let fetch = FetchDescriptor<WorkoutTemplate>(predicate: #Predicate { $0.isBuiltIn == true && $0.experienceLevel == "advanced" })
+        let items = (try? context.fetch(fetch)) ?? []
+        var changed = false
+        for t in items {
+            if let newName = mapping[t.title], t.title != newName {
+                t.title = newName
+                changed = true
+            }
+        }
+        if changed { try? context.save() }
+    }
+}

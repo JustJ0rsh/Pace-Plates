@@ -10,6 +10,7 @@ struct AIPlannerView: View {
     @AppStorage("weightGoal") private var weightGoal: String = "lose" // lose | maintain | gain
     @AppStorage("weightUnit") private var weightUnit: String = "lbs"
     @AppStorage("distanceUnit") private var distanceUnit: String = "mi"
+    @AppStorage("userEquipment") private var userEquipment: String = ""
 
     // Use Settings-backed goal directly
     // Lose | maintain | gain
@@ -98,7 +99,7 @@ struct AIPlannerView: View {
         isGenerating = true
         let req = WorkoutPlanRequest(
             goal: weightGoal,
-            extraContext: prompt,
+            extraContext: buildExtraContext(),
             weightUnit: weightUnit,
             distanceUnit: distanceUnit,
             modelContext: modelContext,
@@ -110,6 +111,12 @@ struct AIPlannerView: View {
         } else {
             showConversation = true
         }
+    }
+    
+    private func buildExtraContext() -> String {
+        let trimmed = userEquipment.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return prompt }
+        return "Available equipment: \(trimmed). " + prompt
     }
 
     private func copyToPasteboard(_ text: String) {
@@ -141,6 +148,21 @@ struct AIPlannerView: View {
                     Text("Using goal: **\(goalDisplayName)** (change in Settings)")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                }
+            }
+
+            // Equipment input between goal and model status
+            GroupBox("Equipment") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Available equipment (optional)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("e.g., dumbbells, barbell, bench, bike", text: $userEquipment)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                        .padding(10)
+                        .background(AppTheme.secondaryBackgroundColor)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
             }
 

@@ -138,6 +138,61 @@ class PersistenceController {
         }
         if changed { try? context.save() }
     }
+
+    /// Unify synonymous exercise names to a single canonical definition
+    /// This safely repoints existing logs to the canonical definition and removes the synonym.
+    func unifySynonymousExerciseDefinitions() {
+        let context = container.mainContext
+        let mappings: [(from: String, to: String, group: String)] = [
+            (from: "Flat Bench Press", to: "Bench Press", group: "Chest"),
+            (from: "Incline Bench", to: "Incline Bench Press", group: "Chest"),
+            (from: "Romanian Deadlifts (RDLs)", to: "Romanian Deadlifts", group: "Back"),
+            (from: "Rows", to: "Barbell Rows", group: "Back"),
+            (from: "Romanian Squats", to: "Bulgarian Split Squats", group: "Legs")
+        ]
+
+        var changed = false
+        for map in mappings {
+            let to = map.to
+            let group = map.group
+            let from = map.from
+            // Find canonical; create if missing
+            let canonicalPred = #Predicate<ExerciseDefinition> { $0.name == to && $0.muscleGroup == group }
+            let canonicalFD = FetchDescriptor<ExerciseDefinition>(predicate: canonicalPred)
+            let canonical = (try? context.fetch(canonicalFD))?.first ?? {
+                let def = ExerciseDefinition(name: to, muscleGroup: group, isUserDefined: false)
+                context.insert(def)
+                return def
+            }()
+
+            // Find all synonyms matching 'from' in the same group
+            let fromPred = #Predicate<ExerciseDefinition> { $0.name == from && $0.muscleGroup == group }
+            let fromFD = FetchDescriptor<ExerciseDefinition>(predicate: fromPred)
+            guard let synonyms = try? context.fetch(fromFD), !synonyms.isEmpty else { continue }
+
+            for syn in synonyms {
+                // Repoint logs
+                if let synId = syn.id as UUID? {
+                    let logPred = #Predicate<ExerciseLog> { $0.exerciseDefinition?.id == synId }
+                    let logFD = FetchDescriptor<ExerciseLog>(predicate: logPred)
+                    if let logs = try? context.fetch(logFD) {
+                        for log in logs {
+                            log.exerciseDefinition = canonical
+                            if (log.exerciseName ?? syn.name) == syn.name {
+                                log.exerciseName = canonical.name
+                            }
+                            changed = true
+                        }
+                    }
+                }
+                // Delete the synonym definition
+                context.delete(syn)
+                changed = true
+            }
+        }
+
+        if changed { try? context.save() }
+    }
     
     // MARK: - Exercise Definition Methods
     

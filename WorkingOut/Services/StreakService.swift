@@ -89,26 +89,45 @@ enum StreakService {
 
 private extension StreakService {
     static func reportAchievements(dailyStreak: Int, weeklyStreak: Int) {
-        var achievements: [GKAchievement] = []
+        // Load existing player achievement states so we only report improvements
+        GKAchievement.loadAchievements { existing, error in
+            if let error { print("GameCenter: Load achievements failed: \(error)") }
+            let map: [String: GKAchievement] = Dictionary(uniqueKeysWithValues: (existing ?? []).map { ach in
+                (ach.identifier, ach)
+            })
 
-        for t in dailyThresholds {
-            let id = String(format: "streak_days_%03d", t)
-            let a = GKAchievement(identifier: id)
-            a.percentComplete = min(100.0, (Double(dailyStreak) / Double(t)) * 100.0)
-            a.showsCompletionBanner = true
-            achievements.append(a)
-        }
+            var toReport: [GKAchievement] = []
 
-        for t in weeklyThresholds {
-            let id = String(format: "streak_weeks_%03d", t)
-            let a = GKAchievement(identifier: id)
-            a.percentComplete = min(100.0, (Double(weeklyStreak) / Double(t)) * 100.0)
-            a.showsCompletionBanner = true
-            achievements.append(a)
-        }
+            func consider(id: String, percent: Double) {
+                let clamped = max(0.0, min(100.0, percent))
+                let current = map[id]?.percentComplete ?? 0.0
+                let alreadyCompleted = map[id]?.isCompleted ?? false
+                // Only report if progress increased
+                if clamped > current + 0.001 {
+                    let a = GKAchievement(identifier: id)
+                    a.percentComplete = clamped
+                    // Only show banner when transitioning to 100% for the first time
+                    a.showsCompletionBanner = (!alreadyCompleted && current < 100.0 && clamped >= 100.0)
+                    toReport.append(a)
+                }
+            }
 
-        GKAchievement.report(achievements) { error in
-            if let error { print("GameCenter: Failed to report streak achievements: \(error)") }
+            for t in dailyThresholds {
+                let id = String(format: "streak_days_%03d", t)
+                consider(id: id, percent: (Double(dailyStreak) / Double(t)) * 100.0)
+            }
+
+            for t in weeklyThresholds {
+                let id = String(format: "streak_weeks_%03d", t)
+                consider(id: id, percent: (Double(weeklyStreak) / Double(t)) * 100.0)
+            }
+
+            if !toReport.isEmpty {
+                GKAchievement.report(toReport) { error in
+                    if let error { print("GameCenter: Failed to report streak achievements: \(error)") }
+                }
+            }
         }
     }
 }
+

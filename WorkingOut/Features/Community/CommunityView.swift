@@ -10,20 +10,6 @@ struct CommunityView: View {
     var body: some View {
         NavigationStack {
             List {
-                // Community landing
-                Section("Community") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Groups and challenges coming soon.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Section("Groups & Challenges") {
-                    NavigationLink { GroupsPlaceholderView() } label: { Label("My Groups", systemImage: "person.3.fill") }
-                    NavigationLink { ChallengesPlaceholderView() } label: { Label("Challenges", systemImage: "flag.checkered") }
-                }
-
                 Section("Game Center") {
                     Button {
                         GameCenterService.shared.presentLeaderboards()
@@ -46,47 +32,5 @@ struct CommunityView: View {
         }
     }
 
-    private func signInTapped() { showSignInError = "Leaderboards are disabled on this branch." }
-
-    private func presentLeaderboards() { }
-}
-
-private struct GroupsPlaceholderView: View {
-    var body: some View {
-        VStack(spacing: 12) {
-            Text("Groups").font(.headline)
-            Text("Create or join a group to compare progress with friends for accountability and competition.")
-                .font(.subheadline).multilineTextAlignment(.center).foregroundStyle(.secondary)
-            Spacer()
-            ContentUnavailableView("Coming Soon", systemImage: "person.3.fill", description: Text("Group leaderboards, invites, and private challenges."))
-            Spacer()
-        }
-        .padding()
-        .navigationTitle("Groups")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
-        .appBackground(AppTheme.gradientHome)
-        .foregroundColor(AppTheme.textColor)
-    }
-}
-
-private struct ChallengesPlaceholderView: View {
-    var body: some View {
-        VStack(spacing: 12) {
-            Text("Challenges").font(.headline)
-            Text("Compete on max lifts, volume, or running with weekly and monthly challenges.")
-                .font(.subheadline).multilineTextAlignment(.center).foregroundStyle(.secondary)
-            Spacer()
-            ContentUnavailableView("Coming Soon", systemImage: "flag.checkered", description: Text("Leaderboards, streaks, and trophies."))
-            Spacer()
-        }
-        .padding()
-        .navigationTitle("Challenges")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
-        .appBackground(AppTheme.gradientHome)
-        .foregroundColor(AppTheme.textColor)
-    }
+    private func signInTapped() { showSignInError = nil }
 }
