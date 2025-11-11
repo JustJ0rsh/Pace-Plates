@@ -28,9 +28,8 @@ struct AIChatSheet: View {
     @State private var showClearConfirmation: Bool = false
     @State private var displayedText: String = ""
     @State private var fullBufferedText: String = ""
-    @State private var isUsingTools: Bool = false
-    @AppStorage("allowAIWebSearch") private var webSearchEnabled: Bool = false
-    @State private var currentSearchResults: [WebSearchResult] = []
+    // Web search removed to reduce tokens and latency
+    // Web search removed
     @State private var scrollOffset: CGFloat = 0
     @State private var contentHeight: CGFloat = 0
     @State private var scrollViewHeight: CGFloat = 0
@@ -49,12 +48,7 @@ struct AIChatSheet: View {
                         }
                         if isStreaming { typingRow().id("progress") }
                         
-                        // Show search results if available
-                        if !currentSearchResults.isEmpty {
-                            searchResultsPanel
-                                .id("sources")
-                                .transition(.asymmetric(insertion: .move(edge: .top).combined(with: .opacity), removal: .opacity))
-                        }
+                        // Web search results disabled
                     }
                     .padding()
                     .background(
@@ -186,14 +180,7 @@ struct AIChatSheet: View {
                         withAnimation(.linear(duration: 0.12)) { proxy.scrollTo("progress", anchor: .bottom) }
                     }
                 }
-                .onChange(of: currentSearchResults) { _, _ in
-                    // Scroll to show sources when they appear
-                    if !currentSearchResults.isEmpty {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            withAnimation { proxy.scrollTo("sources", anchor: .bottom) }
-                        }
-                    }
-                }
+                // Web search disabled – no source auto-scroll
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -278,60 +265,7 @@ struct AIChatSheet: View {
                     .disabled(messages.isEmpty)
             }
             
-            // Center - Web search status and toggle
-            ToolbarItem(placement: .principal) {
-                HStack(spacing: 8) {
-                    if isUsingTools {
-                        HStack(spacing: 4) {
-                            ShimmeringDotsView()
-                            Text("Searching...")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(.orange)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(.orange.opacity(0.1))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(.orange.opacity(0.3), lineWidth: 1)
-                                )
-                        )
-                        .shadow(color: .orange.opacity(0.2), radius: 4, x: 0, y: 2)
-                    }
-
-                    Button {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            toggleWebSearch()
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: webSearchEnabled ? "network" : "network.slash")
-                                .font(.system(size: 12))
-                                .foregroundStyle(webSearchEnabled ? .blue : .gray)
-                                .scaleEffect(webSearchEnabled ? 1.1 : 1.0)
-                            Text("Web")
-                                .font(.system(size: 12, weight: webSearchEnabled ? .semibold : .medium))
-                                .foregroundStyle(webSearchEnabled ? .blue : .gray)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(webSearchEnabled ? .blue.opacity(0.15) : .gray.opacity(0.1))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(webSearchEnabled ? .blue.opacity(0.4) : .gray.opacity(0.2), lineWidth: 1)
-                                )
-                        )
-                        .shadow(color: webSearchEnabled ? .blue.opacity(0.2) : .clear, radius: 3, x: 0, y: 1)
-                        .scaleEffect(webSearchEnabled ? 1.05 : 1.0)
-                    }
-                    .disabled(isStreaming)
-                    .buttonStyle(.plain)
-                }
-            }
+            // Center placeholder removed (web search disabled)
             
             // Right side - Save button
             ToolbarItem(placement: .topBarTrailing) {
@@ -378,82 +312,13 @@ struct AIChatSheet: View {
 
     private func prewarm() async {
         await WorkoutPlanGenerator.shared.prewarmIfPossible()
-
-        // Also prewarm tool session if web search is enabled
-        if webSearchEnabled {
-            await WorkoutPlanGenerator.shared.prewarmToolSessionIfNeeded()
-        }
     }
 
     // With @AppStorage, state syncs to UserDefaults automatically across views.
     // No manual syncing needed to avoid feedback loops.
     private func updateWebSearchState() { }
 
-    private func toggleWebSearch() {
-        webSearchEnabled.toggle()
-
-        if webSearchEnabled {
-            Haptics.playImpact(.light)
-            // Prewarm in background without blocking the main thread
-            Task {
-                await WorkoutPlanGenerator.shared.prewarmToolSessionIfNeeded()
-            }
-        } else {
-            Haptics.playImpact(.medium)
-        }
-    }
-
-    private func shouldTriggerWebSearch(for query: String) -> Bool {
-        // Enhanced detection for immediate UI feedback - must match WorkoutPlanGenerator logic
-        let lower = query.lowercased()
-
-        // First, exclude personalized/subjective queries
-        let personalizedPatterns = [
-            "for me", "my workout", "should i", "can i", "what should i do",
-            "recommend", "suggest", "advice", "help me", "good workout for me",
-            "today", "this week", "my plan", "my training", "my schedule",
-            "i feel", "i'm going", "i want", "i need", "my goal",
-            "when my", "when i", "if my", "if i", "my thighs", "my legs",
-            "my arms", "my back", "i'm sore", "i am sore", "what to do when",
-            "what is good to do", "what should i eat", "how do i"
-        ]
-        
-        if personalizedPatterns.contains(where: { lower.contains($0) }) {
-            return false
-        }
-
-        // Always factual keywords (high confidence - show immediately)
-        let alwaysFactualKeywords = ["what is", "who is", "define", "definition", "research shows", "study found", "evidence",
-                                   "clinical", "medical", "science", "scientific", "benefits of", "side effects",
-                                   "contraindications", "drug", "medication", "supplement facts", "vitamin",
-                                   "micronutrient", "macronutrient", " RDA ", "recommended daily",
-                                   "current guidelines", "latest research", "recent study", "2024", "2025"]
-
-        // Check for always factual keywords first (immediate trigger)
-        if alwaysFactualKeywords.contains(where: { lower.contains($0) }) {
-            return true
-        }
-
-        // Critical health/nutrition topics
-        let criticalHealthKeywords = ["side effects", "contraindications", "allergy", "pregnancy",
-                                    "medication", "drug interaction", " RDA ", "daily requirement",
-                                    "toxicity", "deficiency", "chronic", "acute", "symptoms"]
-        if criticalHealthKeywords.contains(where: { lower.contains($0) }) {
-            return true
-        }
-
-        // Check for specific factual phrases (not personalized)
-        let factualPhrases = ["tell me about", "explain how", "describe the", "what are the effects",
-                            "what causes", "what happens when", "is it safe to", "is it healthy to",
-                            "how effective is", "does it work", "what's the evidence for"]
-
-        if factualPhrases.contains(where: { lower.contains($0) }) {
-            return true
-        }
-
-        // Default: don't show searching indicator
-        return false
-    }
+    // Web search disabled; no toggle or detection needed
 
     private func send() {
         let question = input.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -485,34 +350,12 @@ struct AIChatSheet: View {
                     streamingOpacity = 0.2
                     displayedText = ""
                     fullBufferedText = ""
-                    isUsingTools = false
                     withAnimation(.easeInOut(duration: 2.0)) {
                         streamingOpacity = 1.0
                     }
                 }
 
-                // Check if this query should trigger web search (enhanced detection)
-                let shouldTriggerTools = webSearchEnabled && shouldTriggerWebSearch(for: req.extraContext)
-
-                if shouldTriggerTools {
-                    print("🎯 UI: Detected factual query, will show searching indicator: \(req.extraContext)")
-                    await MainActor.run {
-                        // Show searching indicator immediately for high-confidence queries
-                        let lowerQuery = req.extraContext.lowercased()
-                        let immediateKeywords = ["what is", "define", "benefits", "research", "study", "evidence", "side effects", " RDA ",
-                                               "clinical", "medical", "contraindications", "how much", "what are", "tell me"]
-
-                        let delay = immediateKeywords.contains(where: { lowerQuery.contains($0) }) ? 0.2 : 0.5
-
-                        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                            if !isUsingTools {
-                                print("🔍 UI: Showing searching indicator with haptic feedback")
-                                isUsingTools = true
-                                Haptics.playImpact(.soft)
-                            }
-                        }
-                    }
-                }
+                // Web search disabled: no searching indicator
                 
                 // Start character reveal task
                 let revealTask = Task {
@@ -537,35 +380,7 @@ struct AIChatSheet: View {
                     // Check for cancellation
                     if Task.isCancelled { break }
 
-                    // Check if this chunk contains tool call indicators or results
-                    let lowerChunk = chunk.lowercased()
-                    if (lowerChunk.contains("websearch") || lowerChunk.contains("searching") || lowerChunk.contains("verifying") ||
-                       lowerChunk.contains("tool") || lowerChunk.contains("research") || lowerChunk.contains("web search") ||
-                       lowerChunk.contains("web context") || lowerChunk.contains("verified") || lowerChunk.contains("sources") ||
-                       lowerChunk.contains("=== verified") || lowerChunk.contains("web results") || lowerChunk.contains("citations")) &&
-                        !lowerChunk.contains("unable to verify") && !lowerChunk.contains("failed") {
-                        await MainActor.run {
-                            if !isUsingTools {
-                                print("🔍 UI: Detected tool usage in response chunk: \(chunk)")
-                                Haptics.playImpact(.soft)
-                                // Capture search results when tool is used
-                                currentSearchResults = WebSearchService.shared.lastSearchResults
-                            }
-                            isUsingTools = true
-                        }
-                    } else if lowerChunk.contains("source") || lowerChunk.contains("[1]") || lowerChunk.contains("according to") ||
-                             lowerChunk.contains("study") || lowerChunk.contains("evidence") || lowerChunk.contains("research shows") ||
-                             lowerChunk.contains("studies show") || lowerChunk.contains("clinical evidence") {
-                        // Keep tool indicator on when sources are being cited
-                        await MainActor.run {
-                            if !isUsingTools {
-                                print("🔍 UI: Detected source citation in response chunk: \(chunk)")
-                                // Capture search results when citations are detected
-                                currentSearchResults = WebSearchService.shared.lastSearchResults
-                            }
-                            isUsingTools = true
-                        }
-                    }
+                    // Web search/tool indicators removed
 
                     await MainActor.run {
                         // Only create the assistant message when we have actual content
@@ -593,14 +408,10 @@ struct AIChatSheet: View {
                     if let idx = messages.lastIndex(where: { $0.role == .assistant }) {
                         messages[idx].text = fullBufferedText
                     }
-                    // Reset tool usage indicator
-                    isUsingTools = false
                 }
             } catch is CancellationError {
                 // Silently handle cancellation
-                await MainActor.run {
-                    isUsingTools = false
-                }
+                await MainActor.run { }
             } catch {
                 // Check if this is a context overflow error
                 let errorMessage = error.localizedDescription.lowercased()
@@ -644,7 +455,6 @@ struct AIChatSheet: View {
                     // Retry the question automatically
                     await MainActor.run {
                         isStreaming = false
-                        isUsingTools = false
                     }
                     
                     // Small delay then retry
@@ -653,10 +463,7 @@ struct AIChatSheet: View {
                     return
                 } else {
                     // Other errors - show to user
-                    await MainActor.run {
-                        errorText = error.localizedDescription
-                        isUsingTools = false
-                    }
+                    await MainActor.run { errorText = error.localizedDescription }
                 }
             }
             await MainActor.run {
@@ -664,7 +471,6 @@ struct AIChatSheet: View {
                 lastStreamedAssistantID = nil
                 streamingOpacity = 1.0
                 streamTask = nil
-                isUsingTools = false
                 autoFollow = false
             }
         }
@@ -707,57 +513,7 @@ struct AIChatSheet: View {
         }
     }
 
-    @ViewBuilder
-    private var searchResultsPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "doc.text.magnifyingglass")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.blue)
-                
-                Text("Sources")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.primary)
-                
-                Spacer()
-                
-                Button(action: { withAnimation { currentSearchResults = [] } }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 18))
-                        .foregroundColor(.gray.opacity(0.6))
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(Array(currentSearchResults.enumerated()), id: \.offset) { index, result in
-                        ClickableSourceCard(result: result, index: index + 1)
-                    }
-                }
-                .padding(.horizontal, 16)
-            }
-            .padding(.bottom, 12)
-        }
-        .background(
-            ZStack {
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(.ultraThinMaterial)
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.blue.opacity(0.08), Color.blue.opacity(0.02)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.blue.opacity(0.2), lineWidth: 1)
-            }
-        )
-        .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 4)
-    }
+    // Search results UI removed
 
     @ViewBuilder
     private func messageRow(_ msg: Message) -> some View {
@@ -917,117 +673,4 @@ struct ScrollOffsetPreferenceKey: PreferenceKey {
 }
 
 // MARK: - Clickable Source Card
-struct ClickableSourceCard: View {
-    let result: WebSearchResult
-    let index: Int
-    
-    var body: some View {
-        Link(destination: URL(string: result.url) ?? URL(string: "https://duckduckgo.com")!) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
-                    // Citation number badge
-                    ZStack {
-                        Circle()
-                            .fill(sourceColor.gradient)
-                            .frame(width: 32, height: 32)
-                        
-                        Text("\(index)")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(.white)
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(result.source)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(sourceColor)
-                            .textCase(.uppercase)
-                        
-                        Text(result.title)
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.primary)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
-                    }
-                    
-                    Spacer(minLength: 0)
-                    
-                    Image(systemName: "arrow.up.right.circle.fill")
-                        .font(.system(size: 20))
-                        .foregroundColor(sourceColor.opacity(0.7))
-                }
-                
-                Text(result.snippet)
-                    .font(.system(size: 13))
-                    .foregroundColor(.secondary)
-                    .lineLimit(3)
-                    .multilineTextAlignment(.leading)
-            }
-            .padding(14)
-            .frame(width: 280)
-            .background(
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(.ultraThinMaterial)
-                    
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(
-                            LinearGradient(
-                                colors: [sourceColor.opacity(0.08), sourceColor.opacity(0.02)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                    
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(sourceColor.opacity(0.25), lineWidth: 1.5)
-                }
-            )
-            .shadow(color: sourceColor.opacity(0.15), radius: 8, x: 0, y: 4)
-        }
-        .buttonStyle(.plain)
-    }
-    
-    private var sourceColor: Color {
-        switch result.source.lowercased() {
-        case "duckduckgo": return .blue
-        case "reddit": return .orange
-        case "wikipedia": return .purple
-        default: return .gray
-        }
-    }
-}
-
-// MARK: - Shimmering Dots Component
-struct ShimmeringDotsView: View {
-    @State private var currentDot = 0
-    @State private var scale: Double = 1.0
-
-    var body: some View {
-        HStack(spacing: 3) {
-            ForEach(0..<3, id: \.self) { index in
-                Circle()
-                    .fill(Color.orange)
-                    .frame(width: index == currentDot ? 6 : 4, height: index == currentDot ? 6 : 4)
-                    .opacity(index == currentDot ? 1.0 : 0.4)
-                    .scaleEffect(scale)
-                    .animation(.easeInOut(duration: 0.3), value: currentDot)
-                    .animation(.easeInOut(duration: 0.6).repeatForever(), value: scale)
-            }
-        }
-        .onAppear {
-            startAnimation()
-            // Add subtle pulsing effect
-            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
-                scale = 1.1
-            }
-        }
-    }
-
-    private func startAnimation() {
-        Timer.scheduledTimer(withTimeInterval: 0.35, repeats: true) { _ in
-            withAnimation(.easeInOut(duration: 0.35)) {
-                currentDot = (currentDot + 1) % 3
-            }
-        }
-    }
-}
+// Search source cards and shimmering dots removed

@@ -168,14 +168,7 @@ final class HealthKitManager: ObservableObject {
             let query = HKSampleQuery(sampleType: .workoutType(), predicate: nil, limit: limit, sortDescriptors: [sort]) { _, samples, error in
                 if let error = error { continuation.resume(throwing: error); return }
                 let workouts = (samples as? [HKWorkout]) ?? []
-                let filtered = workouts.filter { w in
-                    switch w.workoutActivityType {
-                    case .running, .walking, .hiking, .cycling, .rowing, .elliptical, .stairClimbing:
-                        return true
-                    default:
-                        return false
-                    }
-                }
+                let filtered = workouts.filter { $0.workoutActivityType == .running }
                 continuation.resume(returning: filtered)
             }
             self.healthStore.execute(query)

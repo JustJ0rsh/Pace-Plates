@@ -39,9 +39,8 @@ final class WorkoutPlanGenerator {
     }
 
     #if canImport(FoundationModels)
-    // Reused sessions to prewarm once and reduce latency
+    // Reused session to prewarm once and reduce latency
     private var basicSession: LanguageModelSession? = nil
-    private var toolEnabledSession: LanguageModelSession? = nil
     #endif
     
     // Static variable to track last context summary for conversation continuity
@@ -109,25 +108,7 @@ final class WorkoutPlanGenerator {
         #endif
     }
 
-    // Prewarm tool-enabled session when web search is enabled
-    func prewarmToolSessionIfNeeded() async {
-        #if AI_FOUNDATION_AVAILABLE
-        if #available(iOS 26, *) {
-            #if canImport(FoundationModels)
-            await MainActor.run {
-                if toolEnabledSession == nil {
-                    let tools: [any Tool] = [WebSearchTool()]
-                    toolEnabledSession = LanguageModelSession(
-                        tools: tools,
-                        instructions: "You are a friendly, creative fitness and nutrition coach. Use webSearch when a claim needs verification or current facts, and cite sources concisely. Keep responses helpful and varied."
-                    )
-                    toolEnabledSession?.prewarm()
-                }
-            }
-            #endif
-        }
-        #endif
-    }
+    // Tool-enabled session and prewarming removed (web search disabled)
     
     /// Reset/offload the model sessions to clear context and free memory
     @MainActor
@@ -137,7 +118,6 @@ final class WorkoutPlanGenerator {
             #if canImport(FoundationModels)
             print("🔄 Resetting model context...")
             basicSession = nil
-            toolEnabledSession = nil
             Self.lastConversationSummary = nil
             print("✅ Model context reset complete")
             #endif
@@ -184,28 +164,17 @@ final class WorkoutPlanGenerator {
         #if AI_FOUNDATION_AVAILABLE
         if #available(iOS 26, *) {
             #if canImport(FoundationModels)
-            // Build a small, non-repeating context from recent assistant messages
-            // Keep this short to avoid exceeding model context window
-            let contextLines: [String] = Self.compactAssistantContext(history: history, maxChars: 400)
+            // Do not include previous conversation context in Ask to minimize tokens
             return AsyncThrowingStream { continuation in
                 Task {
                     do {
-                        // Choose session type based on whether web search is enabled and relevant
-                        let useToolSession = shouldUseWebSearch(for: request.extraContext)
-
-                        // Prefer prewarmed, reusable sessions to avoid asset reload overhead
+                        // Use a fresh, ephemeral session to avoid context accumulation
                         let session: LanguageModelSession = await MainActor.run {
-                            if useToolSession {
-                                if self.toolEnabledSession == nil { Task { await self.prewarmToolSessionIfNeeded() } }
-                                return self.toolEnabledSession ?? self.basicSession ?? LanguageModelSession(
-                                    instructions: "You are a concise fitness/nutrition coach. Keep answers short, safe, and practical."
-                                )
-                            } else {
-                                if self.basicSession == nil { Task { await self.prewarmIfPossible() } }
-                                return self.basicSession ?? LanguageModelSession(
-                                    instructions: "You are a concise fitness/nutrition coach. Keep answers short, safe, and practical."
-                                )
-                            }
+                            let s = LanguageModelSession(
+                                instructions: "You are a concise fitness/nutrition coach. Keep answers short, safe, and practical."
+                            )
+                            s.prewarm()
+                            return s
                         }
 
                         let userStats: UserStats = await Self.collectRecentStats(context: request.modelContext, 
@@ -213,76 +182,23 @@ final class WorkoutPlanGenerator {
                                                                                   distanceUnit: request.distanceUnit)
 
                         // Build concise prompt using centralized builder
-                        let prompt = AIPromptBuilder.buildConversationPrompt(
+                        // Include equipment from Settings if available
+                        let equipment = UserDefaults.standard.string(forKey: "userEquipment")
+                        var prompt = AIPromptBuilder.buildConversationPrompt(
                             goal: request.goal,
                             question: request.extraContext,
                             weightUnit: request.weightUnit,
                             distanceUnit: request.distanceUnit,
                             userStats: userStats,
-                            recentContext: contextLines,
-                            includeWebSearchGuidance: useToolSession
+                            equipment: equipment
                         )
+                        // Extra-safe cap for Ask prompts
+                        if prompt.count > 900 { prompt = String(prompt.prefix(900)) }
 
                         // Clamp prompt size defensively to avoid context window overflow
                         let safePrompt = Self.clampPrompt(prompt)
 
-                        // Pre-process query: Force tool usage for certain patterns BEFORE sending to model (CONVERSATION MODE)
-                        if shouldUseWebSearch(for: request.extraContext) && useToolSession {
-                            print("🎯 CONVERSATION PRE-PROCESSING: Force-enabling web search for factual query: \(request.extraContext)")
-
-                            // For certain high-confidence factual queries, call web search directly
-                            let lowerQuery = request.extraContext.lowercased()
-                            let directCallKeywords = ["what is", "define", "benefits", "research", "study", "evidence", "side effects", " RDA "]
-
-                            if directCallKeywords.contains(where: { lowerQuery.contains($0) }) {
-                                print("🚨 CONVERSATION DIRECT TOOL CALL: High-confidence factual query detected, calling web search immediately...")
-                                do {
-                                    let webResults = try await WebSearchService.shared.search(query: request.extraContext, maxResults: 4)
-                                    let context = WebSearchService.formattedContext(for: webResults, includeCitations: true)
-
-                                    // Stream the verified information
-                                    continuation.yield("\n\n=== VERIFIED INFORMATION ===\n\(context)\n=== END VERIFIED INFORMATION ===\n\n")
-                                    continuation.yield("Based on the above research, here's my analysis:")
-
-                                    // Then let the model continue with the verified context
-                                    let enhancedPrompt = "\(safePrompt)\n\nVERIFIED CONTEXT FROM WEB SEARCH:\n\(context)\n\nNow provide your analysis based on this verified information:"
-                                    let response = try await session.respond(to: Self.clampPrompt(enhancedPrompt))
-                                    print("✅ Conversation enhanced response generated with verified context")
-
-                                    // Extract text from Foundation Models response
-                                    let responseText: String
-                                    let mirror = Mirror(reflecting: response)
-
-                                    // Try to find text content in the response
-                                    if let textValue = mirror.children.first(where: { $0.label?.contains("text") == true })?.value as? String {
-                                        responseText = textValue
-                                    } else if let contentValue = mirror.children.first(where: { $0.label?.contains("content") == true })?.value as? String {
-                                        responseText = contentValue
-                                    } else if let valueValue = mirror.children.first(where: { $0.label?.contains("value") == true })?.value as? String {
-                                        responseText = valueValue
-                                    } else {
-                                        responseText = String(describing: response)
-                                    }
-
-                                    // Stream the enhanced response (larger chunks, smaller delay)
-                                    var currentIndex = responseText.startIndex
-                                    while currentIndex < responseText.endIndex {
-                                        let chunkSize = min(120, responseText.distance(from: currentIndex, to: responseText.endIndex))
-                                        let endIndex = responseText.index(currentIndex, offsetBy: chunkSize)
-                                        let chunk = String(responseText[currentIndex..<endIndex])
-                                        continuation.yield(chunk)
-                                        currentIndex = endIndex
-                                        try? await Task.sleep(nanoseconds: 2_000_000)
-                                    }
-
-                        continuation.finish()
-                                    return
-                    } catch {
-                                    print("❌ Direct tool call failed: \(error.localizedDescription)")
-                                    continuation.yield("[Direct web search failed. Continuing with standard response.]")
-                                }
-                            }
-                        }
+                        // Web search/tool calls disabled
                         // Use proper Foundation Models API for conversation mode
                         #if canImport(FoundationModels)
                         if #available(iOS 26, *) {
@@ -327,30 +243,14 @@ final class WorkoutPlanGenerator {
                                 continuation.finish()
                                 return
                             } catch {
-                                print("❌ Conversation Foundation Models respond() failed: \(error.localizedDescription)")
-
-                                // Fallback: Force web search for critical queries
-                                if shouldUseWebSearch(for: request.extraContext) {
-                                    print("🚨 Forcing fallback web search for conversation due to API failure...")
-                                    do {
-                                        let webResults = try await WebSearchService.shared.search(query: request.extraContext, maxResults: 3)
-                                        let context = WebSearchService.formattedContext(for: webResults, includeCitations: true)
-                                        continuation.yield("\n\n=== VERIFIED INFORMATION (Fallback) ===\n\(context)\n=== END VERIFIED INFORMATION ===\n\n")
-                                        continuation.yield("Note: Using fallback web search due to technical issues. Always verify information from reliable sources.")
-                                    } catch {
-                                        print("❌ Fallback conversation web search also failed: \(error.localizedDescription)")
-                                        continuation.yield("[Web search verification failed. Please check latest research for accuracy.]")
-                                    }
-                                } else {
-                                    continuation.yield("[Unable to verify information with web search. Please check latest research for accuracy.]")
-                                }
-                                continuation.finish()
+                                print("❌ Conversation respond() failed: \(error.localizedDescription)")
+                                continuation.finish(throwing: error)
                                 return
                             }
                         }
                         #else
-                        // Ultimate fallback for older versions or when Foundation Models unavailable
-                        continuation.yield("Web search verification unavailable. Please verify information from reliable sources.")
+                        // Fallback for older versions or when Foundation Models unavailable
+                        continuation.yield("AI unavailable on this device or OS version.")
                         continuation.finish()
                         return
                         #endif
@@ -365,60 +265,7 @@ final class WorkoutPlanGenerator {
         return generatePlanStream(request: request)
     }
 
-    private func shouldUseWebSearch(for query: String) -> Bool {
-        // Use web search if enabled and query appears to need factual verification or current information
-        let allowWebSearch = UserDefaults.standard.bool(forKey: "allowAIWebSearch")
-        guard allowWebSearch else { return false }
-
-        let lower = query.lowercased()
-
-        // First, exclude personalized/subjective queries that shouldn't use web search
-        let personalizedPatterns = [
-            "for me", "my workout", "should i", "can i", "what should i do",
-            "recommend", "suggest", "advice", "help me", "good workout for me",
-            "today", "this week", "my plan", "my training", "my schedule",
-            "when my", "when i", "if my", "if i", "my thighs", "my legs",
-            "my arms", "my back", "i'm sore", "i am sore", "what to do when",
-            "what is good to do", "what should i eat", "how do i"
-        ]
-        
-        if personalizedPatterns.contains(where: { lower.contains($0) }) {
-            // This is a personalized query - don't use web search
-            return false
-        }
-
-        // Always factual keywords (high confidence) - specific, verifiable information
-        let alwaysFactualKeywords = ["what is", "who is", "define", "definition", "research shows", "study found", "evidence",
-                                   "clinical", "medical", "science", "scientific", "benefits of", "side effects",
-                                   "contraindications", "drug", "medication", "supplement facts", "vitamin",
-                                   "micronutrient", "macronutrient", " RDA ", "recommended daily",
-                                   "current guidelines", "latest research", "recent study", "2024", "2025"]
-
-        // Check for always factual keywords first (force tool usage)
-        if alwaysFactualKeywords.contains(where: { lower.contains($0) }) {
-            return true
-        }
-
-        // Force tool usage for critical health/nutrition topics
-        let criticalHealthKeywords = ["side effects", "contraindications", "allergy", "pregnancy",
-                                    "medication", "drug interaction", " RDA ", "daily requirement",
-                                    "toxicity", "deficiency", "chronic", "acute", "symptoms"]
-        if criticalHealthKeywords.contains(where: { lower.contains($0) }) {
-            return true
-        }
-
-        // Check for specific factual phrases (not personalized)
-        let factualPhrases = ["tell me about", "explain how", "describe the", "what are the effects",
-                            "what causes", "what happens when", "is it safe to", "is it healthy to",
-                            "how effective is", "does it work", "what's the evidence for"]
-
-        if factualPhrases.contains(where: { lower.contains($0) }) {
-            return true
-        }
-
-        // Default: don't use web search for general queries
-        return false
-    }
+    // Web search disabled - always false
 
     private static func compactAssistantContext(history: [(String, String)], maxChars: Int) -> [String] {
         // Take last few assistant messages only, avoid repeating user's text
@@ -449,50 +296,18 @@ final class WorkoutPlanGenerator {
     private func generatePlanStreamOnDevice(request: WorkoutPlanRequest) -> AsyncThrowingStream<String, Error> {
         #if AI_FOUNDATION_AVAILABLE
         if #available(iOS 26, *) {
-            // Guided generation via FoundationModels; reuse prewarmed session when possible
+            // Guided generation via FoundationModels; use a fresh session per request to avoid context carry-over
             return AsyncThrowingStream { continuation in
                 Task {
                     do {
                         #if canImport(FoundationModels)
-                        // Choose session based on whether web search is relevant for this request
-                        let useToolSession = shouldUseWebSearch(for: request.extraContext)
-                        let selectedSession: LanguageModelSession
-
-                        if useToolSession {
-                            if toolEnabledSession == nil {
-                                await self.prewarmToolSessionIfNeeded()
-                            }
-                            if let s = toolEnabledSession ?? basicSession {
-                                selectedSession = s
-                            } else {
-                                let fallback: LanguageModelSession = await MainActor.run {
-                                    LanguageModelSession(
-                                        instructions: "You are a friendly, creative fitness/nutrition coach. Offer a few varied options and keep guidance practical."
-                                    )
-                                }
-                                selectedSession = fallback
-                            }
-                        } else {
-                            if basicSession == nil {
-                                await self.prewarmIfPossible()
-                            }
-                            if let s = basicSession {
-                                selectedSession = s
-                            } else {
-                                let fallback: LanguageModelSession = await MainActor.run {
-                                    LanguageModelSession(
-                                        instructions: "You are a friendly, creative fitness/nutrition coach. Keep answers short, varied, and actionable."
-                                    )
-                                }
-                                selectedSession = fallback
-                            }
+                        let session: LanguageModelSession = await MainActor.run {
+                            let s = LanguageModelSession(
+                                instructions: "You are a friendly, creative fitness/nutrition coach. Keep answers short, varied, and actionable."
+                            )
+                            s.prewarm()
+                            return s
                         }
-
-                        if selectedSession !== basicSession && selectedSession !== toolEnabledSession {
-                            selectedSession.prewarm()
-                        }
-
-                        let session = selectedSession
 
                         // Compute stats for prompt context
                         let userStats: UserStats = await Self.collectRecentStats(context: request.modelContext, 
@@ -512,134 +327,22 @@ final class WorkoutPlanGenerator {
                                     context: request.extraContext,
                                     weightUnit: request.weightUnit,
                                     distanceUnit: request.distanceUnit,
-                                    userStats: userStats,
-                                    includeWebSearchGuidance: useToolSession
+                                    userStats: userStats
                                 )
 
-                            // Pre-process query: Force tool usage for certain patterns BEFORE sending to model (PLAN MODE)
-                            if shouldUseWebSearch(for: request.extraContext) && useToolSession {
-                                print("🎯 PLAN PRE-PROCESSING: Force-enabling web search for factual query: \(request.extraContext)")
-
-                                // For certain high-confidence factual queries, call web search directly
-                                let lowerQuery = request.extraContext.lowercased()
-                                let directCallKeywords = ["what is", "define", "benefits", "research", "study", "evidence", "side effects", " RDA "]
-
-                                if directCallKeywords.contains(where: { lowerQuery.contains($0) }) {
-                                    print("🚨 PLAN DIRECT TOOL CALL: High-confidence factual query detected, calling web search immediately...")
-                                    do {
-                                        let webResults = try await WebSearchService.shared.search(query: request.extraContext, maxResults: 4)
-                                        let context = WebSearchService.formattedContext(for: webResults, includeCitations: true)
-
-                                        // Stream the verified information
-                                        continuation.yield("\n\n=== VERIFIED INFORMATION ===\n\(context)\n=== END VERIFIED INFORMATION ===\n\n")
-                                        continuation.yield("Based on the above research, here's my analysis:")
-
-                                        // Then let the model continue with the verified context
-                                    let enhancedPrompt = "\(Self.clampPrompt(prompt))\n\nVERIFIED CONTEXT FROM WEB SEARCH:\n\(context)\n\nNow provide your analysis based on this verified information:"
-                                        let response = try await session.respond(to: Self.clampPrompt(enhancedPrompt))
-                                        print("✅ Plan enhanced response generated with verified context")
-
-                                        // Extract text from Foundation Models response
-                                        let responseText: String
-                                        let mirror = Mirror(reflecting: response)
-
-                                        // Try to find text content in the response
-                                        if let textValue = mirror.children.first(where: { $0.label?.contains("text") == true })?.value as? String {
-                                            responseText = textValue
-                                        } else if let contentValue = mirror.children.first(where: { $0.label?.contains("content") == true })?.value as? String {
-                                            responseText = contentValue
-                                        } else if let valueValue = mirror.children.first(where: { $0.label?.contains("value") == true })?.value as? String {
-                                            responseText = valueValue
-                                        } else {
-                                            responseText = String(describing: response)
-                                        }
-
-                                        // Stream the enhanced response
-                                        var currentIndex = responseText.startIndex
-                                        while currentIndex < responseText.endIndex {
-                                            let chunkSize = min(40, responseText.distance(from: currentIndex, to: responseText.endIndex))
-                                            let endIndex = responseText.index(currentIndex, offsetBy: chunkSize)
-                                            let chunk = String(responseText[currentIndex..<endIndex])
-                                            continuation.yield(chunk)
-                                            currentIndex = endIndex
-                                            try? await Task.sleep(nanoseconds: 12_000_000) // 12ms
-                                        }
-
-                                        continuation.finish()
-                                        return
-                                    } catch {
-                                        print("❌ Plan direct tool call failed: \(error.localizedDescription)")
-                                        continuation.yield("[Direct web search failed. Continuing with standard response.]")
-                                    }
-                                }
-                            }
+                            // Web search/tool calls removed
                             case .ask:
+                                let equipment = UserDefaults.standard.string(forKey: "userEquipment")
                                 prompt = AIPromptBuilder.buildConversationPrompt(
                                     goal: request.goal,
                                     question: request.extraContext,
                                     weightUnit: request.weightUnit,
                                     distanceUnit: request.distanceUnit,
                                     userStats: userStats,
-                                    includeWebSearchGuidance: useToolSession
+                                    equipment: equipment
                                 )
 
-                            // Pre-process query: Force tool usage for certain patterns BEFORE sending to model (ASK MODE)
-                            if shouldUseWebSearch(for: request.extraContext) && useToolSession {
-                                print("🎯 ASK PRE-PROCESSING: Force-enabling web search for factual query: \(request.extraContext)")
-
-                                // For certain high-confidence factual queries, call web search directly
-                                let lowerQuery = request.extraContext.lowercased()
-                                let directCallKeywords = ["what is", "define", "benefits", "research", "study", "evidence", "side effects", " RDA "]
-
-                                if directCallKeywords.contains(where: { lowerQuery.contains($0) }) {
-                                    print("🚨 ASK DIRECT TOOL CALL: High-confidence factual query detected, calling web search immediately...")
-                                    do {
-                                        let webResults = try await WebSearchService.shared.search(query: request.extraContext, maxResults: 4)
-                                        let context = WebSearchService.formattedContext(for: webResults, includeCitations: true)
-
-                                        // Stream the verified information
-                                        continuation.yield("\n\n=== VERIFIED INFORMATION ===\n\(context)\n=== END VERIFIED INFORMATION ===\n\n")
-                                        continuation.yield("Based on the above research, here's my analysis:")
-
-                                        // Then let the model continue with the verified context
-                                        let enhancedPrompt = "\(Self.clampPrompt(prompt))\n\nVERIFIED CONTEXT FROM WEB SEARCH:\n\(context)\n\nNow provide your analysis based on this verified information:"
-                                        let response = try await session.respond(to: Self.clampPrompt(enhancedPrompt))
-                                        print("✅ Ask enhanced response generated with verified context")
-
-                                        // Extract text from Foundation Models response
-                                        let responseText: String
-                                        let mirror = Mirror(reflecting: response)
-
-                                        // Try to find text content in the response
-                                        if let textValue = mirror.children.first(where: { $0.label?.contains("text") == true })?.value as? String {
-                                            responseText = textValue
-                                        } else if let contentValue = mirror.children.first(where: { $0.label?.contains("content") == true })?.value as? String {
-                                            responseText = contentValue
-                                        } else if let valueValue = mirror.children.first(where: { $0.label?.contains("value") == true })?.value as? String {
-                                            responseText = valueValue
-                                        } else {
-                                            responseText = String(describing: response)
-                                        }
-
-                                        // Stream the enhanced response
-                                        var currentIndex = responseText.startIndex
-                                        while currentIndex < responseText.endIndex {
-                                            let chunkSize = min(40, responseText.distance(from: currentIndex, to: responseText.endIndex))
-                                            let endIndex = responseText.index(currentIndex, offsetBy: chunkSize)
-                                            let chunk = String(responseText[currentIndex..<endIndex])
-                                            continuation.yield(chunk)
-                                            currentIndex = endIndex
-                                            try? await Task.sleep(nanoseconds: 12_000_000) // 12ms
-                                        }
-
-                                        continuation.finish()
-                                        return
-                                    } catch {
-                                        print("❌ Ask direct tool call failed: \(error.localizedDescription)")
-                                        continuation.yield("[Direct web search failed. Continuing with standard response.]")
-                                    }
-                                }
-                            }
+                            // Web search/tool calls removed
                         }
 
                         // Use proper Foundation Models API with guided generation
@@ -739,23 +442,9 @@ final class WorkoutPlanGenerator {
                                     return
                                 }
 
-                                // Fallback: Force web search for critical queries
-                                if shouldUseWebSearch(for: request.extraContext) {
-                                    print("🚨 Forcing fallback web search due to API failure...")
-                                    do {
-                                        let webResults = try await WebSearchService.shared.search(query: request.extraContext, maxResults: 4)
-                                        let context = WebSearchService.formattedContext(for: webResults, includeCitations: true)
-                                        continuation.yield("\n\n=== VERIFIED INFORMATION (Fallback) ===\n\(context)\n=== END VERIFIED INFORMATION ===\n\n")
-                                        continuation.yield("Note: Using fallback web search due to technical issues. Always verify information from reliable sources.")
-                                    } catch {
-                                        print("❌ Fallback web search also failed: \(error.localizedDescription)")
-                                        continuation.yield("[Web search verification failed. Please check latest research for accuracy.]")
-                                    }
-                                } else {
-                                    continuation.yield("⚠️ **Generation Failed**\n\n")
-                                    continuation.yield("Unable to complete AI generation: \(errorMessage)\n\n")
-                                    continuation.yield("Please try again or reset the model context.")
-                                }
+                                continuation.yield("⚠️ **Generation Failed**\n\n")
+                                continuation.yield("Unable to complete AI generation: \(errorMessage)\n\n")
+                                continuation.yield("Please try again or reset the model context.")
                                 continuation.finish()
                                 return
                             }
@@ -763,7 +452,7 @@ final class WorkoutPlanGenerator {
                         #endif
 
                         // Fallback for older versions or when tools aren't available
-                        continuation.yield("Web search verification unavailable. Please verify information from reliable sources.")
+                        continuation.yield("AI unavailable on this device or OS version.")
                         continuation.finish()
                         return
                         #else
@@ -809,6 +498,9 @@ final class WorkoutPlanGenerator {
         // Running (this week)
         let weeklyRunSessions: Int
         let weeklyDistance: Double
+        // Typical distance and suggested long run
+        let typicalRunDistance: Double?
+        let suggestedLongRunDistance: Double?
         // Weight + units
         let latestWeight: Double?
         let weightUnit: String
@@ -896,6 +588,7 @@ final class WorkoutPlanGenerator {
         // For distance-weighted average pace
         var aggDurationSec14d: TimeInterval = 0
         var aggDistanceUnits14d: Double = 0
+        var lastDistances: [Double] = []
         
         for run in recentRuns {
             let baseMi = run.distanceUnit.lowercased().contains("mi")
@@ -904,13 +597,14 @@ final class WorkoutPlanGenerator {
             let targetKm = distanceUnit.lowercased().contains("km")
             let converted = targetKm ? inKm : inKm / 1.60934
             totalDistance += converted
-
+            
             // Pace aggregation (distance-weighted): sum times, sum distances
             let distInUnit = targetKm ? inKm : inKm / 1.60934
             if distInUnit > 0, run.duration > 0 {
                 aggDurationSec14d += run.duration
                 aggDistanceUnits14d += distInUnit
             }
+            if converted > 0 { lastDistances.append(converted) }
 
             detailedRuns.append(DetailedRun(
                 date: run.date,
@@ -983,6 +677,24 @@ final class WorkoutPlanGenerator {
             )
         }
         
+        // Compute typical distance (median of last up to 6 runs)
+        var typicalRunDistance: Double? = nil
+        var suggestedLongRun: Double? = nil
+        if !lastDistances.isEmpty {
+            let sorted = lastDistances.suffix(6).sorted()
+            if !sorted.isEmpty {
+                let mid = sorted.count / 2
+                let median = sorted.count % 2 == 0 ? (sorted[mid-1] + sorted[mid]) / 2.0 : sorted[mid]
+                typicalRunDistance = roundRunDistance(median, unit: distanceUnit)
+                if let base = typicalRunDistance {
+                    // Increase long run by ~15% with a minimum floor of +0.5 (mi) or +1.0 (km)
+                    let minStep = distanceUnit.lowercased().contains("km") ? 1.0 : 0.5
+                    let inc = max(base * 0.15, minStep)
+                    suggestedLongRun = roundRunDistance(base + inc, unit: distanceUnit)
+                }
+            }
+        }
+
         // Get experience level from UserDefaults
         let experienceLevel = UserDefaults.standard.string(forKey: "experienceLevel") ?? "beginner"
         
@@ -993,6 +705,8 @@ final class WorkoutPlanGenerator {
             totalDistance: totalDistance,
             weeklyRunSessions: weeklyRuns.count,
             weeklyDistance: weeklyDistance,
+            typicalRunDistance: typicalRunDistance,
+            suggestedLongRunDistance: suggestedLongRun,
             latestWeight: latestWeight,
             weightUnit: weightUnit,
             distanceUnit: distanceUnit,
@@ -1005,6 +719,15 @@ final class WorkoutPlanGenerator {
             detailedWorkouts: detailedWorkouts,
             experienceLevel: experienceLevel
         )
+    }
+
+    private static func roundRunDistance(_ value: Double, unit: String) -> Double {
+        // Round to realistic increments: 0.5 for miles, 1.0 for km
+        if unit.lowercased().contains("km") {
+            return (value / 1.0).rounded() * 1.0
+        } else {
+            return (value / 0.5).rounded() * 0.5
+        }
     }
 
     private static func convertWeight(_ value: Double, from: String, to: String) -> Double {
@@ -1042,8 +765,7 @@ final class WorkoutPlanGenerator {
             context: request.extraContext,
             weightUnit: request.weightUnit,
             distanceUnit: request.distanceUnit,
-            userStats: userStats,
-            includeWebSearchGuidance: false
+            userStats: userStats
         )
 
         let schemaHint = """
@@ -1178,180 +900,5 @@ Ensure strength days have 4–6 items; running items include distance and pace; 
         return String(format: "%d:%02d per %@", mins, secs, unit)
     }
 
-    // MARK: - Tool Calling Flow
-    private func handleToolCallIfPresent(_ snapshot: Any) async -> ToolCall? {
-        // Enhanced tool call detection for Foundation Models
-        let mirror = Mirror(reflecting: snapshot)
-
-        // First check if it's a direct ToolCall object
-        for child in mirror.children {
-            if let toolCall = child.value as? ToolCall {
-                return toolCall
-            }
-        }
-
-        // Check for tool call in string representation with enhanced patterns
-        let description = String(describing: snapshot)
-        if description.contains("webSearch(") || description.contains("webSearch") {
-            return parseToolCallFromString(description)
-        }
-
-        // Also check the snapshot's description directly
-        if let desc = snapshot as? CustomStringConvertible {
-            let text = desc.description
-            if text.contains("webSearch(") || text.contains("webSearch") {
-                return parseToolCallFromString(text)
-            }
-        }
-
-        return nil
-    }
-
-    private func parseToolCallFromString(_ text: String) -> ToolCall? {
-        // Parse tool calls in multiple formats and variations:
-        // webSearch('query', 3)
-        // webSearch('query')
-        // webSearch("query", 3)
-        // webSearch("query")
-        // webSearch(query, 3)
-        // webSearch(query)
-
-        // Clean the text first
-        let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        // Try single quotes with maxResults
-        let pattern1 = "webSearch\\('([^']+)',\\s*(\\d+)\\)"
-        if let toolCall = parseWithPattern(cleanText, pattern: pattern1) {
-            return toolCall
-        }
-
-        // Try single quotes without maxResults (default to 3)
-        let pattern2 = "webSearch\\('([^']+)'\\)"
-        if let toolCall = parseWithPattern(cleanText, pattern: pattern2, defaultMaxResults: 3) {
-            return toolCall
-        }
-
-        // Try double quotes with maxResults
-        let pattern3 = "webSearch\\(\"([^\"]+)\",\\s*(\\d+)\\)"
-        if let toolCall = parseWithPattern(cleanText, pattern: pattern3) {
-            return toolCall
-        }
-
-        // Try double quotes without maxResults
-        let pattern4 = "webSearch\\(\"([^\"]+)\"\\)"
-        if let toolCall = parseWithPattern(cleanText, pattern: pattern4, defaultMaxResults: 3) {
-            return toolCall
-        }
-
-        // Try no quotes with maxResults
-        let pattern5 = "webSearch\\(([^,]+),\\s*(\\d+)\\)"
-        if let toolCall = parseWithPattern(cleanText, pattern: pattern5) {
-            return toolCall
-        }
-
-        // Try no quotes without maxResults
-        let pattern6 = "webSearch\\(([^)]+)\\)"
-        if let toolCall = parseWithPattern(cleanText, pattern: pattern6, defaultMaxResults: 3) {
-            return toolCall
-        }
-
-        return nil
-    }
-
-    private func parseWithPattern(_ text: String, pattern: String, defaultMaxResults: Int? = nil) -> ToolCall? {
-        let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive)
-        let range = NSRange(text.startIndex..., in: text)
-
-        guard let match = regex?.firstMatch(in: text, options: [], range: range),
-              match.numberOfRanges >= 2,
-              let queryRange = Range(match.range(at: 1), in: text) else {
-            return nil
-        }
-
-        let query = String(text[queryRange])
-        let maxResults = defaultMaxResults ?? (match.numberOfRanges >= 3 ? (Range(match.range(at: 2), in: text).flatMap { Int(text[$0]) } ?? 3) : 3)
-
-        return ToolCall(toolName: "webSearch", arguments: ["query": query, "maxResults": maxResults])
-    }
-
-    private func executeTool(_ toolCall: ToolCall) async throws -> String {
-        // Add timeout for tool execution to prevent hanging
-        return try await withTimeout(seconds: 30) {
-            switch toolCall.toolName {
-            case "webSearch":
-                guard let query = toolCall.arguments["query"] as? String,
-                      let maxResults = toolCall.arguments["maxResults"] as? Int else {
-                    throw NSError(domain: "ToolCall", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid webSearch arguments"])
-                }
-
-                // Validate maxResults range
-                let clampedMaxResults = max(1, min(maxResults, 5))
-                let results = try await WebSearchService.shared.search(query: query, maxResults: clampedMaxResults)
-                return WebSearchService.formattedContext(for: results)
-
-            default:
-                throw NSError(domain: "ToolCall", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unknown tool: \(toolCall.toolName)"])
-            }
-        }
-    }
-
-    private func withTimeout<T>(seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
-        return try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask {
-                try await operation()
-            }
-
-            group.addTask {
-                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-                throw NSError(domain: "ToolCall", code: -2, userInfo: [NSLocalizedDescriptionKey: "Tool execution timed out"])
-            }
-
-            let result = try await group.next()!
-            group.cancelAll()
-            return result
-        }
-    }
-
-    private func buildToolResultPrompt(_ toolCall: ToolCall, result: String) async -> String {
-        var lines: [String] = []
-        lines.append("Tool call completed: \(toolCall.toolName)")
-        lines.append("Arguments: \(toolCall.arguments)")
-        lines.append("Result:")
-        lines.append(result)
-        lines.append("")
-        lines.append("Continue with the user's original request, incorporating the tool result above.")
-        return lines.joined(separator: "\n")
-    }
-
-    private func generateWithToolResult(_ session: LanguageModelSession, _ toolPrompt: String, originalPrompt: String) async -> AsyncThrowingStream<String, Error> {
-        return AsyncThrowingStream { continuation in
-            Task {
-                do {
-                    var previous = ""
-                    for try await snapshot in session.streamResponse(to: toolPrompt) {
-                        let full: String = {
-                            if let s = snapshot as? CustomStringConvertible { return s.description }
-                            let mirror = Mirror(reflecting: snapshot)
-                            if let child = mirror.children.first(where: { $0.value is String }) {
-                                return child.value as? String ?? ""
-                            }
-                            return String(describing: snapshot)
-                        }()
-                        let piece = full.hasPrefix(previous) ? String(full.dropFirst(previous.count)) : full
-                        previous = full
-                        if !piece.isEmpty { continuation.yield(piece) }
-                    }
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
-                }
-            }
-        }
-    }
-
-    // MARK: Supporting Types
-    private struct ToolCall {
-        let toolName: String
-        let arguments: [String: Any]
-    }
+    // Tool calling removed
 }

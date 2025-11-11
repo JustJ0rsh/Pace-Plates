@@ -1034,49 +1034,8 @@ struct ConversationScrollOffsetPreferenceKey: PreferenceKey {
 }
 
 private func parseCitations(from content: String) -> [AIConversationSheet.Citation] {
-    var citations: [AIConversationSheet.Citation] = []
-    var citationNumbers: Set<Int> = []
-
-    // Look for citation patterns like [1], [2], etc. in the content
-    let citationRegex = try? NSRegularExpression(pattern: "\\[(\\d+)\\]", options: [])
-    let range = NSRange(content.startIndex..., in: content)
-
-    if let matches = citationRegex?.matches(in: content, options: [], range: range) {
-        for match in matches {
-            if match.numberOfRanges >= 2,
-               let numberRange = Range(match.range(at: 1), in: content),
-               let citationNumber = Int(content[numberRange]) {
-                citationNumbers.insert(citationNumber)
-            }
-        }
-    }
-
-    // Get the actual search results from WebSearchService
-    let searchResults = WebSearchService.shared.lastSearchResults
-    
-    // Map citation numbers to actual search results
-    for number in citationNumbers.sorted() {
-        let index = number - 1 // Citations are 1-indexed, arrays are 0-indexed
-        if index >= 0 && index < searchResults.count {
-            let result = searchResults[index]
-            citations.append(AIConversationSheet.Citation(
-                number: number,
-                title: result.title,
-                url: result.url,
-                snippet: result.snippet
-            ))
-        } else {
-            // Fallback for citations without matching search results
-            citations.append(AIConversationSheet.Citation(
-                number: number,
-                title: "Research Source \(number)",
-                url: "https://duckduckgo.com",
-                snippet: "Verified research information used in this response."
-            ))
-        }
-    }
-
-    return citations
+    // Web search disabled: do not resolve citations to sources
+    return []
 }
 
 private func extractCitationsFromContent(_ content: String) -> [AIConversationSheet.Citation] {

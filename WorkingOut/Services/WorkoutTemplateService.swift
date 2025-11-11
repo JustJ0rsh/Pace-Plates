@@ -196,6 +196,15 @@ final class WorkoutTemplateService {
     func createTemplatesFromMarkdownPlan(conversation: AIConversation, context: ModelContext) -> [WorkoutTemplate] {
         let workoutDays = parseWorkoutDaysFromMarkdown(text: conversation.response)
         var templates: [WorkoutTemplate] = []
+        // Build baselines once for recommended weights
+        #if canImport(Foundation)
+        let preferredUnit = UserDefaults.standard.string(forKey: "weightUnit") ?? "lbs"
+        let baselines = ExerciseRecommendationService.baselines(context: context, preferredUnit: preferredUnit)
+        let baselineMap: [String: ExerciseBaseline] = Dictionary(uniqueKeysWithValues: baselines.map { ($0.name.lowercased(), $0) })
+        #else
+        let preferredUnit = "lbs"
+        let baselineMap: [String: ExerciseBaseline] = [:]
+        #endif
         
         for (_, day) in workoutDays.enumerated() {
             // Skip rest days
@@ -217,16 +226,27 @@ final class WorkoutTemplateService {
             templates.append(template)
             
             // Parse exercises from markdown details
-            let exercises = parseExercisesFromMarkdown(details: day.details, weightUnit: "lbs")
+            let exercises = parseExercisesFromMarkdown(details: day.details, weightUnit: preferredUnit)
             
             for (exerciseIndex, exercise) in exercises.enumerated() {
+                // Choose safe, realistic suggested weight:
+                // - Prefer user's last working set at same reps
+                // - Otherwise derive conservatively from e1RM
+                // - If AI provided a number, clamp it to safe bounds
+                let suggested: Double? = safeSuggestedWeight(
+                    ai: exercise.weight,
+                    name: exercise.name,
+                    reps: exercise.reps,
+                    unit: preferredUnit,
+                    baselines: baselineMap
+                )
                 let templateExercise = TemplateExercise(
                     name: exercise.name,
                     order: exerciseIndex,
                     sets: exercise.sets,
                     reps: exercise.reps,
-                    suggestedWeight: exercise.weight,
-                    weightUnit: exercise.weightUnit,
+                    suggestedWeight: suggested,
+                    weightUnit: preferredUnit,
                     notes: exercise.notes
                 )
                 
@@ -388,5 +408,59 @@ final class WorkoutTemplateService {
         
         return nil
     }
-}
 
+    // MARK: - Recommended weights using baselines + progressive overload
+    private func safeSuggestedWeight(ai: Double?, name: String, reps: Int, unit: String, baselines: [String: ExerciseBaseline]) -> Double? {
+        let key = name.lowercased().trimmingCharacters(in: .whitespaces)
+        let baseline = baselines[key] ?? baselines.first(where: { key.contains($0.key) || $0.key.contains(key) })?.value
+        if let b = baseline {
+            if let last = b.lastByReps[reps] {
+                if let ai, ai <= last * 1.05, ai >= last * 0.95 { return roundToPlates(ai, unit: unit) }
+                return roundToPlates(last, unit: unit)
+            }
+            let loads = ExerciseRecommendationService.suggestedLoads(e1rm: b.e1rm, unit: unit, repTargets: [reps])
+            let base = (loads[reps] ?? (b.e1rm * 0.7)) * 0.9
+            if let ai, ai > 0 { return roundDownToPlates(min(ai, base), unit: unit) }
+            return roundDownToPlates(base, unit: unit)
+        }
+        if let ai, ai > 0 { return roundDownToPlates(ai, unit: unit) }
+        return nil
+    }
+
+    private func recommendedWeight(for name: String, reps: Int, unit: String, baselines: [String: ExerciseBaseline]) -> Double? {
+        let key = name.lowercased().trimmingCharacters(in: .whitespaces)
+        if let b = baselines[key] { return computeFromBaseline(b, reps: reps, unit: unit) }
+        if let b = baselines.first(where: { key.contains($0.key) || $0.key.contains(key) })?.value {
+            return computeFromBaseline(b, reps: reps, unit: unit)
+        }
+        return nil
+    }
+
+    private func computeFromBaseline(_ baseline: ExerciseBaseline, reps: Int, unit: String) -> Double {
+        // If we have a recent set at this rep target, use that value (no auto‑increase to avoid overshooting).
+        if let last = baseline.lastByReps[reps] {
+            return roundToPlates(last, unit: unit)
+        }
+        // Otherwise derive a conservative load from e1RM and round down to plates.
+        let loads = ExerciseRecommendationService.suggestedLoads(e1rm: baseline.e1rm, unit: unit, repTargets: [reps])
+        let aggressive = loads[reps] ?? (baseline.e1rm * 0.7)
+        let conservative = aggressive * 0.9 // nudge down to avoid overestimation
+        return roundDownToPlates(conservative, unit: unit)
+    }
+
+    private func roundToPlates(_ value: Double, unit: String) -> Double {
+        if unit.lowercased() == "kg" {
+            return (value / 2.5).rounded() * 2.5
+        } else {
+            return (value / 5.0).rounded() * 5.0
+        }
+    }
+
+    private func roundDownToPlates(_ value: Double, unit: String) -> Double {
+        if unit.lowercased() == "kg" {
+            return floor(value / 2.5) * 2.5
+        } else {
+            return floor(value / 5.0) * 5.0
+        }
+    }
+}

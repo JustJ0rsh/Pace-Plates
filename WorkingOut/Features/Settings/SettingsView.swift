@@ -14,7 +14,6 @@ struct SettingsView: View {
     @AppStorage("age") private var age: Int = 0
     @AppStorage("sex") private var sex: String = "male" // "male" or "female"
     @AppStorage("experienceLevel") private var experienceLevel: String = "beginner" // "beginner" or "experienced"
-    @AppStorage("allowAIWebSearch") private var allowAIWebSearch: Bool = false
     @AppStorage("useStructuredPlanView") private var useStructuredPlanView: Bool = false
     @AppStorage("enableWeeklyWeightReminder") private var enableWeeklyWeightReminder: Bool = false
     @FocusState private var ageFocused: Bool
@@ -126,14 +125,6 @@ struct SettingsView: View {
                 }
 
                 Section("AI & Plans") {
-                    Toggle(isOn: $allowAIWebSearch) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Allow AI Web Search")
-                            Text("When enabled, the assistant can search the web for factual information and provide cited sources.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
                     Toggle(isOn: $useStructuredPlanView) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Structured Plan View")
