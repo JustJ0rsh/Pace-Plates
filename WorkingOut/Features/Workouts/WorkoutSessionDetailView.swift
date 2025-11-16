@@ -120,14 +120,14 @@ struct WorkoutSessionDetailView: View {
                     let logs = session.exerciseLogs ?? []
                     let groups = Dictionary(grouping: logs) { $0.exerciseName ?? "Exercise" }
                     
-                    // Sort by exerciseOrder first, then by name
+                    // Sort by exerciseOrder (most recently added first), then by name
                     let sortedNames = groups.keys.sorted { name1, name2 in
                         // Get the minimum exerciseOrder for each name
-                        let order1 = groups[name1]?.map { $0.exerciseOrder }.min() ?? Int.max
-                        let order2 = groups[name2]?.map { $0.exerciseOrder }.min() ?? Int.max
+                        let order1 = groups[name1]?.map { $0.exerciseOrder }.min() ?? Int.min
+                        let order2 = groups[name2]?.map { $0.exerciseOrder }.min() ?? Int.min
                         
                         if order1 != order2 {
-                            return order1 < order2
+                            return order1 > order2  // Reversed: higher order = more recent = shows first
                         } else {
                             // If orders are equal, sort alphabetically
                             return name1 < name2
@@ -180,8 +180,16 @@ struct WorkoutSessionDetailView: View {
                                                     editingLogIsNew = false
                                                 } label: {
                                             HStack {
-                                                Text("Set \(log.setNumber)")
-                                                    .foregroundColor(AppTheme.textColor)
+                                                HStack(spacing: 4) {
+                                                    Text("Set \(log.setNumber)")
+                                                        .foregroundColor(AppTheme.textColor)
+                                                    // Show note icon if set has notes
+                                                    if let notes = log.notes, !notes.isEmpty {
+                                                        Image(systemName: "note.text")
+                                                            .font(.caption)
+                                                            .foregroundStyle(.secondary)
+                                                    }
+                                                }
                                                 Spacer()
                                                 if log.isCardio {
                                                     // Show cardio metrics
@@ -289,6 +297,8 @@ struct WorkoutSessionDetailView: View {
             if editingLog == nil || !((session.exerciseLogs ?? []).contains { $0.id == editingLog?.id }) {
                 editingLog = nil
             }
+            // Clean up any empty sets that may have slipped through
+            cleanupEmptySets()
         }
         .onChange(of: notesBuffer) {
             saveWorkItem?.cancel()
@@ -390,6 +400,50 @@ struct WorkoutSessionDetailView: View {
         if var arr = session.exerciseLogs { arr.removeAll { ($0.exerciseName ?? "") == name }; session.exerciseLogs = arr }
         try? modelContext.save()
     }
+    
+    /// Removes any empty sets (0 reps for strength, 0 duration for cardio)
+    private func cleanupEmptySets() {
+        guard let logs = session.exerciseLogs else { return }
+        
+        var needsSave = false
+        for log in logs {
+            let isEmpty: Bool
+            
+            // Check if it's a cardio exercise
+            let isCardio = log.exerciseType == "cardio" || 
+                          log.exerciseDefinition?.muscleGroup.lowercased() == "cardio"
+            
+            if isCardio {
+                // Cardio set is empty if duration is 0
+                isEmpty = (log.durationSeconds ?? 0) == 0
+            } else {
+                // Strength set is empty if reps is 0
+                isEmpty = log.reps == 0
+            }
+            
+            if isEmpty {
+                modelContext.delete(log)
+                needsSave = true
+            }
+        }
+        
+        if needsSave {
+            // Update the session's exerciseLogs array
+            if var arr = session.exerciseLogs {
+                arr.removeAll { log in
+                    let isCardio = log.exerciseType == "cardio" || 
+                                  log.exerciseDefinition?.muscleGroup.lowercased() == "cardio"
+                    if isCardio {
+                        return (log.durationSeconds ?? 0) == 0
+                    } else {
+                        return log.reps == 0
+                    }
+                }
+                session.exerciseLogs = arr
+            }
+            try? modelContext.save()
+        }
+    }
 }
 
 // MARK: - Subviews
@@ -435,6 +489,15 @@ struct ExerciseLogRow: View {
                 Text("\(log.reps) reps @ \(String(format: "%.1f", log.weight)) \(log.weightUnit)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+            }
+            
+            // Display notes if present
+            if let notes = log.notes, !notes.isEmpty {
+                Text(notes)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .italic()
+                    .padding(.top, 4)
             }
         }
         .contentShape(Rectangle())

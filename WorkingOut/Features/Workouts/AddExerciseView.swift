@@ -16,6 +16,9 @@ struct AddExerciseView: View {
     // Include Biceps/Triceps sub-groups so users can file arms more precisely
     private let muscleGroups = ["Chest", "Back", "Legs", "Shoulders", "Biceps", "Triceps", "Forearms", "Core", "Cardio"]
     @State private var historyExerciseName: String? = nil
+    @State private var editingExercise: ExerciseDefinition? = nil
+    @State private var editingExerciseName: String = ""
+    @State private var editingExerciseMuscleGroup: String = ""
 
     init(workoutSession: WorkoutSession, onAdd: ((ExerciseLog) -> Void)? = nil) {
         self.workoutSession = workoutSession
@@ -74,6 +77,13 @@ struct AddExerciseView: View {
                                     historyExerciseName = exercise.name
                                 } label: { Label("History", systemImage: "clock.arrow.circlepath") }
                                 .tint(.teal)
+                                // Allow editing category for all exercises to prevent data loss
+                                Button {
+                                    editingExercise = exercise
+                                    editingExerciseName = exercise.name
+                                    editingExerciseMuscleGroup = exercise.muscleGroup
+                                } label: { Label("Edit Category", systemImage: "pencil") }
+                                .tint(.blue)
                                 if exercise.isUserDefined {
                                     Button(role: .destructive) {
                                         deleteExerciseDefinition(exercise)
@@ -171,9 +181,67 @@ struct AddExerciseView: View {
                 .foregroundColor(AppTheme.textColor)
             }
         }
+        .sheet(isPresented: Binding(get: { editingExercise != nil }, set: { if !$0 { editingExercise = nil } })) {
+            // Sheet for editing exercise category
+            NavigationStack {
+                Form {
+                    Section("Exercise Name") {
+                        Text(editingExerciseName)
+                            .foregroundColor(AppTheme.textColor)
+                    }
+                    
+                    Section("Category") {
+                        Picker("Muscle Group", selection: $editingExerciseMuscleGroup) {
+                            ForEach(muscleGroups, id: \.self) { group in
+                                Text(group).tag(group)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                    }
+                    
+                    if editingExercise != nil {
+                        Section {
+                            Text("Changing the category will update this exercise for all past and future workouts. No data will be lost.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .appBackground(AppTheme.gradientWorkouts)
+                .scrollContentBackground(.hidden)
+                .navigationTitle("Edit Category")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") {
+                            editingExercise = nil
+                        }
+                    }
+
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") {
+                            saveExerciseEdit()
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Delete + History helpers
+
+    private func saveExerciseEdit() {
+        guard let exercise = editingExercise else { return }
+        
+        // Update the exercise definition's muscle group
+        // This automatically updates all logs that reference this exercise
+        exercise.muscleGroup = editingExerciseMuscleGroup
+        
+        try? modelContext.save()
+        
+        // Close the sheet
+        editingExercise = nil
+    }
 
     private func deleteExerciseDefinition(_ exercise: ExerciseDefinition) {
         // If currently showing history for this exercise, close it first

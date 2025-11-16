@@ -309,16 +309,57 @@ final class HealthKitManager: ObservableObject {
         return try await withCheckedThrowingContinuation { cont in
             let q = HKSampleQuery(sampleType: type, predicate: pred, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, err in
                 if let err = err { cont.resume(throwing: err); return }
-                let total = (samples as? [HKCategorySample])?
+                
+                // Filter for actual sleep samples (not in bed, awake, etc.)
+                let sleepSamples = (samples as? [HKCategorySample])?
                     .filter { $0.value == HKCategoryValueSleepAnalysis.asleepCore.rawValue
                            || $0.value == HKCategoryValueSleepAnalysis.asleepDeep.rawValue
                            || $0.value == HKCategoryValueSleepAnalysis.asleepREM.rawValue
                            || $0.value == HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue
-                    }
-                    .reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) } ?? 0.0
+                    } ?? []
+                
+                // ISSUE FIX: Devices like Oura Ring create overlapping samples for different sleep stages
+                // (e.g., one sample for "asleep" 10pm-6am AND separate samples for REM, Deep, Core)
+                // Simply summing durations can count the same time period multiple times
+                
+                // Solution: Merge overlapping time intervals before calculating total duration
+                let total = self.mergeAndCalculateSleepDuration(samples: sleepSamples)
                 cont.resume(returning: total)
             }
             healthStore.execute(q)
         }
+    }
+    
+    /// Merges overlapping sleep samples and calculates total duration
+    /// This prevents double-counting when devices report overlapping sleep stages
+    nonisolated private func mergeAndCalculateSleepDuration(samples: [HKCategorySample]) -> TimeInterval {
+        guard !samples.isEmpty else { return 0 }
+        
+        // Sort samples by start date
+        let sorted = samples.sorted { $0.startDate < $1.startDate }
+        
+        // Merge overlapping intervals
+        var merged: [(start: Date, end: Date)] = []
+        var currentStart = sorted[0].startDate
+        var currentEnd = sorted[0].endDate
+        
+        for i in 1..<sorted.count {
+            let sample = sorted[i]
+            if sample.startDate <= currentEnd {
+                // Overlapping or adjacent - extend the current interval
+                currentEnd = max(currentEnd, sample.endDate)
+            } else {
+                // Gap found - save current interval and start new one
+                merged.append((start: currentStart, end: currentEnd))
+                currentStart = sample.startDate
+                currentEnd = sample.endDate
+            }
+        }
+        // Don't forget the last interval
+        merged.append((start: currentStart, end: currentEnd))
+        
+        // Calculate total duration from merged intervals
+        let totalDuration = merged.reduce(0.0) { $0 + $1.end.timeIntervalSince($1.start) }
+        return totalDuration
     }
 }

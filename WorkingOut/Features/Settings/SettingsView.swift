@@ -174,6 +174,12 @@ struct SettingsView: View {
                                 reminderMinute = comps.minute ?? 0
                                 ReminderService.scheduleWeeklyWeightReminder(weekday: reminderWeekday, hour: reminderHour, minute: reminderMinute)
                             }
+                            .onAppear {
+                                // Initialize the time picker with the saved values
+                                if let date = Calendar.current.date(bySettingHour: reminderHour, minute: reminderMinute, second: 0, of: Date()) {
+                                    reminderTime = date
+                                }
+                            }
                     }
                 }
 

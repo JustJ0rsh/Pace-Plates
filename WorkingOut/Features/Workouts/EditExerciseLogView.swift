@@ -21,12 +21,16 @@ struct EditExerciseLogView: View {
     @State private var caloriesText: String
     @State private var heartRateText: String
     
+    // Notes field
+    @State private var notesText: String
+    
     @State private var historyExerciseName: String? = nil
 
     @FocusState private var repsFocused: Bool
     @FocusState private var weightFocused: Bool
     @FocusState private var durationFocused: Bool
     @FocusState private var distanceFocused: Bool
+    @FocusState private var notesFocused: Bool
 
     init(log: ExerciseLog, isNew: Bool = false) {
         self.log = log
@@ -45,6 +49,9 @@ struct EditExerciseLogView: View {
         _distanceUnit = State(initialValue: log.distanceUnit ?? "mi")
         _caloriesText = State(initialValue: log.caloriesBurned != nil ? String(log.caloriesBurned!) : "")
         _heartRateText = State(initialValue: log.avgHeartRate != nil ? String(log.avgHeartRate!) : "")
+        
+        // Initialize notes field
+        _notesText = State(initialValue: log.notes ?? "")
     }
     
     @AppStorage("weightUnit") private var preferredWeightUnit = "lbs"
@@ -68,8 +75,21 @@ struct EditExerciseLogView: View {
     }
     
     // Helper to detect if this is a cardio exercise
+    // Now properly checks the exercise definition's muscle group = "Cardio"
     private var isCardioExercise: Bool {
-        guard let raw = log.exerciseName, !raw.isEmpty else { return log.exerciseType == "cardio" }
+        // First check if the exercise definition's muscle group is "Cardio"
+        if let muscleGroup = log.exerciseDefinition?.muscleGroup, muscleGroup.lowercased() == "cardio" {
+            return true
+        }
+        
+        // If explicit type is set, respect that
+        if log.exerciseType == "cardio" { return true }
+        
+        // Fallback to name-based detection only if no definition
+        guard let raw = log.exerciseName, !raw.isEmpty, log.exerciseDefinition == nil else { 
+            return log.exerciseType == "cardio" 
+        }
+        
         let name = raw.lowercased()
         // Broad cardio indicators
         let cardioTokens = ["run", "jog", "bike", "cycle", "swim", "elliptical", "cardio", "treadmill", "stair", "rowing", "rower", "erg", "ergometer", "concept2", "assault bike", "airdyne", "spin"]
@@ -77,8 +97,7 @@ struct EditExerciseLogView: View {
         // Common strength "row" exercises that should NOT be treated as cardio
         let strengthRowTokens = [" row", "rows", "barbell row", "bent over row", "bent-over row", "pendlay row", "t-bar row", "dumbbell row", "one-arm row", "one arm row", "seated row", "cable row", "inverted row"]
         let isStrengthRow = strengthRowTokens.contains(where: { name.contains($0) }) && !name.contains("rowing") && !name.contains("rower")
-        // Respect explicit type if already set to cardio; otherwise infer
-        if log.exerciseType == "cardio" { return !isStrengthRow }
+        
         return looksCardio && !isStrengthRow
     }
 
@@ -201,6 +220,15 @@ struct EditExerciseLogView: View {
                         }
                     }
                 }
+                
+                // Notes section (shared for both cardio and strength)
+                Section("Notes (Optional)") {
+                    TextEditor(text: $notesText)
+                        .frame(minHeight: 80)
+                        .focused($notesFocused)
+                        .scrollContentBackground(.hidden)
+                        .background(Color.clear)
+                }
             }
             .navigationTitle("Edit Set")
             .navigationBarTitleDisplayMode(.inline)
@@ -293,6 +321,7 @@ struct EditExerciseLogView: View {
                 weightFocused = false
                 durationFocused = false
                 distanceFocused = false
+                notesFocused = false
                 dismissKeyboard()
                 if isNew && !didSaveExplicitly {
                     // User canceled; remove the newly created set
@@ -309,6 +338,11 @@ struct EditExerciseLogView: View {
                         log.avgHeartRate = Int(heartRateText)
                         log.reps = 1
                         log.weight = 0
+                        
+                        // Delete empty cardio sets
+                        if log.durationSeconds ?? 0 == 0 {
+                            modelContext.delete(log)
+                        }
                     } else {
                         log.exerciseType = "strength"
                         let reps = Int(repsText) ?? log.reps
@@ -316,7 +350,16 @@ struct EditExerciseLogView: View {
                         log.reps = reps
                         log.weight = weight
                         log.weightUnit = weightUnit
+                        
+                        // Delete empty strength sets
+                        if reps == 0 {
+                            modelContext.delete(log)
+                        }
                     }
+                    
+                    // Save notes
+                    log.notes = notesText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : notesText
+                    
                     try? modelContext.save()
                 }
             }
@@ -337,6 +380,20 @@ struct EditExerciseLogView: View {
             // Set default values for strength fields
             log.reps = 1
             log.weight = 0
+            
+            // Delete empty cardio sets (no duration = meaningless)
+            if log.durationSeconds ?? 0 == 0 {
+                modelContext.delete(log)
+                try? modelContext.save()
+                repsFocused = false
+                weightFocused = false
+                durationFocused = false
+                distanceFocused = false
+                notesFocused = false
+                dismissKeyboard()
+                dismiss()
+                return
+            }
         } else {
             // Save strength data
             log.exerciseType = "strength"
@@ -345,13 +402,31 @@ struct EditExerciseLogView: View {
             log.reps = reps
             log.weight = weight
             log.weightUnit = weightUnit
+            
+            // Delete empty strength sets (no reps = meaningless)
+            if reps == 0 {
+                modelContext.delete(log)
+                try? modelContext.save()
+                repsFocused = false
+                weightFocused = false
+                durationFocused = false
+                distanceFocused = false
+                notesFocused = false
+                dismissKeyboard()
+                dismiss()
+                return
+            }
         }
+        
+        // Save notes (store nil if empty to save space)
+        log.notes = notesText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : notesText
         
         try? modelContext.save()
         repsFocused = false
         weightFocused = false
         durationFocused = false
         distanceFocused = false
+        notesFocused = false
         dismissKeyboard()
         dismiss()
     }

@@ -9,64 +9,80 @@ struct TutorialView: View {
         VStack(spacing: 20) {
             TabView(selection: $page) {
                 tutorialPage(
-                    title: "Welcome to WorkingOut",
+                    title: "Welcome to Pace & Plates",
                     icon: "sparkles",
                     bullets: [
-                        "Track workouts, runs, and weight — no account needed",
-                        "Quick, readable charts",
-                        "Private by default; optional iCloud sync"
+                        "Your complete fitness companion for workouts, runs, and nutrition tracking",
+                        "Beautiful charts and insights with no account required",
+                        "Privacy-first with optional iCloud sync across devices"
                     ]
                 ).tag(0)
 
                 tutorialPage(
-                    title: "Workouts",
-                    icon: "dumbbell",
+                    title: "Smart Workouts",
+                    icon: "dumbbell.fill",
                     bullets: [
-                        "Tap + to start a Gym Session and Add Exercise",
-                        "Tap a set to edit reps & weight",
-                        "Click Add Set to duplicate the privious one"
+                        "Track strength and cardio exercises in one place",
+                        "Add notes to each set for progress tracking",
+                        "Use built-in templates or create custom workouts",
+                        "See your lifting volume and progress charts"
                     ]
                 ).tag(1)
 
                 tutorialPage(
-                    title: "Runs",
-                    icon: "figure.run",
+                    title: "AI Workout Planning",
+                    icon: "sparkles",
                     bullets: [
-                        "Tap + to track; Smart watch runs import automatically from the health app",
-                        "See Total Steps per day and an estimated calorie burn per run",
-                        "Routes are shown on the map (colored by pace)"
+                        "Get personalized workout plans powered by Apple Intelligence",
+                        "Plans adapt to your experience level and goals",
+                        "Save and reuse your favorite workout routines",
+                        "Export plans as templates for future sessions"
                     ]
                 ).tag(2)
 
                 tutorialPage(
-                    title: "Weight",
-                    icon: "scalemass",
+                    title: "Running & Cardio",
+                    icon: "figure.run",
                     bullets: [
-                        "Log weight with + in lbs or kg",
-                        "Switch Metric/Imperial — history converts automatically",
-                        "Progress shown with every entry"
+                        "GPS tracking with pace-colored routes on the map",
+                        "Apple Watch runs import automatically",
+                        "Track cycling, hiking, and rowing workouts",
+                        "Live Activity support for at-a-glance stats"
                     ]
                 ).tag(3)
 
                 tutorialPage(
-                    title: "Goals & Backup",
-                    icon: "target",
+                    title: "Home Dashboard",
+                    icon: "house.fill",
                     bullets: [
-                        "Set goal weight and choose Lose / Maintain / Gain",
-                        "Units, profile, and privacy policy in the Settings",
-                        "Export/Import backups any time"
+                        "View streaks and workout calendar at a glance",
+                        "Track daily steps, sleep, and vital health metrics",
+                        "See current weather for outdoor workouts",
+                        "Earn Game Center achievements for consistency"
                     ]
                 ).tag(4)
 
                 tutorialPage(
-                    title: "Permissions",
-                    icon: "hand.raised",
+                    title: "Weight & Nutrition",
+                    icon: "scalemass.fill",
                     bullets: [
-                        "After this tutorial we’ll ask for Health access",
-                        "Location prompt shows on Runs (for routes & weather)",
-                        "Live Activity while running is optional"
+                        "Log weight in lbs or kg with automatic unit conversion",
+                        "Set goals: lose, maintain, or gain weight",
+                        "Track progress with visual charts",
+                        "Get weekly reminders to stay consistent"
                     ]
                 ).tag(5)
+
+                tutorialPage(
+                    title: "Permissions",
+                    icon: "hand.raised.fill",
+                    bullets: [
+                        "Health access enables workout and run sync",
+                        "Location is used for GPS routes and weather",
+                        "Notifications for weekly weight reminders (optional)",
+                        "All data stays on your device unless you enable iCloud"
+                    ]
+                ).tag(6)
             }
             .tabViewStyle(.page(indexDisplayMode: .always))
 
@@ -74,7 +90,7 @@ struct TutorialView: View {
                 Button("Skip") { onFinish?() }
                     .foregroundStyle(.secondary)
                 Spacer()
-                if page < 5 {
+                if page < 6 {
                     Button("Next") { withAnimation { page += 1 } }
                         .buttonStyle(.borderedProminent)
                 } else {

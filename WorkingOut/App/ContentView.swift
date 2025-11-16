@@ -2,6 +2,7 @@ import SwiftUI
 import GameKit
 import CoreLocation
 import SwiftData
+import HealthKit
 
 #if canImport(FoundationModels)
 import FoundationModels
@@ -71,7 +72,14 @@ struct ContentView: View {
 
             if !didShowTutorial {
                 showTutorial = true
+            } else {
+                // If tutorial was shown before (e.g., after reinstall), check health authorization
+                // and prompt if not granted - this ensures reinstalling the app will re-request permissions
+                Task { @MainActor in
+                    await checkAndRequestHealthAuthorizationIfNeeded()
+                }
             }
+            
             // Schedule weekly reminders if enabled
             ReminderService.scheduleIfEnabled()
 
@@ -131,6 +139,31 @@ extension ContentView {
         let status = manager.authorizationStatus
         if status == .notDetermined {
             manager.requestWhenInUseAuthorization()
+        }
+    }
+    
+    /// Checks if Health authorization is needed and requests it
+    /// This ensures users get prompted after reinstalling the app
+    @MainActor
+    private func checkAndRequestHealthAuthorizationIfNeeded() async {
+        guard HKHealthStore.isHealthDataAvailable() else { return }
+        
+        // Check if we have any authorization status
+        let healthStore = HKHealthStore()
+        let workoutType = HKObjectType.workoutType()
+        let status = healthStore.authorizationStatus(for: workoutType)
+        
+        // If not determined or sharing denied, request authorization
+        // Note: HealthKit doesn't allow checking read authorization status,
+        // so we also request if the user hasn't granted sharing yet
+        if status == .notDetermined {
+            do {
+                try await Task.sleep(nanoseconds: 500_000_000) // Small delay for smooth UX
+                try await HealthKitManager.shared.requestAuthorization()
+                await requestLocationAuthorizationIfNeeded()
+            } catch {
+                healthAuthError = error.localizedDescription
+            }
         }
     }
     

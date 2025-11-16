@@ -57,9 +57,11 @@ enum ReminderService {
             requestAuthorization { ok in
                 if ok {
                     let d = UserDefaults.standard
-                    let weekday = d.integer(forKey: weekdayKey) == 0 ? 2 : d.integer(forKey: weekdayKey)
-                    let hour = d.object(forKey: hourKey) as? Int ?? 9
-                    let minute = d.object(forKey: minuteKey) as? Int ?? 0
+                    // Use stored values, or defaults if not set
+                    // Note: We use object(forKey:) to distinguish between "not set" and "set to 0"
+                    let weekday = d.object(forKey: weekdayKey) as? Int ?? 2  // Default: Monday
+                    let hour = d.object(forKey: hourKey) as? Int ?? 9        // Default: 9 AM
+                    let minute = d.object(forKey: minuteKey) as? Int ?? 0    // Default: 0 minutes
                     scheduleWeeklyWeightReminder(weekday: weekday, hour: hour, minute: minute)
                 }
             }
