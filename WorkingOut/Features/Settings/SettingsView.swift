@@ -16,6 +16,7 @@ struct SettingsView: View {
     @AppStorage("experienceLevel") private var experienceLevel: String = "beginner" // "beginner" or "experienced"
     @AppStorage("useStructuredPlanView") private var useStructuredPlanView: Bool = false
     @AppStorage("enableWeeklyWeightReminder") private var enableWeeklyWeightReminder: Bool = false
+    @AppStorage("showVitalsOnHome") private var showVitalsOnHome: Bool = true
     @FocusState private var ageFocused: Bool
     @FocusState private var heightFocused: Bool
     @FocusState private var goalWeightFocused: Bool
@@ -124,6 +125,17 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("Home Screen") {
+                    Toggle(isOn: $showVitalsOnHome) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Show Vitals Section")
+                            Text("Display health vitals like heart rate, steps, and sleep on the home screen.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                
                 Section("AI & Plans") {
                     Toggle(isOn: $useStructuredPlanView) {
                         VStack(alignment: .leading, spacing: 4) {
@@ -203,6 +215,13 @@ struct SettingsView: View {
                             showAlert = true
                         }
                     }
+                    
+                    Button {
+                        deduplicateAllData()
+                    } label: {
+                        Label("Remove All Duplicates", systemImage: "sparkles")
+                            .foregroundColor(.blue)
+                    }
                 }
 
                 // Move Privacy & Data to the bottom
@@ -253,6 +272,9 @@ struct SettingsView: View {
                 }
             }
         }
+        .onAppear {
+            loadProfileFromHealthKit()
+        }
     }
     
     // MARK: - Backup actions
@@ -263,6 +285,37 @@ struct SettingsView: View {
     @State private var showAlert: Bool = false
     @State private var alertMessage: String = ""
     @State private var confirmDeleteAll: Bool = false
+    
+    // MARK: - HealthKit Profile Loading
+    private func loadProfileFromHealthKit() {
+        Task { @MainActor in
+            // Only load if values are not already set
+            if age == 0 {
+                if let healthAge = try? HealthKitManager.shared.getAge() {
+                    age = healthAge
+                }
+            }
+            
+            if sex == "male" { // default value, might not be set yet
+                if let healthSex = try? HealthKitManager.shared.getBiologicalSex() {
+                    sex = healthSex
+                }
+            }
+            
+            if heightValue == 0 {
+                if let healthHeight = try? await HealthKitManager.shared.getHeight() {
+                    // healthHeight is in inches
+                    if heightUnit == "cm" {
+                        // Convert inches to cm
+                        heightValue = healthHeight * 2.54
+                    } else {
+                        // Keep as inches
+                        heightValue = healthHeight
+                    }
+                }
+            }
+        }
+    }
     
     private func exportTapped() {
         do {
@@ -291,6 +344,101 @@ struct SettingsView: View {
             showAlert = true
         } catch {
             alertMessage = "Import failed: \(error.localizedDescription)"
+            showAlert = true
+        }
+    }
+    
+    private func deduplicateAllData() {
+        do {
+            var totalRemoved = 0
+            
+            // Deduplicate runs
+            let allRuns = try modelContext.fetch(FetchDescriptor<RunningSession>(sortBy: [SortDescriptor(\.date, order: .forward)]))
+            var runsToKeep: [RunningSession] = []
+            var duplicateRuns: [RunningSession] = []
+            
+            for run in allRuns {
+                let isDuplicate = runsToKeep.contains { existing in
+                    let dateDiff = abs(existing.date.timeIntervalSince(run.date))
+                    let distanceDiff = abs(existing.distance - run.distance)
+                    let durationDiff = abs(existing.duration - run.duration)
+                    
+                    let areSimilar = dateDiff < 120 &&
+                                    existing.distanceUnit == run.distanceUnit &&
+                                    distanceDiff < 0.07 &&
+                                    durationDiff < 30
+                    
+                    if let uuid1 = existing.healthWorkoutUUID, !uuid1.isEmpty,
+                       let uuid2 = run.healthWorkoutUUID, !uuid2.isEmpty {
+                        return uuid1 == uuid2
+                    }
+                    
+                    return areSimilar
+                }
+                
+                if isDuplicate {
+                    duplicateRuns.append(run)
+                } else {
+                    runsToKeep.append(run)
+                }
+            }
+            duplicateRuns.forEach { modelContext.delete($0) }
+            totalRemoved += duplicateRuns.count
+            
+            // Deduplicate weight entries
+            let allWeights = try modelContext.fetch(FetchDescriptor<WeightEntry>(sortBy: [SortDescriptor(\.date, order: .forward)]))
+            var weightsToKeep: [WeightEntry] = []
+            var duplicateWeights: [WeightEntry] = []
+            let calendar = Calendar.current
+            
+            for weight in allWeights {
+                let isDuplicate = weightsToKeep.contains { existing in
+                    let sameDay = calendar.isDate(existing.date, inSameDayAs: weight.date)
+                    let weightDiff = abs(existing.weight - weight.weight)
+                    return sameDay &&
+                           existing.weightUnit == weight.weightUnit &&
+                           weightDiff < 0.5
+                }
+                
+                if isDuplicate {
+                    duplicateWeights.append(weight)
+                } else {
+                    weightsToKeep.append(weight)
+                }
+            }
+            duplicateWeights.forEach { modelContext.delete($0) }
+            totalRemoved += duplicateWeights.count
+            
+            // Deduplicate workout sessions
+            let allSessions = try modelContext.fetch(FetchDescriptor<WorkoutSession>(sortBy: [SortDescriptor(\.date, order: .forward)]))
+            var sessionsToKeep: [WorkoutSession] = []
+            var duplicateSessions: [WorkoutSession] = []
+            
+            for session in allSessions {
+                let isDuplicate = sessionsToKeep.contains { existing in
+                    let timeDiff = abs(existing.date.timeIntervalSince(session.date))
+                    return timeDiff < 120 // within 2 minutes
+                }
+                
+                if isDuplicate {
+                    duplicateSessions.append(session)
+                } else {
+                    sessionsToKeep.append(session)
+                }
+            }
+            duplicateSessions.forEach { modelContext.delete($0) }
+            totalRemoved += duplicateSessions.count
+            
+            try modelContext.save()
+            
+            if totalRemoved == 0 {
+                alertMessage = "No duplicates found"
+            } else {
+                alertMessage = "Removed \(totalRemoved) duplicate(s): \(duplicateRuns.count) runs, \(duplicateWeights.count) weights, \(duplicateSessions.count) workouts"
+            }
+            showAlert = true
+        } catch {
+            alertMessage = "Failed to remove duplicates: \(error.localizedDescription)"
             showAlert = true
         }
     }

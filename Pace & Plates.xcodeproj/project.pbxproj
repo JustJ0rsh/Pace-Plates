@@ -22,20 +22,6 @@
 			remoteGlobalIDString = 420B3EE72EB3E28400F73922;
 			remoteInfo = RunningWidgetExtension;
 		};
-		42B50D322D9DE5690082A9FA /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 42B50D192D9DE5670082A9FA /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 42B50D202D9DE5670082A9FA;
-			remoteInfo = WorkingOut;
-		};
-		42B50D3C2D9DE5690082A9FA /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 42B50D192D9DE5670082A9FA /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 42B50D202D9DE5670082A9FA;
-			remoteInfo = WorkingOut;
-		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -60,8 +46,6 @@
 		4226C17A2E94A47300908453 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		4226C1802E9DED2A00908453 /* Info 2.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info 2.plist"; sourceTree = "<group>"; };
 		42B50D212D9DE5670082A9FA /* Pace & Plates.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Pace & Plates.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		42B50D312D9DE5690082A9FA /* Pace & PlatesTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Pace & PlatesTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
-		42B50D3B2D9DE5690082A9FA /* Pace & PlatesUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Pace & PlatesUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		42FCE1502EA875FA00334FD2 /* WeatherKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WeatherKit.framework; path = System/Library/Frameworks/WeatherKit.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -99,16 +83,6 @@
 			path = WorkingOut;
 			sourceTree = "<group>";
 		};
-		42B50D342D9DE5690082A9FA /* WorkingOutTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = WorkingOutTests;
-			sourceTree = "<group>";
-		};
-		42B50D3E2D9DE5690082A9FA /* WorkingOutUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = WorkingOutUITests;
-			sourceTree = "<group>";
-		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -128,20 +102,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		42B50D2E2D9DE5690082A9FA /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		42B50D382D9DE5690082A9FA /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -150,8 +110,6 @@
 			children = (
 				420B40FE2EBDA73900F73922 /* GameCenterResources.gamekit */,
 				42B50D232D9DE5670082A9FA /* WorkingOut */,
-				42B50D342D9DE5690082A9FA /* WorkingOutTests */,
-				42B50D3E2D9DE5690082A9FA /* WorkingOutUITests */,
 				420B3EED2EB3E28400F73922 /* RunningWidget */,
 				42B50D222D9DE5670082A9FA /* Products */,
 				4226C17A2E94A47300908453 /* Info.plist */,
@@ -164,8 +122,6 @@
 			isa = PBXGroup;
 			children = (
 				42B50D212D9DE5670082A9FA /* Pace & Plates.app */,
-				42B50D312D9DE5690082A9FA /* Pace & PlatesTests.xctest */,
-				42B50D3B2D9DE5690082A9FA /* Pace & PlatesUITests.xctest */,
 				420B3EE82EB3E28400F73922 /* RunningWidgetExtension.appex */,
 			);
 			name = Products;
@@ -230,52 +186,6 @@
 			productReference = 42B50D212D9DE5670082A9FA /* Pace & Plates.app */;
 			productType = "com.apple.product-type.application";
 		};
-		42B50D302D9DE5690082A9FA /* Pace & PlatesTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 42B50D482D9DE5690082A9FA /* Build configuration list for PBXNativeTarget "Pace & PlatesTests" */;
-			buildPhases = (
-				42B50D2D2D9DE5690082A9FA /* Sources */,
-				42B50D2E2D9DE5690082A9FA /* Frameworks */,
-				42B50D2F2D9DE5690082A9FA /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				42B50D332D9DE5690082A9FA /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				42B50D342D9DE5690082A9FA /* WorkingOutTests */,
-			);
-			name = "Pace & PlatesTests";
-			packageProductDependencies = (
-			);
-			productName = WorkingOutTests;
-			productReference = 42B50D312D9DE5690082A9FA /* Pace & PlatesTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
-		42B50D3A2D9DE5690082A9FA /* Pace & PlatesUITests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 42B50D4B2D9DE5690082A9FA /* Build configuration list for PBXNativeTarget "Pace & PlatesUITests" */;
-			buildPhases = (
-				42B50D372D9DE5690082A9FA /* Sources */,
-				42B50D382D9DE5690082A9FA /* Frameworks */,
-				42B50D392D9DE5690082A9FA /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				42B50D3D2D9DE5690082A9FA /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				42B50D3E2D9DE5690082A9FA /* WorkingOutUITests */,
-			);
-			name = "Pace & PlatesUITests";
-			packageProductDependencies = (
-			);
-			productName = WorkingOutUITests;
-			productReference = 42B50D3B2D9DE5690082A9FA /* Pace & PlatesUITests.xctest */;
-			productType = "com.apple.product-type.bundle.ui-testing";
-		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -291,14 +201,6 @@
 					};
 					42B50D202D9DE5670082A9FA = {
 						CreatedOnToolsVersion = 16.2;
-					};
-					42B50D302D9DE5690082A9FA = {
-						CreatedOnToolsVersion = 16.2;
-						TestTargetID = 42B50D202D9DE5670082A9FA;
-					};
-					42B50D3A2D9DE5690082A9FA = {
-						CreatedOnToolsVersion = 16.2;
-						TestTargetID = 42B50D202D9DE5670082A9FA;
 					};
 				};
 			};
@@ -317,8 +219,6 @@
 			projectRoot = "";
 			targets = (
 				42B50D202D9DE5670082A9FA /* Pace & Plates */,
-				42B50D302D9DE5690082A9FA /* Pace & PlatesTests */,
-				42B50D3A2D9DE5690082A9FA /* Pace & PlatesUITests */,
 				420B3EE72EB3E28400F73922 /* RunningWidgetExtension */,
 			);
 		};
@@ -341,20 +241,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		42B50D2F2D9DE5690082A9FA /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		42B50D392D9DE5690082A9FA /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -372,20 +258,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		42B50D2D2D9DE5690082A9FA /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		42B50D372D9DE5690082A9FA /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -393,16 +265,6 @@
 			isa = PBXTargetDependency;
 			target = 420B3EE72EB3E28400F73922 /* RunningWidgetExtension */;
 			targetProxy = 420B3EFB2EB3E28600F73922 /* PBXContainerItemProxy */;
-		};
-		42B50D332D9DE5690082A9FA /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 42B50D202D9DE5670082A9FA /* Pace & Plates */;
-			targetProxy = 42B50D322D9DE5690082A9FA /* PBXContainerItemProxy */;
-		};
-		42B50D3D2D9DE5690082A9FA /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 42B50D202D9DE5670082A9FA /* Pace & Plates */;
-			targetProxy = 42B50D3C2D9DE5690082A9FA /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -688,74 +550,6 @@
 			};
 			name = Release;
 		};
-		42B50D492D9DE5690082A9FA /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOutTests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pace & Plates.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Pace & Plates";
-			};
-			name = Debug;
-		};
-		42B50D4A2D9DE5690082A9FA /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOutTests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pace & Plates.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Pace & Plates";
-			};
-			name = Release;
-		};
-		42B50D4C2D9DE5690082A9FA /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOutUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = WorkingOut;
-			};
-			name = Debug;
-		};
-		42B50D4D2D9DE5690082A9FA /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOutUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = WorkingOut;
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -782,24 +576,6 @@
 			buildConfigurations = (
 				42B50D462D9DE5690082A9FA /* Debug */,
 				42B50D472D9DE5690082A9FA /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		42B50D482D9DE5690082A9FA /* Build configuration list for PBXNativeTarget "Pace & PlatesTests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				42B50D492D9DE5690082A9FA /* Debug */,
-				42B50D4A2D9DE5690082A9FA /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		42B50D4B2D9DE5690082A9FA /* Build configuration list for PBXNativeTarget "Pace & PlatesUITests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				42B50D4C2D9DE5690082A9FA /* Debug */,
-				42B50D4D2D9DE5690082A9FA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -16,6 +16,7 @@ struct HomeView: View {
     @AppStorage("weightUnit") private var preferredWeightUnit = "lbs"
     @AppStorage("streakMode") private var streakMode: String = "daily"
     @AppStorage("distanceUnit") private var distanceUnit: String = "mi"
+    @AppStorage("showVitalsOnHome") private var showVitalsOnHome: Bool = true
     
     @State private var selectedChartTab: ChartTab = .volume
 
@@ -445,7 +446,9 @@ struct HomeView: View {
 
                     recentActivityCard
 
-                    VitalsSnapshotView()
+                    if showVitalsOnHome {
+                        VitalsSnapshotView()
+                    }
 
                     // Floating Charts Card with Tabs
                     VStack(spacing: 12) {

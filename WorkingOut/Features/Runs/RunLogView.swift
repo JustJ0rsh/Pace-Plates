@@ -210,26 +210,30 @@ struct RunLogView: View {
 
                     if !runningSessions.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            LazyVStack(spacing: 12) {
+                            LazyVStack(spacing: 16) {
                             ForEach(runningSessions) { session in
                                 NavigationLink {
                                     RunSessionDetailView(session: session)
                                 } label: {
-                                    HStack(alignment: .top) {
+                                    HStack(alignment: .top, spacing: 12) {
                                         // Activity type icon
                                         Image(systemName: activityIcon(for: session.activityType))
                                             .font(.title2)
                                             .foregroundStyle(AppTheme.accentColor)
                                             .frame(width: 32)
                                         
-                                        VStack(alignment: .leading) {
+                                        VStack(alignment: .leading, spacing: 4) {
                                             Text(session.date.formatted(date: .abbreviated, time: .shortened))
                                                 .font(.headline)
                                             Text("\(String(format: "%.1f", session.distance)) \(session.distanceUnit) • \(String(format: "%.0f", caloriesFor(session))) kcal")
                                                 .font(.subheadline)
-                                            Text(formatDuration(session.duration))
-                                                .font(.subheadline)
-                                                .foregroundStyle(.secondary)
+                                            HStack(spacing: 4) {
+                                                Text(formatDuration(session.duration))
+                                                Text("•")
+                                                Text(formatPace(distance: session.distance, duration: session.duration, unit: session.distanceUnit))
+                                            }
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
                                             if let place = locationCache[session.id], !place.isEmpty {
                                                 Text(place)
                                                     .font(.caption)
@@ -248,7 +252,10 @@ struct RunLogView: View {
                                         }
                                         }
                                     }
-                                    Divider().opacity(0.2)
+                                    .padding(.vertical, 4)
+                                    if session.id != runningSessions.last?.id {
+                                        Divider().opacity(0.2)
+                                    }
                                 }
                                 .onDelete(perform: deleteRunningSessions)
                             }
@@ -461,6 +468,14 @@ struct RunLogView: View {
         } else {
             return String(format: "%02d:%02d", minutes, seconds)
         }
+    }
+    
+    private func formatPace(distance: Double, duration: TimeInterval, unit: String) -> String {
+        guard distance > 0, duration > 0 else { return "—" }
+        let minutesPerUnit = (duration / 60.0) / distance
+        let mins = Int(minutesPerUnit)
+        let secs = Int((minutesPerUnit - Double(mins)) * 60)
+        return String(format: "%d:%02d/%@", mins, secs, unit)
     }
 
     // MARK: - Steps and Calories helpers

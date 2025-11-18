@@ -29,6 +29,11 @@ final class HealthKitManager: ObservableObject {
         set.insert(HKObjectType.quantityType(forIdentifier: .oxygenSaturation)!)
         set.insert(HKObjectType.quantityType(forIdentifier: .bodyTemperature)!)
         set.insert(HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!)
+        
+        // Profile characteristics
+        set.insert(HKObjectType.quantityType(forIdentifier: .height)!)
+        set.insert(HKObjectType.characteristicType(forIdentifier: .biologicalSex)!)
+        set.insert(HKObjectType.characteristicType(forIdentifier: .dateOfBirth)!)
 
         return set
     }()
@@ -361,5 +366,50 @@ final class HealthKitManager: ObservableObject {
         // Calculate total duration from merged intervals
         let totalDuration = merged.reduce(0.0) { $0 + $1.end.timeIntervalSince($1.start) }
         return totalDuration
+    }
+    
+    // MARK: - User Profile Characteristics
+    
+    /// Get user's age from HealthKit date of birth
+    func getAge() throws -> Int? {
+        guard let dateOfBirthComponents = try? healthStore.dateOfBirthComponents() else { return nil }
+        let calendar = Calendar.current
+        let now = Date()
+        let ageComponents = calendar.dateComponents([.year], from: dateOfBirthComponents, to: calendar.dateComponents([.year, .month, .day], from: now))
+        return ageComponents.year
+    }
+    
+    /// Get user's biological sex from HealthKit
+    func getBiologicalSex() throws -> String? {
+        let sexObject = try? healthStore.biologicalSex()
+        switch sexObject?.biologicalSex {
+        case .male:
+            return "male"
+        case .female:
+            return "female"
+        default:
+            return nil
+        }
+    }
+    
+    /// Get user's height from HealthKit (returns value in inches)
+    func getHeight() async throws -> Double? {
+        guard let heightType = HKQuantityType.quantityType(forIdentifier: .height) else { return nil }
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+        let pred = HKQuery.predicateForSamples(withStart: .distantPast, end: Date(), options: [])
+        
+        return try await withCheckedThrowingContinuation { cont in
+            let query = HKSampleQuery(sampleType: heightType, predicate: pred, limit: 1, sortDescriptors: [sort]) { _, samples, err in
+                if let err = err { cont.resume(throwing: err); return }
+                if let sample = samples?.first as? HKQuantitySample {
+                    // Return height in inches
+                    let heightInInches = sample.quantity.doubleValue(for: HKUnit.inch())
+                    cont.resume(returning: heightInInches)
+                } else {
+                    cont.resume(returning: nil)
+                }
+            }
+            healthStore.execute(query)
+        }
     }
 }

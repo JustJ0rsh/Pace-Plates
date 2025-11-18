@@ -100,6 +100,21 @@ struct StreakCalendarView: View {
             let cardio = cardioDays
             let lifts = liftDays
             LazyVStack(alignment: .leading, spacing: 16) {
+                // Legend at the top
+                HStack(spacing: 16) {
+                    HStack(spacing: 6) {
+                        Circle().fill(AppTheme.accentColor).frame(width: 10, height: 10)
+                        Text("Workout").font(.caption).foregroundStyle(.secondary)
+                    }
+                    HStack(spacing: 6) {
+                        Circle().fill(Color.orange).frame(width: 10, height: 10)
+                        Text("Cardio").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+                
                 // Weekday header (static)
                 HStack(spacing: 0) {
                     ForEach(weekdaySymbols, id: \.self) { sym in
@@ -137,20 +152,6 @@ struct StreakCalendarView: View {
                         .padding(.horizontal, 4)
                     }
                 }
-
-                // Legend
-                HStack(spacing: 16) {
-                    HStack(spacing: 6) {
-                        Circle().fill(AppTheme.accentColor).frame(width: 10, height: 10)
-                        Text("Workout").font(.caption).foregroundStyle(.secondary)
-                    }
-                    HStack(spacing: 6) {
-                        Circle().fill(Color.orange).frame(width: 10, height: 10)
-                        Text("Cardio").font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                }
-                .padding(.horizontal)
             }
             .padding(.top)
             .padding(.bottom)

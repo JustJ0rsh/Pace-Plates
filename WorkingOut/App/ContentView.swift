@@ -11,6 +11,9 @@ import FoundationModels
 struct ContentView: View {
     let persistenceController = PersistenceController.shared // Need access to this
     @AppStorage("didShowTutorial") private var didShowTutorial: Bool = false
+    @AppStorage("didCompleteProfileSetup") private var didCompleteProfileSetup: Bool = false
+    @AppStorage("age") private var age: Int = 0
+    @AppStorage("heightValue") private var heightValue: Double = 0
     @State private var showTutorial: Bool = false
     @State private var healthAuthError: String? = nil
     @AppStorage("measurementSystem") private var measurementSystem: String = "imperial"
@@ -70,11 +73,19 @@ struct ContentView: View {
                 }
             }
 
-            if !didShowTutorial {
+            // Check if user needs to see onboarding
+            // Show onboarding if: 
+            // 1. They haven't completed profile setup AND
+            // 2. They haven't filled out basic profile info (age, height)
+            let hasProfileData = age > 0 && heightValue > 0
+            if !didCompleteProfileSetup && !hasProfileData {
                 showTutorial = true
             } else {
-                // If tutorial was shown before (e.g., after reinstall), check health authorization
-                // and prompt if not granted - this ensures reinstalling the app will re-request permissions
+                // If onboarding was completed or profile data exists, mark as complete
+                didCompleteProfileSetup = true
+                didShowTutorial = true
+                
+                // Check health authorization and prompt if not granted
                 Task { @MainActor in
                     await checkAndRequestHealthAuthorizationIfNeeded()
                 }
@@ -112,9 +123,13 @@ struct ContentView: View {
         } message: {
             Text(healthAuthError ?? "Health permissions may be limited. You can adjust them in Settings.")
         }
-        .sheet(isPresented: $showTutorial, onDismiss: { didShowTutorial = true }) {
+        .sheet(isPresented: $showTutorial, onDismiss: {
+            didShowTutorial = true
+            didCompleteProfileSetup = true
+        }) {
             TutorialView(onFinish: {
                 didShowTutorial = true
+                didCompleteProfileSetup = true
                 showTutorial = false
                 Task { @MainActor in
                     do {

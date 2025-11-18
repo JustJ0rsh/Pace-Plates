@@ -5,7 +5,7 @@ struct BackupFile: Codable {
     struct ExerciseDefinitionDTO: Codable { let id: UUID; let name: String; let muscleGroup: String; let isUserDefined: Bool }
     struct WorkoutSessionDTO: Codable { let id: UUID; let date: Date; let notes: String?; let title: String? }
     struct ExerciseLogDTO: Codable { let id: UUID; let reps: Int; let weight: Double; let weightUnit: String; let setNumber: Int; let exerciseName: String?; let exerciseDefinitionId: UUID?; let workoutSessionId: UUID? }
-    struct RunningSessionDTO: Codable { let id: UUID; let date: Date; let distance: Double; let distanceUnit: String; let duration: TimeInterval; let calories: Double?; let notes: String?; let locations: Data; let healthWorkoutUUID: String? }
+    struct RunningSessionDTO: Codable { let id: UUID; let date: Date; let distance: Double; let distanceUnit: String; let duration: TimeInterval; let calories: Double?; let notes: String?; let locations: Data; let healthWorkoutUUID: String?; let activityType: String }
     struct WeightEntryDTO: Codable { let id: UUID; let date: Date; let weight: Double; let weightUnit: String }
 
     var exportedAt: Date
@@ -31,7 +31,7 @@ enum DataBackupService {
             exerciseDefinitions: defs.map { .init(id: $0.id, name: $0.name, muscleGroup: $0.muscleGroup, isUserDefined: $0.isUserDefined) },
             workoutSessions: sessions.map { .init(id: $0.id, date: $0.date, notes: $0.notes, title: $0.title) },
             exerciseLogs: logs.map { .init(id: $0.id, reps: $0.reps, weight: $0.weight, weightUnit: $0.weightUnit, setNumber: $0.setNumber, exerciseName: $0.exerciseName, exerciseDefinitionId: $0.exerciseDefinition?.id, workoutSessionId: $0.workoutSession?.id) },
-            runningSessions: runs.map { .init(id: $0.id, date: $0.date, distance: $0.distance, distanceUnit: $0.distanceUnit, duration: $0.duration, calories: $0.calories, notes: $0.notes, locations: $0.locations, healthWorkoutUUID: $0.healthWorkoutUUID) },
+            runningSessions: runs.map { .init(id: $0.id, date: $0.date, distance: $0.distance, distanceUnit: $0.distanceUnit, duration: $0.duration, calories: $0.calories, notes: $0.notes, locations: $0.locations, healthWorkoutUUID: $0.healthWorkoutUUID, activityType: $0.activityType) },
             weightEntries: weights.map { .init(id: $0.id, date: $0.date, weight: $0.weight, weightUnit: $0.weightUnit) }
         )
 
@@ -94,7 +94,8 @@ enum DataBackupService {
             defsByNameGroup[key] = model
         }
 
-        // Insert sessions
+        // Insert sessions (with deduplication)
+        let existingSessions = ((try? context.fetch(FetchDescriptor<WorkoutSession>())) ?? [])
         var sessionsById: [UUID: WorkoutSession] = [:]
         for dto in file.workoutSessions {
             if existingSessionIDs.contains(dto.id) {
@@ -103,6 +104,14 @@ enum DataBackupService {
                 if let existing = try? context.fetch(fd).first { sessionsById[dto.id] = existing }
                 continue
             }
+            
+            // Check for similar workout sessions (within 2 minutes of same date)
+            let isSimilar = existingSessions.contains { existing in
+                let timeDiff = abs(existing.date.timeIntervalSince(dto.date))
+                return timeDiff < 120 // within 2 minutes
+            }
+            if isSimilar { continue }
+            
             let model = WorkoutSession(id: dto.id, date: dto.date, notes: dto.notes, title: dto.title ?? nil)
             context.insert(model)
             sessionsById[dto.id] = model
@@ -130,16 +139,58 @@ enum DataBackupService {
             context.insert(model)
         }
 
-        // Insert runs
+        // Insert runs (with deduplication)
+        let existingRuns = ((try? context.fetch(FetchDescriptor<RunningSession>())) ?? [])
+        let existingRunsByHealthUUID: [String: RunningSession] = Dictionary(uniqueKeysWithValues: 
+            existingRuns.compactMap { run in
+                guard let uuid = run.healthWorkoutUUID, !uuid.isEmpty else { return nil }
+                return (uuid, run)
+            }
+        )
+        
         for dto in file.runningSessions {
+            // Skip if already exists by ID
             if existingRunIDs.contains(dto.id) { continue }
-            let model = RunningSession(id: dto.id, date: dto.date, distance: dto.distance, distanceUnit: dto.distanceUnit, duration: dto.duration, calories: dto.calories, notes: dto.notes, locations: dto.locations, healthWorkoutUUID: dto.healthWorkoutUUID)
+            
+            // Skip if a run with the same healthWorkoutUUID already exists
+            if let healthUUID = dto.healthWorkoutUUID, !healthUUID.isEmpty, 
+               existingRunsByHealthUUID[healthUUID] != nil {
+                continue
+            }
+            
+            // Check for similar runs (same date, distance, duration) to avoid duplicates
+            let isSimilar = existingRuns.contains { existing in
+                let dateDiff = abs(existing.date.timeIntervalSince(dto.date))
+                let distanceDiff = abs(existing.distance - dto.distance)
+                let durationDiff = abs(existing.duration - dto.duration)
+                return dateDiff < 120 && // within 2 minutes
+                       existing.distanceUnit == dto.distanceUnit &&
+                       distanceDiff < 0.07 && // within 0.07 units (miles or km)
+                       durationDiff < 30 // within 30 seconds
+            }
+            if isSimilar { continue }
+            
+            let model = RunningSession(id: dto.id, date: dto.date, distance: dto.distance, distanceUnit: dto.distanceUnit, duration: dto.duration, calories: dto.calories, notes: dto.notes, locations: dto.locations, healthWorkoutUUID: dto.healthWorkoutUUID, activityType: dto.activityType)
             context.insert(model)
         }
 
-        // Insert weights
+        // Insert weights (with deduplication)
+        let existingWeights = ((try? context.fetch(FetchDescriptor<WeightEntry>())) ?? [])
         for dto in file.weightEntries {
+            // Skip if already exists by ID
             if existingWeightIDs.contains(dto.id) { continue }
+            
+            // Check for similar weight entries (same day, similar weight)
+            let isSimilar = existingWeights.contains { existing in
+                let calendar = Calendar.current
+                let sameDay = calendar.isDate(existing.date, inSameDayAs: dto.date)
+                let weightDiff = abs(existing.weight - dto.weight)
+                return sameDay && 
+                       existing.weightUnit == dto.weightUnit &&
+                       weightDiff < 0.5 // within 0.5 units
+            }
+            if isSimilar { continue }
+            
             let model = WeightEntry(id: dto.id, date: dto.date, weight: dto.weight, weightUnit: dto.weightUnit)
             context.insert(model)
         }
