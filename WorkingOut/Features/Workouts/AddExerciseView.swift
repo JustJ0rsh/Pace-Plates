@@ -152,32 +152,57 @@ struct AddExerciseView: View {
         }
         .sheet(isPresented: Binding(get: { historyExerciseName != nil }, set: { if !$0 { historyExerciseName = nil } })) {
             if let name = historyExerciseName {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Recent Workouts for \(name)")
-                        .font(.headline)
-                    let recent = lastThreeWorkouts(forExerciseName: name)
-                    if recent.isEmpty {
-                        Text("No history yet.")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(Array(recent.enumerated()), id: \.offset) { _, item in
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(item.date.formatted(date: .abbreviated, time: .omitted))
-                                    .font(.subheadline).foregroundStyle(.secondary)
-                                ForEach(item.sets, id: \.id) { set in
-                                    Text("Set \(set.setNumber): \(set.reps) reps @ \(String(format: "%.1f", set.weight)) \(set.weightUnit)")
+                ZStack {
+                    AppTheme.gradientWorkouts.ignoresSafeArea()
+                    
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Recent Workouts for \(name)")
+                            .font(.headline)
+                            .padding(.top, 16)
+                        
+                        let recent = lastThreeWorkouts(forExerciseName: name)
+                        if recent.isEmpty {
+                            ContentUnavailableView(
+                                "No History",
+                                systemImage: "clock.arrow.circlepath",
+                                description: Text("You haven't logged this exercise yet.")
+                            )
+                        } else {
+                            ScrollView {
+                                VStack(spacing: 12) {
+                                    ForEach(Array(recent.enumerated()), id: \.offset) { _, item in
+                                        VStack(alignment: .leading, spacing: 8) {
+                                            Text(item.date.formatted(date: .abbreviated, time: .omitted))
+                                                .font(.subheadline)
+                                                .foregroundStyle(.secondary)
+                                            
+                                            ForEach(item.sets, id: \.id) { set in
+                                                HStack {
+                                                    Text("Set \(set.setNumber)")
+                                                        .fontWeight(.medium)
+                                                    Spacer()
+                                                    Text("\(set.reps) reps")
+                                                    Text("@")
+                                                        .foregroundStyle(.secondary)
+                                                    Text("\(String(format: "%.1f", set.weight)) \(set.weightUnit)")
+                                                }
+                                                .font(.callout)
+                                                .padding(.vertical, 2)
+                                            }
+                                        }
+                                        .padding()
+                                        .background(AppTheme.secondaryBackgroundColor)
+                                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                    }
                                 }
+                                .padding(.bottom, 16)
                             }
-                            .padding(10)
-                            .background(AppTheme.secondaryBackgroundColor)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                         }
                     }
-                    Spacer(minLength: 0)
+                    .padding(.horizontal)
                 }
-                .padding()
-                .presentationDetents([.fraction(0.35), .medium])
-                .appBackground(AppTheme.gradientWorkouts)
+                .presentationDetents([.fraction(0.45), .medium, .large])
+                .presentationDragIndicator(.visible)
                 .foregroundColor(AppTheme.textColor)
             }
         }

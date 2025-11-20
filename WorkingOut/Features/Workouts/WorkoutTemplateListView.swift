@@ -9,10 +9,11 @@ struct WorkoutTemplateListView: View {
     @State private var createdSession: WorkoutSession?
     @State private var selectedExperienceLevel: String? = nil
     @State private var selectedGoal: String? = nil
+    @State private var searchText: String = ""
     
     // Separate templates
     private var builtInTemplates: [WorkoutTemplate] {
-        templates.filter { $0.isBuiltIn }
+        templates.filter { $0.isBuiltIn && $0.experienceLevel?.lowercased() != "advanced" }
     }
     
     private var aiGeneratedTemplates: [WorkoutTemplate] {
@@ -31,15 +32,30 @@ struct WorkoutTemplateListView: View {
             filtered = filtered.filter { $0.goal == goal }
         }
         
+        if !searchText.isEmpty {
+            filtered = filtered.filter { template in
+                template.title.localizedCaseInsensitiveContains(searchText) ||
+                (template.templateDescription?.localizedCaseInsensitiveContains(searchText) ?? false)
+            }
+        }
+        
         return filtered
     }
     
     // Unique experience levels and goals
+    // Unique experience levels and goals
     private var experienceLevels: [String] {
-        Array(Set(builtInTemplates.compactMap { $0.experienceLevel })).sorted()
+        let levels = Set(builtInTemplates.compactMap { $0.experienceLevel })
+        // Custom order: Custom first, then Beginner, Intermediate
+        let order = ["Custom", "Beginner", "Intermediate"]
+        // Filter to only show levels that actually exist in the data
+        return order.filter { levels.contains($0) }
     }
     
     private var availableGoals: [String] {
+        // Hide categories for Custom templates
+        if selectedExperienceLevel == "Custom" { return [] }
+        
         let templates = selectedExperienceLevel != nil ? 
             builtInTemplates.filter { $0.experienceLevel == selectedExperienceLevel } : 
             builtInTemplates
@@ -58,142 +74,181 @@ struct WorkoutTemplateListView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ScrollView {
-                    VStack(spacing: 20) {
-                        
-                        let aiFirst = (WorkoutPlanGenerator.shared.availability() == .available)
-
-                        // MARK: - AI Generated Templates (if available and preferred first)
-                        if aiFirst && !aiGeneratedTemplates.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack {
-                                    Image(systemName: "sparkles")
-                                        .foregroundColor(.purple)
-                                    Text("AI Generated")
-                                        .font(.title2)
-                                        .fontWeight(.bold)
-                                    Spacer()
-                                }
-                                .padding(.horizontal, AppTheme.padding)
-
-                                VStack(spacing: 12) {
-                                    ForEach(aiGeneratedTemplates) { template in
-                                        TemplateCard(template: template) {
-                                            selectedTemplate = template
+                ZStack(alignment: .bottom) {
+                    ScrollView {
+                        VStack(spacing: 20) {
+                            
+                            let aiFirst = (WorkoutPlanGenerator.shared.availability() == .available)
+    
+                            // MARK: - AI Generated Templates (if available and preferred first)
+                            if aiFirst && !aiGeneratedTemplates.isEmpty {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    HStack {
+                                        Image(systemName: "sparkles")
+                                            .foregroundColor(.purple)
+                                        Text("AI Generated")
+                                            .font(.title2)
+                                            .fontWeight(.bold)
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, AppTheme.padding)
+    
+                                    VStack(spacing: 12) {
+                                        ForEach(aiGeneratedTemplates) { template in
+                                            TemplateCard(template: template) {
+                                                selectedTemplate = template
+                                            }
                                         }
                                     }
+                                    .padding(.horizontal, AppTheme.padding)
                                 }
-                                .padding(.horizontal, AppTheme.padding)
                             }
-                        }
-
-                        // MARK: - Built-In Templates Section
-                        if !builtInTemplates.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack {
-                                    Image(systemName: "books.vertical.fill")
-                                        .foregroundColor(.orange)
-                                    Text("Built-In Programs")
-                                        .font(.title2)
-                                        .fontWeight(.bold)
-                                    Spacer()
-                                }
-                                .padding(.horizontal, AppTheme.padding)
-                                
-                                // Filters
-                                VStack(spacing: 8) {
-                                    // Experience Level Filter
-                                    ScrollView(.horizontal, showsIndicators: false) {
-                                        HStack(spacing: 8) {
-                                            FilterChip(
-                                                title: "All Levels",
-                                                isSelected: selectedExperienceLevel == nil
-                                            ) {
-                                                selectedExperienceLevel = nil
-                                                selectedGoal = nil
-                                            }
-                                            
-                                            ForEach(experienceLevels, id: \.self) { level in
-                                                FilterChip(
-                                                    title: level.capitalized,
-                                                    isSelected: selectedExperienceLevel == level
-                                                ) {
-                                                    selectedExperienceLevel = level
-                                                    selectedGoal = nil
-                                                }
-                                            }
-                                        }
-                                        .padding(.horizontal, AppTheme.padding)
+    
+                            // MARK: - Built-In Templates Section
+                            if !builtInTemplates.isEmpty {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    HStack {
+                                        Image(systemName: "books.vertical.fill")
+                                            .foregroundColor(.orange)
+                                        Text("Built-In Programs")
+                                            .font(.title2)
+                                            .fontWeight(.bold)
+                                        Spacer()
                                     }
+                                    .padding(.horizontal, AppTheme.padding)
                                     
-                                    // Goal Filter (if level selected)
-                                    if selectedExperienceLevel != nil && !availableGoals.isEmpty {
+                                    // Filters
+                                    VStack(spacing: 8) {
+                                        // Experience Level Filter
                                         ScrollView(.horizontal, showsIndicators: false) {
                                             HStack(spacing: 8) {
                                                 FilterChip(
-                                                    title: "All Goals",
-                                                    isSelected: selectedGoal == nil
+                                                    title: "All Templates",
+                                                    isSelected: selectedExperienceLevel == nil
                                                 ) {
+                                                    selectedExperienceLevel = nil
                                                     selectedGoal = nil
                                                 }
                                                 
-                                                ForEach(availableGoals, id: \.self) { goal in
+                                                ForEach(experienceLevels, id: \.self) { level in
                                                     FilterChip(
-                                                        title: goal.replacingOccurrences(of: "_", with: " ").capitalized,
-                                                        isSelected: selectedGoal == goal
+                                                        title: level.capitalized,
+                                                        isSelected: selectedExperienceLevel == level
                                                     ) {
-                                                        selectedGoal = goal
+                                                        selectedExperienceLevel = level
+                                                        selectedGoal = nil
                                                     }
                                                 }
                                             }
                                             .padding(.horizontal, AppTheme.padding)
                                         }
-                                    }
-                                }
-                                
-                                // Template List
-                                VStack(spacing: 12) {
-                                    ForEach(filteredBuiltInTemplates) { template in
-                                        BuiltInTemplateCard(template: template) {
-                                            selectedTemplate = template
+                                        
+                                        // Goal Filter (if level selected)
+                                        if selectedExperienceLevel != nil && !availableGoals.isEmpty {
+                                            ScrollView(.horizontal, showsIndicators: false) {
+                                                HStack(spacing: 8) {
+                                                    FilterChip(
+                                                        title: "All Categories",
+                                                        isSelected: selectedGoal == nil
+                                                    ) {
+                                                        selectedGoal = nil
+                                                    }
+                                                    
+                                                    ForEach(availableGoals, id: \.self) { goal in
+                                                        FilterChip(
+                                                            title: goal.replacingOccurrences(of: "_", with: " ").capitalized,
+                                                            isSelected: selectedGoal == goal
+                                                        ) {
+                                                            selectedGoal = goal
+                                                        }
+                                                    }
+                                                }
+                                                .padding(.horizontal, AppTheme.padding)
+                                            }
                                         }
                                     }
-                                }
-                                .padding(.horizontal, AppTheme.padding)
-                            }
-                        }
-                        
-                        // MARK: - AI Generated Templates Section (fallback when not first)
-                        if !aiFirst && !aiGeneratedTemplates.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack {
-                                    Image(systemName: "sparkles")
-                                        .foregroundColor(.purple)
-                                    Text("AI Generated")
-                                        .font(.title2)
-                                        .fontWeight(.bold)
-                                    Spacer()
-                                }
-                                .padding(.horizontal, AppTheme.padding)
-                                
-                                VStack(spacing: 12) {
-                                    ForEach(aiGeneratedTemplates) { template in
-                                        TemplateCard(template: template) {
-                                            selectedTemplate = template
+                                    
+                                    // Template List
+                                    LazyVStack(spacing: 12) {
+                                        ForEach(filteredBuiltInTemplates) { template in
+                                            BuiltInTemplateCard(template: template) {
+                                                selectedTemplate = template
+                                            }
                                         }
                                     }
+                                    .padding(.horizontal, AppTheme.padding)
                                 }
-                                .padding(.horizontal, AppTheme.padding)
+                            }
+                            
+                            // MARK: - AI Generated Templates Section (fallback when not first)
+                            if !aiFirst && !aiGeneratedTemplates.isEmpty {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    HStack {
+                                        Image(systemName: "sparkles")
+                                            .foregroundColor(.purple)
+                                        Text("AI Generated")
+                                            .font(.title2)
+                                            .fontWeight(.bold)
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, AppTheme.padding)
+                                    
+                                    VStack(spacing: 12) {
+                                        ForEach(aiGeneratedTemplates) { template in
+                                            TemplateCard(template: template) {
+                                                selectedTemplate = template
+                                            }
+                                        }
+                                    }
+                                    .padding(.horizontal, AppTheme.padding)
+                                }
                             }
                         }
+                        .padding(.vertical, 8)
+                        .padding(.bottom, 80) // Space for floating search bar
                     }
-                    .padding(.vertical, 8)
+                    
+                    // Floating Search Bar
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundColor(.secondary)
+                            NoToolbarTextField(
+                                text: $searchText,
+                                placeholder: "Search templates...",
+                                returnKeyType: .search,
+                                onCommit: { dismissKeyboard() }
+                            )
+                            .frame(height: 24) // Match standard text field height
+                            
+                            if !searchText.isEmpty {
+                                Button(action: { 
+                                    searchText = ""
+                                    dismissKeyboard()
+                                }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                        .padding()
+                        .background(.ultraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                        )
+                        .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
+                        .padding(.horizontal, AppTheme.padding)
+                        .padding(.bottom, 16)
+                    }
                 }
             }
         }
         .navigationTitle("Workout Templates")
         .navigationBarTitleDisplayMode(.inline)
-        .appBackground(AppTheme.gradientWorkouts)
+        .background(AppTheme.gradientWorkouts.ignoresSafeArea())
         .foregroundColor(AppTheme.textColor)
         .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
@@ -211,6 +266,85 @@ struct WorkoutTemplateListView: View {
                 dismiss()
                 // The navigation will be handled by the parent view
             }
+        }
+        .onAppear {
+            // Smart default selection
+            if selectedExperienceLevel == nil {
+                let hasCustom = builtInTemplates.contains { $0.experienceLevel == "Custom" }
+                if hasCustom {
+                    selectedExperienceLevel = "Custom"
+                }
+                // Otherwise leave as nil ("All Templates")
+            }
+        }
+    }
+}
+
+// MARK: - No Toolbar Text Field
+struct NoToolbarTextField: UIViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+    var returnKeyType: UIReturnKeyType = .default
+    var onCommit: (() -> Void)? = nil
+
+    func makeUIView(context: Context) -> UITextField {
+        let textField = UITextField()
+        textField.placeholder = placeholder
+        textField.delegate = context.coordinator
+        textField.returnKeyType = returnKeyType
+        
+        // This is the key line to remove the toolbar
+        textField.inputAccessoryView = nil
+        
+        // Styling to match SwiftUI TextField
+        textField.textColor = UIColor(AppTheme.textColor)
+        textField.attributedPlaceholder = NSAttributedString(
+            string: placeholder,
+            attributes: [.foregroundColor: UIColor.secondaryLabel]
+        )
+        textField.backgroundColor = .clear
+        
+        return textField
+    }
+
+    func updateUIView(_ uiView: UITextField, context: Context) {
+        if uiView.text != text {
+            uiView.text = text
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: NoToolbarTextField
+
+        init(_ parent: NoToolbarTextField) {
+            self.parent = parent
+        }
+
+        func textFieldDidChangeSelection(_ textField: UITextField) {
+            parent.text = textField.text ?? ""
+        }
+        
+        func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+            parent.onCommit?()
+            textField.resignFirstResponder()
+            return true
+        }
+        
+        func textFieldDidEndEditing(_ textField: UITextField) {
+            parent.text = textField.text ?? ""
+        }
+        
+        // Handle text changes
+        func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
+            if let currentText = textField.text as NSString? {
+                let updatedText = currentText.replacingCharacters(in: range, with: string)
+                parent.text = updatedText
+            }
+            return true
         }
     }
 }
@@ -531,3 +665,4 @@ struct ExerciseTemplateRow: View {
     }
     .modelContainer(PersistenceController.preview.container)
 }
+

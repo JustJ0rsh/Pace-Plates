@@ -22,6 +22,7 @@ struct WorkoutSessionDetailView: View {
     @State private var showingDatePicker: Bool = false
     @FocusState private var notesFocused: Bool
     @State private var didEditTitle: Bool = false
+    // Removed local saveAsTemplate state in favor of session property
     @AppStorage("weightUnit") private var weightUnit: String = "lbs"
     // Avoid storing/staging ExerciseDefinition references for UI
     
@@ -47,8 +48,25 @@ struct WorkoutSessionDetailView: View {
             VStack(spacing: 16) {
                 // Details Tile
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Details")
-                        .font(.headline)
+                    HStack {
+                        Text("Details")
+                            .font(.headline)
+                        Spacer()
+                        HStack(spacing: 8) {
+                            Text("Save Template")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Toggle("", isOn: Binding(
+                                get: { session.shouldSaveAsTemplate },
+                                set: { newValue in
+                                    session.shouldSaveAsTemplate = newValue
+                                    try? modelContext.save()
+                                }
+                            ))
+                            .toggleStyle(SwitchToggleStyle(tint: .green))
+                            .labelsHidden()
+                        }
+                    }
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Title")
                             .font(.subheadline)
@@ -285,6 +303,9 @@ struct WorkoutSessionDetailView: View {
         .navigationTitle(titleText.isEmpty ? "Workout Details" : titleText)
         .toolbarBackground(.visible, for: .navigationBar)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            // Toolbar items removed as requested
+        }
         .sheet(isPresented: $showingAddExercise) {
             AddExerciseView(workoutSession: session, onAdd: { log in
                 editingLog = log
@@ -342,6 +363,22 @@ struct WorkoutSessionDetailView: View {
                 if !(hasExercises || hasNotes || hasTitle) {
                     modelContext.delete(session)
                     try? modelContext.save()
+                }
+            }
+            
+            // Save as template if requested and session is valid
+            if session.shouldSaveAsTemplate && !session.isDeleted {
+                let hasExercises = !((session.exerciseLogs ?? []).isEmpty)
+                if hasExercises {
+                    if let existingTemplate = session.generatedTemplate {
+                        // Update existing template
+                        WorkoutTemplateService.shared.updateTemplate(template: existingTemplate, from: session, context: modelContext)
+                    } else {
+                        // Create new template and link it
+                        let newTemplate = WorkoutTemplateService.shared.createTemplateFromWorkout(session: session, context: modelContext)
+                        session.generatedTemplate = newTemplate
+                        try? modelContext.save()
+                    }
                 }
             }
         }

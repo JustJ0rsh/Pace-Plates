@@ -11,6 +11,7 @@ struct WorkoutLogView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Query(sort: [SortDescriptor<WorkoutSession>(\.date, order: .reverse)]) private var workoutSessions: [WorkoutSession]
+    @Query(sort: [SortDescriptor<ExerciseDefinition>(\.name)]) private var exerciseDefinitions: [ExerciseDefinition]
     @State private var newSessionToOpen: WorkoutSession? = nil
     @State private var pastSessionID: UUID? = nil
     @State private var newlyCreatedSessionID: UUID? = nil
@@ -67,33 +68,11 @@ struct WorkoutLogView: View {
                     }
                     // Total Weight Lifted per Day Chart Tile
                     if !workoutSessions.isEmpty {
+                        let data = chartData
+                        let dailyVolume = data.dailyVolume
+                        let groupedVolume = data.groupedVolume
                         let calendar = Calendar.current
-
-                        // Compute daily volume time series (unit-aware)
-                        // Compute per-session total volume (sum of reps * weight per exercise), converted to preferred unit
-                        let perSession: [(date: Date, volume: Double)] = workoutSessions.map { session in
-                            let total = (session.exerciseLogs ?? []).reduce(0.0) { acc, log in
-                                if selectedCategory != "All" {
-                                    let group = (log.exerciseDefinition?.muscleGroup ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                                    if group != selectedCategory { return acc }
-                                }
-                                let weightInPreferred = convertWeight(log.weight, from: log.weightUnit, to: preferredWeightUnit)
-                                return acc + (Double(log.reps) * weightInPreferred)
-                            }
-                            return (date: session.date, volume: total)
-                        }
-                        // Group by day and sum
-                        let groupedVolume: [Date: Double] = Dictionary(grouping: perSession, by: { item in
-                            calendar.startOfDay(for: item.date)
-                        }).mapValues { dayItems in
-                            dayItems.reduce(0.0) { $0 + $1.volume }
-                        }
-
-                        let dailyAll: [(date: Date, value: Double)] = groupedVolume.keys.sorted().map { day in
-                            (date: day, value: groupedVolume[day] ?? 0)
-                        }
-                        let dailyVolume: [(date: Date, value: Double)] = dailyAll.filter { $0.date >= last7DaysDomain.lowerBound && $0.date < last7DaysDomain.upperBound }
-
+                        
                         let minV = dailyVolume.map { $0.value }.min() ?? 0
                         let maxV = dailyVolume.map { $0.value }.max() ?? 0
                         let spanV = max(1.0, maxV - minV)
@@ -349,14 +328,42 @@ struct WorkoutLogView: View {
         return gradient.ignoresSafeArea(.container, edges: .all)
     }
 
-    private func availableCategories() -> [String] {
-        var set: Set<String> = []
-        for s in workoutSessions {
-            for l in (s.exerciseLogs ?? []) {
-                let g = (l.exerciseDefinition?.muscleGroup ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                if !g.isEmpty { set.insert(g) }
+    private var chartData: (dailyVolume: [(date: Date, value: Double)], groupedVolume: [Date: Double]) {
+        let calendar = Calendar.current
+        let domain = last7DaysDomain
+        let startOfWindow = domain.lowerBound
+        
+        // Optimize: Only process sessions within the window (plus a buffer if needed, but exact is fine for daily sum)
+        // workoutSessions is sorted by date descending
+        let relevantSessions = workoutSessions.prefix { $0.date >= startOfWindow }
+        
+        let perSession: [(date: Date, volume: Double)] = relevantSessions.map { session in
+            let total = (session.exerciseLogs ?? []).reduce(0.0) { acc, log in
+                if selectedCategory != "All" {
+                    let group = (log.exerciseDefinition?.muscleGroup ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    if group != selectedCategory { return acc }
+                }
+                let weightInPreferred = convertWeight(log.weight, from: log.weightUnit, to: preferredWeightUnit)
+                return acc + (Double(log.reps) * weightInPreferred)
             }
+            return (date: session.date, volume: total)
         }
-        return set.sorted()
+        
+        let groupedVolume: [Date: Double] = Dictionary(grouping: perSession, by: { item in
+            calendar.startOfDay(for: item.date)
+        }).mapValues { dayItems in
+            dayItems.reduce(0.0) { $0 + $1.volume }
+        }
+        
+        let dailyVolume: [(date: Date, value: Double)] = groupedVolume.keys.sorted().map { day in
+            (date: day, value: groupedVolume[day] ?? 0)
+        }
+        
+        return (dailyVolume, groupedVolume)
+    }
+
+    private func availableCategories() -> [String] {
+        let groups = Set(exerciseDefinitions.map { $0.muscleGroup.trimmingCharacters(in: .whitespacesAndNewlines) })
+        return groups.filter { !$0.isEmpty }.sorted()
     }
 }

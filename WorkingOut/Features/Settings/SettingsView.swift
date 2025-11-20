@@ -115,15 +115,7 @@ struct SettingsView: View {
                     .pickerStyle(.segmented)
                 }
                 
-                Section("About") {
-                    HStack {
-                        Text("Version")
-                            .foregroundColor(AppTheme.textColor)
-                        Spacer()
-                        Text("1.4.1")
-                            .foregroundStyle(.secondary)
-                    }
-                }
+
 
                 Section("Home Screen") {
                     Toggle(isOn: $showVitalsOnHome) {
@@ -233,6 +225,16 @@ struct SettingsView: View {
                     }
                     Link(destination: URL(string: "https://github.com/JustJ0rsh/Pace-Plates/blob/main/Privacy%20Policy")!) {
                         Label("Privacy Policy", systemImage: "doc.text")
+                    }
+                }
+                
+                Section("About") {
+                    HStack {
+                        Text("Version")
+                            .foregroundColor(AppTheme.textColor)
+                        Spacer()
+                        Text("1.4.1")
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -429,12 +431,16 @@ struct SettingsView: View {
             duplicateSessions.forEach { modelContext.delete($0) }
             totalRemoved += duplicateSessions.count
             
+            // Deduplicate exercises
+            let removedExercises = PersistenceController.shared.deduplicateExerciseDefinitions()
+            totalRemoved += removedExercises
+            
             try modelContext.save()
             
             if totalRemoved == 0 {
                 alertMessage = "No duplicates found"
             } else {
-                alertMessage = "Removed \(totalRemoved) duplicate(s): \(duplicateRuns.count) runs, \(duplicateWeights.count) weights, \(duplicateSessions.count) workouts"
+                alertMessage = "Removed \(totalRemoved) duplicate(s): \(duplicateRuns.count) runs, \(duplicateWeights.count) weights, \(duplicateSessions.count) workouts, \(removedExercises) exercises"
             }
             showAlert = true
         } catch {

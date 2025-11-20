@@ -22,79 +22,81 @@ struct TutorialView: View {
     @FocusState private var goalWeightFocused: Bool
 
     var body: some View {
-        VStack(spacing: 20) {
-            TabView(selection: $page) {
-                tutorialPage(
-                    title: "Welcome to Pace & Plates",
-                    icon: "sparkles",
-                    bullets: [
-                        "Your complete fitness companion for workouts, runs, and nutrition tracking",
-                        "Beautiful charts and insights with no account required",
-                        "Privacy-first with optional iCloud sync across devices"
-                    ]
-                ).tag(0)
+        NavigationStack {
+            VStack(spacing: 20) {
+                TabView(selection: $page) {
+                    tutorialPage(
+                        title: "Welcome to Pace & Plates",
+                        icon: "sparkles",
+                        bullets: [
+                            "Your complete fitness companion for workouts, runs, and nutrition tracking",
+                            "Beautiful charts and insights with no account required",
+                            "Privacy-first with optional iCloud sync across devices"
+                        ]
+                    ).tag(0)
 
-                tutorialPage(
-                    title: "Track Everything",
-                    icon: "chart.xyaxis.line",
-                    bullets: [
-                        "Log strength workouts with exercise templates",
-                        "GPS tracking for runs with pace-colored routes",
-                        "Track weight and nutrition goals",
-                        "AI-powered workout planning with Apple Intelligence",
-                        "View streaks and earn achievements"
-                    ]
-                ).tag(1)
+                    tutorialPage(
+                        title: "Track Everything",
+                        icon: "chart.xyaxis.line",
+                        bullets: [
+                            "Log strength workouts with exercise templates",
+                            "GPS tracking for runs with pace-colored routes",
+                            "Track weight and nutrition goals",
+                            "AI-powered workout planning with Apple Intelligence",
+                            "View streaks and earn achievements"
+                        ]
+                    ).tag(1)
 
-                tutorialPage(
-                    title: "Permissions",
-                    icon: "hand.raised.fill",
-                    bullets: [
-                        "Health access enables workout and run sync",
-                        "Location is used for GPS routes and weather",
-                        "Notifications for weekly weight reminders (optional)",
-                        "All data stays on your device unless you enable iCloud"
-                    ]
-                ).tag(2)
-                
-                // Profile Setup Page
-                profileSetupPage()
-                    .tag(3)
-            }
-            .tabViewStyle(.page(indexDisplayMode: .always))
-
-            HStack {
-                Button("Skip") { 
-                    didCompleteProfileSetup = true
-                    onFinish?()
+                    tutorialPage(
+                        title: "Permissions",
+                        icon: "hand.raised.fill",
+                        bullets: [
+                            "Health access enables workout and run sync",
+                            "Location is used for GPS routes and weather",
+                            "Notifications for weekly weight reminders (optional)",
+                            "All data stays on your device unless you enable iCloud"
+                        ]
+                    ).tag(2)
+                    
+                    // Profile Setup Page
+                    profileSetupPage()
+                        .tag(3)
                 }
-                .foregroundStyle(.secondary)
-                Spacer()
-                if page < 3 {
-                    Button("Next") { withAnimation { page += 1 } }
-                        .buttonStyle(.borderedProminent)
-                } else {
-                    Button("Get Started") {
+                .tabViewStyle(.page(indexDisplayMode: .always))
+
+                HStack {
+                    Button("Skip") { 
                         didCompleteProfileSetup = true
                         onFinish?()
                     }
-                    .buttonStyle(.borderedProminent)
+                    .foregroundStyle(.secondary)
+                    Spacer()
+                    if page < 3 {
+                        Button("Next") { withAnimation { page += 1 } }
+                            .buttonStyle(.borderedProminent)
+                    } else {
+                        Button("Get Started") {
+                            didCompleteProfileSetup = true
+                            onFinish?()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
                 }
             }
-        }
-        .padding()
-        .appBackground(AppTheme.gradientHome)
-        .foregroundColor(AppTheme.textColor)
-        .sheet(isPresented: $showHeightPicker) {
-            HeightPickerSheet(heightUnit: $heightUnit, heightValue: $heightValue)
-        }
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") {
-                    ageFocused = false
-                    goalWeightFocused = false
-                    dismissKeyboard()
+            .padding()
+            .appBackground(AppTheme.gradientHome)
+            .foregroundColor(AppTheme.textColor)
+            .sheet(isPresented: $showHeightPicker) {
+                HeightPickerSheet(heightUnit: $heightUnit, heightValue: $heightValue)
+            }
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        ageFocused = false
+                        goalWeightFocused = false
+                        dismissKeyboard()
+                    }
                 }
             }
         }
@@ -264,7 +266,7 @@ struct TutorialView: View {
                 .padding(.horizontal)
             }
         }
-        .scrollDismissesKeyboard(.immediately)
+        .scrollDismissesKeyboard(.interactively)
     }
 }
 

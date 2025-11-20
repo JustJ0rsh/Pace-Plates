@@ -8,8 +8,11 @@ final class WorkoutSession {
     var title: String = ""
     var notes: String?
     @Relationship(deleteRule: .nullify, inverse: \ExerciseLog.workoutSession) var exerciseLogs: [ExerciseLog]?
+    @Relationship(deleteRule: .nullify) var generatedTemplate: WorkoutTemplate?
     
-    init(id: UUID = UUID(), date: Date = Date(), notes: String? = nil, title: String? = nil) {
+    var shouldSaveAsTemplate: Bool = false
+    
+    init(id: UUID = UUID(), date: Date = Date(), notes: String? = nil, title: String? = nil, shouldSaveAsTemplate: Bool = false) {
         self.id = id
         self.date = date
         self.notes = notes
@@ -18,5 +21,6 @@ final class WorkoutSession {
         } else {
             self.title = "Gym Session"
         }
+        self.shouldSaveAsTemplate = shouldSaveAsTemplate
     }
 } 

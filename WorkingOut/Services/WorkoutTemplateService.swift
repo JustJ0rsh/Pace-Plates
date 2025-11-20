@@ -115,6 +115,108 @@ final class WorkoutTemplateService {
         #endif
     }
     
+    /// Creates a WorkoutTemplate from a completed WorkoutSession
+    /// - Parameters:
+    ///   - session: The workout session to template-ize
+    ///   - context: The ModelContext
+    /// - Returns: The created WorkoutTemplate
+    func createTemplateFromWorkout(session: WorkoutSession, context: ModelContext) -> WorkoutTemplate {
+        let template = WorkoutTemplate(
+            title: session.title.isEmpty ? "Custom Workout" : session.title,
+            notes: session.notes,
+            isBuiltIn: true, // Treat as built-in to show in the main list
+            experienceLevel: "Custom",
+            goal: "Custom",
+            difficulty: 3, // Default to Medium
+            estimatedDuration: nil,
+            equipment: [],
+            muscleGroups: [],
+            templateDescription: "Created from workout on \(session.date.formatted(date: .abbreviated, time: .omitted))"
+        )
+        
+        context.insert(template)
+        
+        let logs = session.exerciseLogs ?? []
+        // Group by exercise name
+        let groups = Dictionary(grouping: logs) { $0.exerciseName ?? "Exercise" }
+        
+        // Sort groups by the minimum exerciseOrder to preserve workout order
+        let sortedNames = groups.keys.sorted { name1, name2 in
+            let order1 = groups[name1]?.map { $0.exerciseOrder }.min() ?? Int.min
+            let order2 = groups[name2]?.map { $0.exerciseOrder }.min() ?? Int.min
+            return order1 < order2 // Lower order first
+        }
+        
+        for (index, name) in sortedNames.enumerated() {
+            guard let exerciseLogs = groups[name], let firstLog = exerciseLogs.first else { continue }
+            
+            let sets = exerciseLogs.count
+            
+            let templateExercise = TemplateExercise(
+                name: name,
+                order: index,
+                sets: sets,
+                reps: firstLog.reps,
+                suggestedWeight: firstLog.weight,
+                weightUnit: firstLog.weightUnit,
+                notes: firstLog.notes
+            )
+            
+            templateExercise.template = template
+            context.insert(templateExercise)
+        }
+        
+        try? context.save()
+        print("✅ Created custom template '\(template.title)'")
+        return template
+    }
+    
+    /// Updates an existing WorkoutTemplate from a WorkoutSession
+    func updateTemplate(template: WorkoutTemplate, from session: WorkoutSession, context: ModelContext) {
+        template.title = session.title.isEmpty ? "Custom Workout" : session.title
+        template.notes = session.notes
+        template.templateDescription = "Updated from workout on \(session.date.formatted(date: .abbreviated, time: .omitted))"
+        
+        // Clear existing exercises
+        if let existing = template.exercises {
+            for ex in existing {
+                context.delete(ex)
+            }
+        }
+        
+        // Re-add exercises from session
+        let logs = session.exerciseLogs ?? []
+        let groups = Dictionary(grouping: logs) { $0.exerciseName ?? "Exercise" }
+        
+        let sortedNames = groups.keys.sorted { name1, name2 in
+            let order1 = groups[name1]?.map { $0.exerciseOrder }.min() ?? Int.min
+            let order2 = groups[name2]?.map { $0.exerciseOrder }.min() ?? Int.min
+            return order1 < order2
+        }
+        
+        for (index, name) in sortedNames.enumerated() {
+            guard let exerciseLogs = groups[name], let firstLog = exerciseLogs.first else { continue }
+            
+            let sets = exerciseLogs.count
+            
+            let templateExercise = TemplateExercise(
+                name: name,
+                order: index,
+                sets: sets,
+                reps: firstLog.reps,
+                suggestedWeight: firstLog.weight,
+                weightUnit: firstLog.weightUnit,
+                notes: firstLog.notes
+            )
+            
+            templateExercise.template = template
+            context.insert(templateExercise)
+        }
+        
+        try? context.save()
+        print("✅ Updated custom template '\(template.title)'")
+    }
+    
     /// Creates a WorkoutSession from a template
     /// - Parameters:
     ///   - template: The template to create a workout from

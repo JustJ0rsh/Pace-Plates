@@ -34,47 +34,26 @@ struct HomeView: View {
     // MARK: Derived Data
 
     // Sample computed properties for chart data (replace with actual logic)
-    private var weeklyRunData: [(date: Date, distance: Double)] {
-        // TODO: Implement logic to group runs by week and sum distance
-        // Example placeholder:
+    // Optimized: Only process runs from the last 7 days
+    private var dailyRunTotalsLast7: [(date: Date, distance: Double)] {
         let calendar = Calendar.current
-        return Dictionary(grouping: runningSessions) { session in
-            calendar.startOfWeek(for: session.date)
-        }.mapValues { sessionsInWeek in
-            sessionsInWeek.reduce(0) { $0 + $1.distance(in: .kilometers) } // Sum distance in km
-        }.map { (date: $0.key, distance: $0.value) }
-        .sorted { $0.date < $1.date }
-    }
-    
-    // Daily total distance series for runs (sum per day)
-    private var dailyRunTotals: [(date: Date, distance: Double)] {
-        let calendar = Calendar.current
-        let grouped = Dictionary(grouping: runningSessions) { session in
+        let startOfWindow = last7DaysDomain.lowerBound
+        
+        // Since runningSessions is sorted by date descending, we can stop once we go past the window
+        let relevantSessions = runningSessions.prefix { $0.date >= startOfWindow }
+        
+        let grouped = Dictionary(grouping: relevantSessions) { session in
             calendar.startOfDay(for: session.date)
         }
+        
         let summed: [(date: Date, distance: Double)] = grouped.map { (key: Date, value: [RunningSession]) in
             let totalKm = value.reduce(0.0) { partial, session in
                 partial + session.distance(in: .kilometers)
             }
             return (date: key, distance: totalKm)
         }
+        
         return summed.sorted { $0.date < $1.date }
-    }
-    
-    private var dailyRunTotalsLast7: [(date: Date, distance: Double)] {
-        let domain = last7DaysDomain
-        return dailyRunTotals.filter { $0.date >= domain.lowerBound && $0.date < domain.upperBound }
-    }
-    
-    private var weeklyWorkoutCount: [(date: Date, count: Int)] {
-        // TODO: Implement logic to group workouts by week and count
-        // Example placeholder:
-        let calendar = Calendar.current
-        return Dictionary(grouping: workoutSessions) { session in
-            calendar.startOfWeek(for: session.date)
-        }.mapValues { $0.count }
-        .map { (date: $0.key, count: $0.value) }
-        .sorted { $0.date < $1.date }
     }
     
     // Convert weights to a unified display unit
@@ -86,27 +65,25 @@ struct HomeView: View {
     }
 
     // Build a sorted series for the chart in the preferred unit
-    private var weightSeries: [(date: Date, weight: Double)] {
-        weightEntries
-            .map { (date: $0.date, weight: convertWeight($0.weight, from: $0.weightUnit, to: preferredWeightUnit)) }
-            .sorted { $0.date < $1.date }
-    }
-
-    private var weightSeriesLast7: [(date: Date, weight: Double)] {
-        let domain = last7DaysDomain
-        return weightSeries.filter { $0.date >= domain.lowerBound && $0.date < domain.upperBound }
-    }
-
-    // One dot per day (take the latest entry for that day) for the last 7 days
+    // Optimized: Only process weights from the last 7 days
     private var weightDailySeriesLast7: [(date: Date, weight: Double)] {
         let calendar = Calendar.current
-        let grouped = Dictionary(grouping: weightSeriesLast7) { item in
+        let startOfWindow = last7DaysDomain.lowerBound
+        
+        // weightEntries is sorted by date descending
+        let relevantEntries = weightEntries.prefix { $0.date >= startOfWindow }
+        
+        let grouped = Dictionary(grouping: relevantEntries) { item in
             calendar.startOfDay(for: item.date)
         }
-        let perDayLatest: [(date: Date, weight: Double)] = grouped.map { day, items in
-            let latest = items.max(by: { $0.date < $1.date })!
-            return (date: day, weight: latest.weight)
+        
+        let perDayLatest: [(date: Date, weight: Double)] = grouped.compactMap { day, items in
+            // Items are already sorted descending, so the first one is the latest for that day
+            guard let latest = items.first else { return nil }
+            let converted = convertWeight(latest.weight, from: latest.weightUnit, to: preferredWeightUnit)
+            return (date: day, weight: converted)
         }.sorted { $0.date < $1.date }
+        
         return perDayLatest
     }
     
@@ -124,9 +101,15 @@ struct HomeView: View {
     }
     
     // Total lifted volume per day (sum of reps * weight per set), grouped by day
-    private var workoutVolumePerDay: [(date: Date, volume: Double)] {
+    // Optimized: Only process workouts from the last 7 days
+    private var workoutVolumePerDayLast7: [(date: Date, volume: Double)] {
         let calendar = Calendar.current
-        let perSession: [(date: Date, volume: Double)] = workoutSessions.map { session in
+        let startOfWindow = last7DaysDomain.lowerBound
+        
+        // workoutSessions is sorted by date descending
+        let relevantSessions = workoutSessions.prefix { $0.date >= startOfWindow }
+        
+        let perSession: [(date: Date, volume: Double)] = relevantSessions.map { session in
             let total = (session.exerciseLogs ?? []).reduce(0.0) { acc, log in
                 let unit = log.weightUnit
                 let weightInPreferred = convertWeight(log.weight, from: unit, to: preferredWeightUnit)
@@ -134,18 +117,16 @@ struct HomeView: View {
             }
             return (date: session.date, volume: total)
         }
+        
         let grouped = Dictionary(grouping: perSession) { item in
             calendar.startOfDay(for: item.date)
         }
+        
         let summed: [(date: Date, volume: Double)] = grouped.map { (day, items) in
             (date: day, volume: items.reduce(0) { $0 + $1.volume })
         }
+        
         return summed.sorted { $0.date < $1.date }
-    }
-    
-    private var workoutVolumePerDayLast7: [(date: Date, volume: Double)] {
-        let domain = last7DaysDomain
-        return workoutVolumePerDay.filter { $0.date >= domain.lowerBound && $0.date < domain.upperBound }
     }
 
     // MARK: Formatting & Utilities
@@ -425,6 +406,21 @@ struct HomeView: View {
                             .foregroundStyle(.secondary)
                         Text(lastRun.date.formatted(date: .abbreviated, time: .shortened))
                             .font(.subheadline)
+                    }
+                }
+            } else {
+                // Placeholder to maintain consistent height
+                Divider().hidden()
+                HStack(spacing: 10) {
+                    Image(systemName: "figure.run")
+                        .hidden()
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Last Run")
+                            .font(.caption)
+                            .hidden()
+                        Text("Placeholder")
+                            .font(.subheadline)
+                            .hidden()
                     }
                 }
             }

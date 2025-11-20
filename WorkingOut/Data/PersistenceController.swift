@@ -109,34 +109,60 @@ class PersistenceController {
     // Remove duplicated exercise definitions (same name + muscle group),
     // preferring built-ins over user-defined. Reassign any logs pointing
     // at duplicates to the kept definition before deletion.
-    func deduplicateExerciseDefinitions() {
+    // Remove duplicated exercise definitions (same name, ignoring case/whitespace),
+    // preferring built-ins over user-defined. Reassign any logs pointing
+    // at duplicates to the kept definition before deletion.
+    // Returns the number of duplicates removed.
+    @discardableResult
+    func deduplicateExerciseDefinitions() -> Int {
         let context = container.mainContext
-        guard let defs = try? context.fetch(FetchDescriptor<ExerciseDefinition>()) else { return }
+        guard let defs = try? context.fetch(FetchDescriptor<ExerciseDefinition>()) else { return 0 }
+        
+        // Group by normalized name only (ignoring muscle group for matching purposes to catch "Bench Press" (Chest) vs "Bench Press" (Push))
         var groups: [String: [ExerciseDefinition]] = [:]
         for d in defs {
-            let key = (d.name.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)) + "||" + d.muscleGroup.lowercased()
+            let key = d.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             groups[key, default: []].append(d)
         }
+        
+        var removedCount = 0
         var changed = false
+        
         for (_, items) in groups where items.count > 1 {
-            // Keep built-in if present, otherwise first
-            let keeper: ExerciseDefinition = items.first(where: { !$0.isUserDefined }) ?? items.first!
+            // Determine keeper:
+            // 1. Built-in (isUserDefined == false)
+            // 2. If multiple built-ins (unlikely) or all user-defined, pick the one with the most logs (if we could check easily) or just the oldest created (by ID sorting or similar stability).
+            // For now: Prefer built-in, then first one found.
+            
+            let builtIn = items.first(where: { !$0.isUserDefined })
+            let keeper = builtIn ?? items.first!
+            
             let toDelete = items.filter { $0.id != keeper.id }
             if toDelete.isEmpty { continue }
+            
             // Repoint logs
             for dup in toDelete {
                 if let dupId = dup.id as UUID? {
                     let pred = #Predicate<ExerciseLog> { $0.exerciseDefinition?.id == dupId }
                     let fd = FetchDescriptor<ExerciseLog>(predicate: pred)
                     if let logs = try? context.fetch(fd) {
-                        for log in logs { log.exerciseDefinition = keeper }
+                        for log in logs { 
+                            log.exerciseDefinition = keeper 
+                            // If the log had the duplicate's name snapshot, update it to the keeper's name
+                            if (log.exerciseName ?? "").lowercased() == dup.name.lowercased() {
+                                log.exerciseName = keeper.name
+                            }
+                        }
                     }
                 }
                 context.delete(dup)
+                removedCount += 1
                 changed = true
             }
         }
+        
         if changed { try? context.save() }
+        return removedCount
     }
 
     /// Unify synonymous exercise names to a single canonical definition
