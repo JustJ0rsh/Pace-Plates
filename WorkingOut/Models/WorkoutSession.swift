@@ -11,8 +11,9 @@ final class WorkoutSession {
     @Relationship(deleteRule: .nullify) var generatedTemplate: WorkoutTemplate?
     
     var shouldSaveAsTemplate: Bool = false
+    var sourceTemplateID: UUID? // ID of the template this session was created from
     
-    init(id: UUID = UUID(), date: Date = Date(), notes: String? = nil, title: String? = nil, shouldSaveAsTemplate: Bool = false) {
+    init(id: UUID = UUID(), date: Date = Date(), notes: String? = nil, title: String? = nil, shouldSaveAsTemplate: Bool = false, sourceTemplateID: UUID? = nil) {
         self.id = id
         self.date = date
         self.notes = notes
@@ -22,5 +23,6 @@ final class WorkoutSession {
             self.title = "Gym Session"
         }
         self.shouldSaveAsTemplate = shouldSaveAsTemplate
+        self.sourceTemplateID = sourceTemplateID
     }
 } 

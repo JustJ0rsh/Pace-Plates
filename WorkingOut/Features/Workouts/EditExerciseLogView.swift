@@ -242,8 +242,11 @@ struct EditExerciseLogView: View {
             }
             .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
-            .appBackground(AppTheme.gradientWorkouts)
-            .ignoresSafeArea(.keyboard)
+            .background {
+                AppTheme.gradientWorkouts
+                    .ignoresSafeArea()
+            }
+            // Removed .ignoresSafeArea(.keyboard) to allow view to resize
             .scrollContentBackground(.hidden)
             .scrollDismissesKeyboard(.immediately)
             .gesture(DragGesture().onChanged { _ in dismissKeyboard() })

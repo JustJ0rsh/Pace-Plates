@@ -21,6 +21,7 @@ struct ContentView: View {
     @AppStorage("distanceUnit") private var distanceUnit: String = "mi"
     @AppStorage("heightUnit") private var heightUnit: String = "in"
     @State private var aiAvailability: WorkoutPlanGenerator.Availability = .unknown
+    @State private var importedWorkout: SharedWorkoutSession?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -143,6 +144,18 @@ struct ContentView: View {
                     }
                 }
             })
+        }
+
+        .sheet(item: $importedWorkout) { session in
+            WorkoutImportView(sharedSession: session)
+        }
+        .onOpenURL { url in
+            if let session = WorkoutSharingService.shared.parseWorkoutFile(url: url) {
+                importedWorkout = session
+            } else if let session = WorkoutSharingService.shared.parseShareURL(url) {
+                // Fallback for legacy links if any
+                importedWorkout = session
+            }
         }
     }
 }

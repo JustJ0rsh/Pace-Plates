@@ -21,6 +21,7 @@ struct WorkoutSessionDetailView: View {
     @State private var showingAddExercise: Bool = false
     @State private var showingDatePicker: Bool = false
     @FocusState private var notesFocused: Bool
+    @FocusState private var titleFocused: Bool
     @State private var didEditTitle: Bool = false
     // Removed local saveAsTemplate state in favor of session property
     @AppStorage("weightUnit") private var weightUnit: String = "lbs"
@@ -72,11 +73,21 @@ struct WorkoutSessionDetailView: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                         TextField("Workout Title", text: $titleText)
-                            .padding(10)
+                            .padding(14)
                             .background(AppTheme.secondaryBackgroundColor)
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                             .foregroundColor(AppTheme.textColor)
                             .tint(AppTheme.accentColor)
+                            .focused($titleFocused)
+                            .onTapGesture { selectAllText() }
+                            .onChange(of: titleFocused) { _, newValue in
+                                if newValue {
+                                    // Slight delay to ensure focus is fully established
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                        selectAllText()
+                                    }
+                                }
+                            }
                             .onChange(of: titleText) { _, newValue in
                                 saveWorkItem?.cancel()
                                 let work = DispatchWorkItem { [session, modelContext] in
@@ -193,6 +204,19 @@ struct WorkoutSessionDetailView: View {
                                     LazyVStack(spacing: 6) {
                                         ForEach(logs) { log in
                                             HStack {
+                                                if session.sourceTemplateID != nil {
+                                                    Button {
+                                                        log.isCompleted.toggle()
+                                                        try? modelContext.save()
+                                                    } label: {
+                                                        Image(systemName: log.isCompleted ? "checkmark.circle.fill" : "circle")
+                                                            .font(.title2)
+                                                            .foregroundStyle(log.isCompleted ? .green : .secondary)
+                                                    }
+                                                    .buttonStyle(.plain)
+                                                    .padding(.trailing, 4)
+                                                }
+                                                
                                                 Button {
                                                     editingLog = log
                                                     editingLogIsNew = false
@@ -286,8 +310,12 @@ struct WorkoutSessionDetailView: View {
             .presentationDetents([.medium])
             .presentationBackground(AppTheme.backgroundColor)
         }
-        .appBackground(AppTheme.gradientWorkouts)
-        .ignoresSafeArea(.keyboard) // Fill behind the keyboard to avoid dark gap
+
+        .background {
+            AppTheme.gradientWorkouts
+                .ignoresSafeArea()
+        }
+        // Removed .ignoresSafeArea(.keyboard) to allow view to resize
         .scrollDismissesKeyboard(.immediately)
         .gesture(DragGesture().onChanged { _ in dismissKeyboard() })
         .toolbar(.hidden, for: .tabBar)
@@ -296,15 +324,29 @@ struct WorkoutSessionDetailView: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
         .scrollContentBackground(.hidden)
         .foregroundColor(AppTheme.textColor)
-        .background {
-            AppTheme.backgroundGradient
-                .ignoresSafeArea(.keyboard) // Ensure gradient extends under keyboard
-        }
         .navigationTitle(titleText.isEmpty ? "Workout Details" : titleText)
         .toolbarBackground(.visible, for: .navigationBar)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            // Toolbar items removed as requested
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Menu {
+                    if let fileURL = WorkoutSharingService.shared.exportWorkout(session: session) {
+                        ShareLink(item: fileURL) {
+                            Label("Share Workout File", systemImage: "square.and.arrow.up")
+                        }
+                    }
+                    
+                    ShareLink(item: generateShareText(includeData: true)) {
+                        Label("Share Text Summary", systemImage: "doc.text")
+                    }
+                    
+                    ShareLink(item: generateShareText(includeData: false)) {
+                        Label("Share Structure Only", systemImage: "list.bullet")
+                    }
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                }
+            }
         }
         .sheet(isPresented: $showingAddExercise) {
             AddExerciseView(workoutSession: session, onAdd: { log in
@@ -480,6 +522,75 @@ struct WorkoutSessionDetailView: View {
             }
             try? modelContext.save()
         }
+    }
+
+    private func generateShareText(includeData: Bool) -> String {
+        var text = ""
+        
+        // Header
+        let title = session.title.isEmpty ? "Gym Session" : session.title
+        text += "\(title)\n"
+        text += "\(session.date.formatted(date: .long, time: .shortened))\n"
+        
+        if let notes = session.notes, !notes.isEmpty {
+            text += "\nNotes: \(notes)\n"
+        }
+        
+        text += "\n"
+        
+        // Exercises
+        let logs = session.exerciseLogs ?? []
+        let groups = Dictionary(grouping: logs) { $0.exerciseName ?? "Exercise" }
+        
+        // Sort by exerciseOrder
+        let sortedNames = groups.keys.sorted { name1, name2 in
+            let order1 = groups[name1]?.map { $0.exerciseOrder }.min() ?? Int.min
+            let order2 = groups[name2]?.map { $0.exerciseOrder }.min() ?? Int.min
+            // Same sort logic as view: higher order first (reversed in view logic? wait, let's check view logic)
+            // View logic: return order1 > order2. So higher order is first.
+            if order1 != order2 {
+                return order1 > order2
+            } else {
+                return name1 < name2
+            }
+        }
+        
+        for name in sortedNames {
+            text += "• \(name)\n"
+            let exerciseLogs = (groups[name] ?? []).sorted { $0.setNumber < $1.setNumber }
+            
+            for log in exerciseLogs {
+                text += "  Set \(log.setNumber): "
+                
+                if includeData {
+                    if log.isCardio {
+                        var parts: [String] = []
+                        if let duration = log.formattedDuration { parts.append(duration) }
+                        if let distance = log.distance, let unit = log.distanceUnit {
+                            parts.append("\(String(format: "%.2f", distance)) \(unit)")
+                        }
+                        text += parts.joined(separator: " | ")
+                    } else {
+                        text += "\(log.reps) reps @ \(String(format: "%.1f", log.weight)) \(log.weightUnit)"
+                    }
+                } else {
+                    // Structure only
+                    text += "____"
+                }
+                text += "\n"
+            }
+            text += "\n"
+        }
+        
+        return text
+        }
+    
+    private func selectAllText() {
+        #if os(iOS)
+        DispatchQueue.main.async {
+            UIApplication.shared.sendAction(#selector(UIResponder.selectAll(_:)), to: nil, from: nil, for: nil)
+        }
+        #endif
     }
 }
 

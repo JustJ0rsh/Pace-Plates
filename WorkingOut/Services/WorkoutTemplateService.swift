@@ -226,7 +226,8 @@ final class WorkoutTemplateService {
         let session = WorkoutSession(
             date: Date(),
             notes: template.notes,
-            title: template.title
+            title: template.title,
+            sourceTemplateID: template.id
         )
         
         context.insert(session)

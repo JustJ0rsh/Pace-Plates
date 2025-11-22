@@ -25,6 +25,8 @@ final class ExerciseLog {
     var exerciseName: String?
     var exerciseType: String? = "strength"  // "strength" or "cardio"
     
+    var isCompleted: Bool = false // Track if the set was completed
+    
     @Relationship(deleteRule: .nullify) var exerciseDefinition: ExerciseDefinition?
     @Relationship(deleteRule: .nullify) var workoutSession: WorkoutSession?
     
@@ -41,7 +43,8 @@ final class ExerciseLog {
          distanceUnit: String? = nil,
          caloriesBurned: Int? = nil,
          avgHeartRate: Int? = nil,
-         notes: String? = nil) {
+         notes: String? = nil,
+         isCompleted: Bool = false) {
         self.id = id
         self.reps = reps
         self.weight = weight
@@ -56,6 +59,7 @@ final class ExerciseLog {
         self.caloriesBurned = caloriesBurned
         self.avgHeartRate = avgHeartRate
         self.notes = notes
+        self.isCompleted = isCompleted
     }
     
     // Helper computed properties
