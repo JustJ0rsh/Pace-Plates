@@ -237,6 +237,142 @@ final class HealthKitManager: ObservableObject {
         }
     }
 
+    // MARK: - Workout Metrics
+    
+    /// Fetch average heart rate for a workout
+    func averageHeartRate(for workout: HKWorkout) async throws -> Double? {
+        guard let heartRateType = HKQuantityType.quantityType(forIdentifier: .heartRate) else { return nil }
+        let predicate = HKQuery.predicateForObjects(from: workout)
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKStatisticsQuery(quantityType: heartRateType, quantitySamplePredicate: predicate, options: .discreteAverage) { _, stats, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                let value = stats?.averageQuantity()?.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
+                continuation.resume(returning: value)
+            }
+            self.healthStore.execute(query)
+        }
+    }
+    
+    /// Fetch maximum heart rate for a workout
+    func maxHeartRate(for workout: HKWorkout) async throws -> Double? {
+        guard let heartRateType = HKQuantityType.quantityType(forIdentifier: .heartRate) else { return nil }
+        let predicate = HKQuery.predicateForObjects(from: workout)
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKStatisticsQuery(quantityType: heartRateType, quantitySamplePredicate: predicate, options: .discreteMax) { _, stats, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                let value = stats?.maximumQuantity()?.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
+                continuation.resume(returning: value)
+            }
+            self.healthStore.execute(query)
+        }
+    }
+    
+    /// Fetch minimum heart rate for a workout
+    func minHeartRate(for workout: HKWorkout) async throws -> Double? {
+        guard let heartRateType = HKQuantityType.quantityType(forIdentifier: .heartRate) else { return nil }
+        let predicate = HKQuery.predicateForObjects(from: workout)
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKStatisticsQuery(quantityType: heartRateType, quantitySamplePredicate: predicate, options: .discreteMin) { _, stats, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                let value = stats?.minimumQuantity()?.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
+                continuation.resume(returning: value)
+            }
+            self.healthStore.execute(query)
+        }
+    }
+    
+    /// Fetch average cadence (running or walking) for a workout
+    func averageCadence(for workout: HKWorkout) async throws -> Double? {
+        // Running cadence is available on Apple Watch Series 6+ and some third-party devices
+        if #available(iOS 16.0, *), let cadenceType = HKQuantityType.quantityType(forIdentifier: .runningStrideLength) {
+            let predicate = HKQuery.predicateForObjects(from: workout)
+            
+            return try await withCheckedThrowingContinuation { continuation in
+                let query = HKStatisticsQuery(quantityType: cadenceType, quantitySamplePredicate: predicate, options: .discreteAverage) { _, stats, error in
+                    if let error = error {
+                        continuation.resume(throwing: error)
+                        return
+                    }
+                    // Convert stride length to cadence if possible
+                    // Cadence = speed / stride length * 60
+                    let value = stats?.averageQuantity()?.doubleValue(for: .meter())
+                    continuation.resume(returning: value)
+                }
+                self.healthStore.execute(query)
+            }
+        }
+        return nil
+    }
+    
+    /// Fetch maximum cadence for a workout
+    func maxCadence(for workout: HKWorkout) async throws -> Double? {
+        if #available(iOS 16.0, *), let cadenceType = HKQuantityType.quantityType(forIdentifier: .runningStrideLength) {
+            let predicate = HKQuery.predicateForObjects(from: workout)
+            
+            return try await withCheckedThrowingContinuation { continuation in
+                let query = HKStatisticsQuery(quantityType: cadenceType, quantitySamplePredicate: predicate, options: .discreteMax) { _, stats, error in
+                    if let error = error {
+                        continuation.resume(throwing: error)
+                        return
+                    }
+                    let value = stats?.maximumQuantity()?.doubleValue(for: .meter())
+                    continuation.resume(returning: value)
+                }
+                self.healthStore.execute(query)
+            }
+        }
+        return nil
+    }
+    
+    /// Fetch average running power for a workout
+    func averagePower(for workout: HKWorkout) async throws -> Double? {
+        // Running power requires compatible devices (Stryd, some Garmin watches, etc.)
+        guard let powerType = HKQuantityType.quantityType(forIdentifier: .runningPower) else { return nil }
+        let predicate = HKQuery.predicateForObjects(from: workout)
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKStatisticsQuery(quantityType: powerType, quantitySamplePredicate: predicate, options: .discreteAverage) { _, stats, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                let value = stats?.averageQuantity()?.doubleValue(for: .watt())
+                continuation.resume(returning: value)
+            }
+            self.healthStore.execute(query)
+        }
+    }
+    
+    /// Fetch maximum running power for a workout
+    func maxPower(for workout: HKWorkout) async throws -> Double? {
+        guard let powerType = HKQuantityType.quantityType(forIdentifier: .runningPower) else { return nil }
+        let predicate = HKQuery.predicateForObjects(from: workout)
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKStatisticsQuery(quantityType: powerType, quantitySamplePredicate: predicate, options: .discreteMax) { _, stats, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                let value = stats?.maximumQuantity()?.doubleValue(for: .watt())
+                continuation.resume(returning: value)
+            }
+            self.healthStore.execute(query)
+        }
+    }
+    
     // MARK: - Delete matching run
     func deleteRun(uuidString: String?, endDate: Date, duration: TimeInterval, distanceMeters: Double? = nil) async throws {
         let runs = try await fetchRecentRuns(limit: 50)
@@ -306,9 +442,14 @@ final class HealthKitManager: ObservableObject {
     func lastNightSleepDuration() async throws -> TimeInterval {
         guard let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else { return 0 }
         let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
-        let lastNightStart = cal.date(byAdding: .day, value: -1, to: today)!
-        let pred = HKQuery.predicateForSamples(withStart: lastNightStart, end: today, options: .strictEndDate)
+        let now = Date()
+        // Define "Last Night" as the sleep session ending today.
+        // We look back to yesterday 6 PM to cover the start of sleep, and end at current time.
+        // This handles sleep crossing midnight (e.g. 11 PM - 7 AM).
+        let startOfDay = cal.startOfDay(for: now)
+        guard let yesterday6PM = cal.date(byAdding: .hour, value: -6, to: startOfDay) else { return 0 }
+        
+        let pred = HKQuery.predicateForSamples(withStart: yesterday6PM, end: now, options: .strictEndDate)
         let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
 
         return try await withCheckedThrowingContinuation { cont in

@@ -204,6 +204,14 @@ struct WorkoutLogView: View {
                                             }
                                         }
                                     }
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                        Button(role: .destructive) {
+                                            modelContext.delete(session)
+                                            try? modelContext.save()
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
+                                    }
                                     Divider().opacity(0.2)
                                 }
                                 .onDelete(perform: deleteWorkoutSessions)

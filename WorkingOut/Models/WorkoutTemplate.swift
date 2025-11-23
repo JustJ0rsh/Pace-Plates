@@ -9,6 +9,7 @@ final class WorkoutTemplate {
     var createdDate: Date = Date()
     var sourceAIConversationId: UUID?
     @Relationship(deleteRule: .cascade, inverse: \TemplateExercise.template) var exercises: [TemplateExercise]?
+    @Relationship(deleteRule: .nullify, inverse: \WorkoutSession.generatedTemplate) var sourceSession: WorkoutSession?
     
     // Built-in template properties
     var isBuiltIn: Bool = false

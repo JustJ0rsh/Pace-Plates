@@ -163,6 +163,14 @@ struct WeightLogView: View {
                                     }
                                     .foregroundColor(AppTheme.textColor)
                                     .padding(.vertical, 4)
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                        Button(role: .destructive) {
+                                            modelContext.delete(entry)
+                                            try? modelContext.save()
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
+                                    }
                                     Divider().opacity(0.2)
                                 }
                             }

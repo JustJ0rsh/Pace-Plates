@@ -238,25 +238,106 @@ final class WorkoutTemplateService {
         }
         
         for templateExercise in exercises {
-            // Create all sets for each exercise (not just one!)
-            for setNumber in 1...templateExercise.sets {
-                let log = ExerciseLog(
-                    reps: templateExercise.reps,
-                    weight: templateExercise.suggestedWeight ?? 0,
-                    weightUnit: templateExercise.weightUnit,
-                    setNumber: setNumber,
-                    exerciseName: templateExercise.name,
-                    exerciseOrder: templateExercise.order
-                )
-                
-                log.workoutSession = session
-                context.insert(log)
+            // Check if notes contain detailed per-set data (from imported workouts)
+            let perSetData = parsePerSetData(from: templateExercise.notes)
+            
+            // Detect exercise type (cardio if notes contain duration/distance data)
+            let isCardio = perSetData.first?.durationSeconds != nil || perSetData.first?.distance != nil
+            
+            if !perSetData.isEmpty {
+                // Use the detailed per-set data
+                for (index, setData) in perSetData.enumerated() {
+                    let log = ExerciseLog(
+                        reps: setData.reps,
+                        weight: setData.weight,
+                        weightUnit: setData.weightUnit,
+                        setNumber: index + 1,
+                        exerciseName: templateExercise.name,
+                        exerciseOrder: templateExercise.order,
+                        exerciseType: isCardio ? "cardio" : "strength",
+                        durationSeconds: setData.durationSeconds,
+                        distance: setData.distance,
+                        distanceUnit: setData.distanceUnit,
+                        notes: setData.notes
+                    )
+                    
+                    log.workoutSession = session
+                    context.insert(log)
+                }
+            } else {
+                // Use the template's suggested values (standard template behavior)
+                for setNumber in 1...templateExercise.sets {
+                    let log = ExerciseLog(
+                        reps: templateExercise.reps,
+                        weight: templateExercise.suggestedWeight ?? 0,
+                        weightUnit: templateExercise.weightUnit,
+                        setNumber: setNumber,
+                        exerciseName: templateExercise.name,
+                        exerciseOrder: templateExercise.order
+                    )
+                    
+                    log.workoutSession = session
+                    context.insert(log)
+                }
             }
         }
         
         try? context.save()
         print("✅ Created workout session from template '\(template.title)'")
         return session
+    }
+    
+    /// Parses per-set data from notes string
+    /// Format: "Set 1: 34 reps @ 110.0 lbs\nSet 2: 20 reps @ 160.0 lbs"
+    private func parsePerSetData(from notes: String?) -> [(reps: Int, weight: Double, weightUnit: String, durationSeconds: Int?, distance: Double?, distanceUnit: String?, notes: String?)] {
+        guard let notes = notes, !notes.isEmpty else { return [] }
+        
+        var result: [(Int, Double, String, Int?, Double?, String?, String?)] = []
+        let lines = notes.components(separatedBy: .newlines)
+        
+        for line in lines {
+            // Parse strength format: "Set 1: 34 reps @ 110.0 lbs"
+            if let match = try? NSRegularExpression(pattern: "Set\\s+(\\d+):\\s+(\\d+)\\s+reps\\s+@\\s+([0-9.]+)\\s+(lbs|kg)", options: [])
+                .firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) {
+                
+                if let repsRange = Range(match.range(at: 2), in: line),
+                   let weightRange = Range(match.range(at: 3), in: line),
+                   let unitRange = Range(match.range(at: 4), in: line) {
+                    
+                    let reps = Int(String(line[repsRange])) ?? 0
+                    let weight = Double(String(line[weightRange])) ?? 0
+                    let unit = String(line[unitRange])
+                    
+                    result.append((reps, weight, unit, nil, nil, nil, nil))
+                }
+            }
+            // Parse cardio format: "Set 1: 30:00 5.0 mi" (duration and distance)
+            else if let match = try? NSRegularExpression(pattern: "Set\\s+(\\d+):\\s+(\\d+):(\\d+)(?:\\s+([0-9.]+)\\s+(mi|km))?", options: [])
+                .firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) {
+                
+                if let minRange = Range(match.range(at: 2), in: line),
+                   let secRange = Range(match.range(at: 3), in: line) {
+                    
+                    let minutes = Int(String(line[minRange])) ?? 0
+                    let seconds = Int(String(line[secRange])) ?? 0
+                    let totalSeconds = minutes * 60 + seconds
+                    
+                    var distance: Double? = nil
+                    var distanceUnit: String? = nil
+                    
+                    if match.numberOfRanges >= 6,
+                       let distRange = Range(match.range(at: 4), in: line),
+                       let unitRange = Range(match.range(at: 5), in: line) {
+                        distance = Double(String(line[distRange]))
+                        distanceUnit = String(line[unitRange])
+                    }
+                    
+                    result.append((0, 0, "lbs", totalSeconds, distance, distanceUnit, nil))
+                }
+            }
+        }
+        
+        return result
     }
     
     /// Gets all available workout days from an AI conversation's plan

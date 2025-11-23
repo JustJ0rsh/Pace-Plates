@@ -32,6 +32,45 @@ struct SharedExerciseSet: Codable, Identifiable {
     var notes: String?
 }
 
+import UniformTypeIdentifiers
+import CoreTransferable
+
+extension UTType {
+    static var paceAndPlatesWorkout: UTType {
+        UTType(exportedAs: "com.justj0rsh.paceandplates.workout", conformingTo: .json)
+    }
+}
+
+extension SharedWorkoutSession: Transferable {
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(contentType: .paceAndPlatesWorkout) { session in
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .prettyPrinted
+            return try encoder.encode(session)
+        } importing: { data in
+            try JSONDecoder().decode(SharedWorkoutSession.self, from: data)
+        }
+        
+        FileRepresentation(contentType: .paceAndPlatesWorkout) { session in
+            let tempDir = FileManager.default.temporaryDirectory
+            // Sanitize title for filename
+            let safeTitle = session.title.components(separatedBy: .init(charactersIn: "/\\?%*|\"<>:")).joined(separator: "_")
+            let fileName = "\(safeTitle.isEmpty ? "Workout" : safeTitle).ppworkout"
+            let fileURL = tempDir.appendingPathComponent(fileName)
+            
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .prettyPrinted
+            let data = try encoder.encode(session)
+            try data.write(to: fileURL)
+            
+            return SentTransferredFile(fileURL)
+        } importing: { received in
+            let data = try Data(contentsOf: received.file)
+            return try JSONDecoder().decode(SharedWorkoutSession.self, from: data)
+        }
+    }
+}
+
 // MARK: - Service
 
 class WorkoutSharingService {
@@ -56,7 +95,7 @@ class WorkoutSharingService {
             
             // Create a temporary file
             let tempDir = FileManager.default.temporaryDirectory
-            let fileName = "\(session.title.isEmpty ? "Workout" : session.title).workout"
+            let fileName = "\(session.title.isEmpty ? "Workout" : session.title).ppworkout"
             let fileURL = tempDir.appendingPathComponent(fileName)
             
             try data.write(to: fileURL)
@@ -145,7 +184,9 @@ class WorkoutSharingService {
     
     // MARK: - Conversion Helpers
     
-    private func convertToShared(_ session: WorkoutSession) -> SharedWorkoutSession {
+    // MARK: - Conversion Helpers
+    
+    func convertToShared(_ session: WorkoutSession) -> SharedWorkoutSession {
         let logs = session.exerciseLogs ?? []
         let groups = Dictionary(grouping: logs) { $0.exerciseName ?? "Unknown Exercise" }
         
@@ -195,3 +236,4 @@ class WorkoutSharingService {
         )
     }
 }
+

@@ -16,12 +16,36 @@ struct WorkoutTemplateListView: View {
         templates.filter { $0.isBuiltIn && $0.experienceLevel?.lowercased() != "advanced" }
     }
     
-    private var aiGeneratedTemplates: [WorkoutTemplate] {
-        templates.filter { !$0.isBuiltIn }
+    private var importedTemplates: [WorkoutTemplate] {
+        templates.filter { !$0.isBuiltIn && $0.experienceLevel == "Imported" }
     }
     
-    // Filter built-in templates
-    private var filteredBuiltInTemplates: [WorkoutTemplate] {
+    private var aiGeneratedTemplates: [WorkoutTemplate] {
+        templates.filter { !$0.isBuiltIn && $0.experienceLevel != "Imported" }
+    }
+    
+    // Filter templates - includes both built-in and imported
+    private var filteredTemplates: [WorkoutTemplate] {
+        // Debug logging
+        print("🔍 Filtering templates...")
+        print("   Total templates: \(templates.count)")
+        print("   Built-in: \(builtInTemplates.count)")
+        print("   Imported: \(importedTemplates.count)")
+        print("   AI Generated: \(aiGeneratedTemplates.count)")
+        print("   Selected level: \(selectedExperienceLevel ?? "nil")")
+        
+        if selectedExperienceLevel == "Imported" {
+            // Show only imported templates
+            return importedTemplates
+        }
+        
+        if selectedExperienceLevel == "Custom" {
+            // Show both built-in Custom AND imported templates
+            let customBuiltIns = builtInTemplates.filter { $0.experienceLevel == "Custom" }
+            return customBuiltIns + importedTemplates
+        }
+        
+        // For other levels or "All", filter built-ins normally
         var filtered = builtInTemplates
         
         if let level = selectedExperienceLevel {
@@ -43,13 +67,31 @@ struct WorkoutTemplateListView: View {
     }
     
     // Unique experience levels and goals
-    // Unique experience levels and goals
     private var experienceLevels: [String] {
-        let levels = Set(builtInTemplates.compactMap { $0.experienceLevel })
-        // Custom order: Custom first, then Beginner, Intermediate
-        let order = ["Custom", "Beginner", "Intermediate"]
-        // Filter to only show levels that actually exist in the data
-        return order.filter { levels.contains($0) }
+        let builtInLevels = Set(builtInTemplates.compactMap { $0.experienceLevel })
+        let order = ["Custom", "Imported", "Beginner", "Intermediate"]
+        
+        return order.filter { level in
+            if level == "Imported" { return !importedTemplates.isEmpty }
+            return builtInLevels.contains(level)
+        }
+    }
+    
+    // Section Headers
+    private var sectionTitle: String {
+        if selectedExperienceLevel == "Imported" { return "Imported Templates" }
+        if selectedExperienceLevel == "Custom" { return "Custom Programs" }
+        return "Workout Programs"
+    }
+    
+    private var sectionIcon: String {
+        if selectedExperienceLevel == "Imported" { return "square.and.arrow.down.fill" }
+        return "books.vertical.fill"
+    }
+    
+    private var sectionColor: Color {
+        if selectedExperienceLevel == "Imported" { return .blue }
+        return .orange
     }
     
     private var availableGoals: [String] {
@@ -104,13 +146,13 @@ struct WorkoutTemplateListView: View {
                                 }
                             }
     
-                            // MARK: - Built-In Templates Section
-                            if !builtInTemplates.isEmpty {
+                            // MARK: - Custom & Imported Templates Combined
+                            if !builtInTemplates.isEmpty || !importedTemplates.isEmpty {
                                 VStack(alignment: .leading, spacing: 12) {
                                     HStack {
-                                        Image(systemName: "books.vertical.fill")
-                                            .foregroundColor(.orange)
-                                        Text("Built-In Programs")
+                                        Image(systemName: sectionIcon)
+                                            .foregroundColor(sectionColor)
+                                        Text(sectionTitle)
                                             .font(.title2)
                                             .fontWeight(.bold)
                                         Spacer()
@@ -143,8 +185,10 @@ struct WorkoutTemplateListView: View {
                                             .padding(.horizontal, AppTheme.padding)
                                         }
                                         
-                                        // Goal Filter (if level selected)
-                                        if selectedExperienceLevel != nil && !availableGoals.isEmpty {
+                                        // Goal Filter (if level selected and not Imported/Custom)
+                                        if selectedExperienceLevel != nil && 
+                                           selectedExperienceLevel != "Imported" && 
+                                           !availableGoals.isEmpty {
                                             ScrollView(.horizontal, showsIndicators: false) {
                                                 HStack(spacing: 8) {
                                                     FilterChip(
@@ -170,9 +214,16 @@ struct WorkoutTemplateListView: View {
                                     
                                     // Template List
                                     LazyVStack(spacing: 12) {
-                                        ForEach(filteredBuiltInTemplates) { template in
-                                            BuiltInTemplateCard(template: template) {
-                                                selectedTemplate = template
+                                        ForEach(filteredTemplates) { template in
+                                            // Use TemplateCard for imported/custom, BuiltInTemplateCard for built-ins
+                                            if template.isBuiltIn {
+                                                BuiltInTemplateCard(template: template) {
+                                                    selectedTemplate = template
+                                                }
+                                            } else {
+                                                TemplateCard(template: template) {
+                                                    selectedTemplate = template
+                                                }
                                             }
                                         }
                                     }
@@ -268,10 +319,21 @@ struct WorkoutTemplateListView: View {
             }
         }
         .onAppear {
+            // Debug: Log all templates
+            print("📋 WorkoutTemplateListView appeared")
+            print("   Total templates in DB: \(templates.count)")
+            for template in templates {
+                print("   - \(template.title): isBuiltIn=\(template.isBuiltIn), level=\(template.experienceLevel ?? "nil"), goal=\(template.goal ?? "nil")")
+            }
+            
             // Smart default selection
             if selectedExperienceLevel == nil {
                 let hasCustom = builtInTemplates.contains { $0.experienceLevel == "Custom" }
-                if hasCustom {
+                let hasImported = !importedTemplates.isEmpty
+                if hasImported {
+                    // Default to Imported if we have imported templates
+                    selectedExperienceLevel = "Imported"
+                } else if hasCustom {
                     selectedExperienceLevel = "Custom"
                 }
                 // Otherwise leave as nil ("All Templates")

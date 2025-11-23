@@ -12,73 +12,82 @@ struct WorkoutImportView: View {
     
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Header
-                    VStack(spacing: 8) {
-                        Text("Import Workout")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        
-                        Text(sharedSession.title)
-                            .font(.title2)
-                            .bold()
-                            .multilineTextAlignment(.center)
-                        
-                        if let notes = sharedSession.notes, !notes.isEmpty {
-                            Text(notes)
-                                .font(.body)
+            ZStack {
+                AppTheme.backgroundColor.ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // Header
+                        VStack(spacing: 8) {
+                            Text("Import Workout")
+                                .font(.subheadline)
                                 .foregroundStyle(.secondary)
+                            
+                            Text(sharedSession.title)
+                                .font(.title2)
+                                .bold()
                                 .multilineTextAlignment(.center)
-                                .padding(.horizontal)
-                        }
-                    }
-                    .padding(.top)
-                    
-                    // Exercises Preview
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Exercises")
-                            .font(.headline)
-                            .padding(.horizontal)
-                        
-                        ForEach(sharedSession.exercises) { exercise in
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(exercise.name)
-                                    .font(.headline)
-                                
-                                ForEach(exercise.sets) { set in
-                                    HStack {
-                                        Text("Set \(set.setNumber)")
-                                            .foregroundStyle(.secondary)
-                                            .frame(width: 50, alignment: .leading)
-                                        
-                                        if exercise.type == "cardio" {
-                                            if let duration = set.durationSeconds {
-                                                Text("\(duration / 60):\(String(format: "%02d", duration % 60))")
-                                            }
-                                            if let distance = set.distance, let unit = set.distanceUnit {
-                                                Text("\(String(format: "%.2f", distance)) \(unit)")
-                                            }
-                                        } else {
-                                            Text("\(set.reps) reps @ \(String(format: "%.1f", set.weight)) \(set.weightUnit)")
-                                        }
-                                    }
-                                    .font(.subheadline)
-                                }
+                            
+                            if let notes = sharedSession.notes, !notes.isEmpty {
+                                Text(notes)
+                                    .font(.body)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal)
                             }
-                            .padding()
-                            .background(AppTheme.secondaryBackgroundColor)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            .padding(.horizontal)
                         }
+                        .padding(.top)
+                        
+                        // Exercises Preview
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("Exercises")
+                                .font(.headline)
+                                .padding(.horizontal)
+                            
+                            ForEach(sharedSession.exercises) { exercise in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(exercise.name)
+                                        .font(.headline)
+                                        .foregroundStyle(AppTheme.textColor)
+                                    
+                                    ForEach(exercise.sets) { set in
+                                        HStack {
+                                            Text("Set \(set.setNumber)")
+                                                .foregroundStyle(.secondary)
+                                                .frame(width: 50, alignment: .leading)
+                                            
+                                            if exercise.type == "cardio" {
+                                                if let duration = set.durationSeconds {
+                                                    Text("\(duration / 60):\(String(format: "%02d", duration % 60))")
+                                                        .foregroundStyle(AppTheme.textColor)
+                                                }
+                                                if let distance = set.distance, let unit = set.distanceUnit {
+                                                    Text("\(String(format: "%.2f", distance)) \(unit)")
+                                                        .foregroundStyle(AppTheme.textColor)
+                                                }
+                                            } else {
+                                                Text("\(set.reps) reps @ \(String(format: "%.1f", set.weight)) \(set.weightUnit)")
+                                                    .foregroundStyle(AppTheme.textColor)
+                                            }
+                                        }
+                                        .font(.subheadline)
+                                    }
+                                }
+                                .padding()
+                                .background(AppTheme.secondaryBackgroundColor)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .padding(.horizontal)
+                            }
+                        }
+                        
+                        Spacer()
+                            .frame(height: 40)
                     }
-                    
-                    Spacer()
-                        .frame(height: 40)
                 }
             }
-            .background(AppTheme.backgroundColor.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
@@ -110,84 +119,199 @@ struct WorkoutImportView: View {
     private func saveAsTemplate() {
         isSaving = true
         
-        Task {
+        Task { @MainActor in
             do {
-                // Create a new WorkoutTemplate from the shared session
+                // CRITICAL: Use the shared persistence controller's context
+                let persistentContext = PersistenceController.shared.container.mainContext
+                
+                // Verify we have the correct database by checking built-in templates
+                let builtInCheck = try persistentContext.fetch(FetchDescriptor<WorkoutTemplate>(
+                    predicate: #Predicate { $0.isBuiltIn == true }
+                ))
+                print("🔍 Database verification: Found \(builtInCheck.count) built-in templates")
+                
+                if builtInCheck.isEmpty {
+                    print("⚠️  WARNING: Database appears empty. This context might not be connected properly.")
+                }
+                
+                // Keep the original name but add (Imported) suffix
+                let uniqueTitle = "\(sharedSession.title) (Imported)"
+                
+                print("📝 Creating imported template: '\(uniqueTitle)'")
+                print("   Source has \(sharedSession.exercises.count) exercises:")
+                for (idx, ex) in sharedSession.exercises.enumerated() {
+                    print("   [\(idx)] \(ex.name) - order: \(ex.order), sets: \(ex.sets.count)")
+                }
+                
+                // Create a new WorkoutTemplate with explicit UUID and properties
+                let templateID = UUID()
                 let newTemplate = WorkoutTemplate(
-                    title: sharedSession.title,
-                    notes: sharedSession.notes
+                    id: templateID,
+                    title: uniqueTitle,
+                    notes: sharedSession.notes,
+                    isBuiltIn: false, // CRITICAL: Must be false for imported templates
+                    experienceLevel: "Imported",
+                    goal: "Imported"
                 )
                 
-                modelContext.insert(newTemplate)
+                // Insert template first
+                persistentContext.insert(newTemplate)
                 
                 // Add exercises to the template
+                var exerciseCount = 0
                 for sharedExercise in sharedSession.exercises {
-                    // Find or create ExerciseDefinition
-                    // Ideally we try to match by name, or create a new one if it doesn't exist
-                    _ = try await findOrCreateExerciseDefinition(name: sharedExercise.name, type: sharedExercise.type, muscleGroup: sharedExercise.muscleGroup)
-                    
-                    // Prepare notes, potentially adding cardio info
-                    var notes = sharedExercise.sets.first?.notes
-                    if sharedExercise.type == "cardio", let firstSet = sharedExercise.sets.first {
-                        var cardioInfo: [String] = []
-                        if let duration = firstSet.durationSeconds {
-                            cardioInfo.append("Duration: \(duration / 60)m")
+                    // Skip if already processed (prevent duplicates)
+                    if exerciseCount > 0 && sharedSession.exercises.filter({ $0.name == sharedExercise.name }).count > 1 {
+                        // Check if we already added this exercise
+                        let alreadyAdded = (0..<exerciseCount).contains { idx in
+                            sharedSession.exercises[idx].name == sharedExercise.name && 
+                            sharedSession.exercises[idx].order == sharedExercise.order
                         }
-                        if let distance = firstSet.distance, let unit = firstSet.distanceUnit {
-                            cardioInfo.append("Distance: \(distance) \(unit)")
-                        }
-                        if !cardioInfo.isEmpty {
-                            let info = cardioInfo.joined(separator: ", ")
-                            notes = notes == nil ? info : "\(notes!) (\(info))"
+                        if alreadyAdded {
+                            print("⚠️  Skipping duplicate exercise: \(sharedExercise.name)")
+                            continue
                         }
                     }
+                    
+                    // Find or create ExerciseDefinition
+                    _ = try findOrCreateExerciseDefinition(name: sharedExercise.name, type: sharedExercise.type, muscleGroup: sharedExercise.muscleGroup, context: persistentContext)
+                    
+                    // Calculate representative values from all sets
+                    let allReps = sharedExercise.sets.map { $0.reps }
+                    let allWeights = sharedExercise.sets.map { $0.weight }
+                    
+                    // Use the MEDIAN or FIRST set as representative (templates are meant to be simplified)
+                    let representativeReps = allReps.first ?? 0
+                    let representativeWeight = allWeights.first
+                    
+                    // Build detailed notes showing all sets
+                    var detailedNotes: [String] = []
+                    for (index, set) in sharedExercise.sets.enumerated() {
+                        if sharedExercise.type == "cardio" {
+                            var setInfo = "Set \(index + 1):"
+                            if let duration = set.durationSeconds {
+                                setInfo += " \(duration / 60):\(String(format: "%02d", duration % 60))"
+                            }
+                            if let distance = set.distance, let unit = set.distanceUnit {
+                                setInfo += " \(String(format: "%.2f", distance)) \(unit)"
+                            }
+                            detailedNotes.append(setInfo)
+                        } else {
+                            detailedNotes.append("Set \(index + 1): \(set.reps) reps @ \(String(format: "%.1f", set.weight)) \(set.weightUnit)")
+                        }
+                        if let setNotes = set.notes, !setNotes.isEmpty {
+                            detailedNotes.append("  Note: \(setNotes)")
+                        }
+                    }
+                    let combinedNotes = detailedNotes.joined(separator: "\n")
 
                     let templateExercise = TemplateExercise(
                         name: sharedExercise.name,
                         order: sharedExercise.order,
                         sets: sharedExercise.sets.count,
-                        reps: sharedExercise.sets.first?.reps ?? 0,
-                        suggestedWeight: sharedExercise.sets.first?.weight,
+                        reps: representativeReps,
+                        suggestedWeight: representativeWeight,
                         weightUnit: sharedExercise.sets.first?.weightUnit ?? "lbs",
-                        notes: notes
+                        notes: combinedNotes
                     )
-                    // templateExercise.exerciseDefinition = definition // Not supported in TemplateExercise model
                     templateExercise.template = newTemplate
                     
-                    modelContext.insert(templateExercise)
+                    persistentContext.insert(templateExercise)
+                    exerciseCount += 1
+                    print("   Added exercise \(exerciseCount): \(sharedExercise.name) (\(sharedExercise.sets.count) sets)")
                 }
                 
-                try modelContext.save()
+                // Explicitly save to catch any errors immediately
+                print("💾 Saving template to database...")
+                do {
+                    try persistentContext.save()
+                    print("✅ Save completed successfully")
+                } catch {
+                    print("❌ Save failed with error: \(error)")
+                    print("   Error details: \(error.localizedDescription)")
+                    throw error
+                }
                 
-                await MainActor.run {
+                // Give CloudKit a moment to process
+                try await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
+                
+                // Verify with ID-based fetch (more reliable than title)
+                print("🔍 Verifying template with ID: \(templateID)")
+                let verifyDescriptor = FetchDescriptor<WorkoutTemplate>(
+                    predicate: #Predicate<WorkoutTemplate> { template in
+                        template.id == templateID
+                    }
+                )
+                let verified = try persistentContext.fetch(verifyDescriptor)
+                print("   Found \(verified.count) templates with matching ID")
+                
+                // Also check by title as a fallback
+                let allTemplates = try persistentContext.fetch(FetchDescriptor<WorkoutTemplate>())
+                print("   Total templates in DB: \(allTemplates.count)")
+                let byTitle = allTemplates.filter { $0.title == uniqueTitle }
+                print("   Templates with title '\(uniqueTitle)': \(byTitle.count)")
+                
+                if let found = verified.first {
+                    print("✅ Verified template in database:")
+                    print("   - ID: \(found.id)")
+                    print("   - Title: \(found.title)")
+                    print("   - Experience Level: \(found.experienceLevel ?? "nil")")
+                    print("   - Goal: \(found.goal ?? "nil")")
+                    print("   - Is Built-in: \(found.isBuiltIn)")
+                    print("   - Exercises: \(found.exercises?.count ?? 0)")
+                    
+                    // Success feedback
+                    Haptics.notify(.success)
                     isSaving = false
                     dismiss()
+                } else if let foundByTitle = byTitle.first {
+                    print("⚠️  Found template by title but not by ID")
+                    print("   - Actual ID: \(foundByTitle.id)")
+                    print("   - Expected ID: \(templateID)")
+                    print("   - This suggests the template was modified after save")
+                    
+                    // Still count as success since it exists
+                    Haptics.notify(.success)
+                    isSaving = false
+                    dismiss()
+                } else {
+                    print("❌ Template not found by ID or title")
+                    print("   Checking if ANY non-built-in templates exist...")
+                    let imported = allTemplates.filter { !$0.isBuiltIn }
+                    print("   Non-built-in templates: \(imported.count)")
+                    for t in imported.prefix(5) {
+                        print("      - \(t.title) (id: \(t.id))")
+                    }
+                    
+                    throw NSError(domain: "WorkoutImport", code: -1, 
+                                userInfo: [NSLocalizedDescriptionKey: "Template failed to persist. This may be a CloudKit sync issue. Try disabling iCloud sync in Settings > Apple ID > iCloud > Pace & Plates and try again."])
                 }
             } catch {
-                await MainActor.run {
-                    isSaving = false
-                    saveError = error.localizedDescription
-                }
+                print("❌ Failed to save template: \(error)")
+                isSaving = false
+                saveError = "Failed to save template: \(error.localizedDescription)"
             }
         }
     }
     
-    private func findOrCreateExerciseDefinition(name: String, type: String, muscleGroup: String?) async throws -> ExerciseDefinition {
+    private func findOrCreateExerciseDefinition(name: String, type: String, muscleGroup: String?, context: ModelContext) throws -> ExerciseDefinition {
         // Try to find existing definition by name (case insensitive)
+        // Note: localizedStandardContains can be unstable in SwiftData predicates
         let fetchDescriptor = FetchDescriptor<ExerciseDefinition>(
-            predicate: #Predicate<ExerciseDefinition> { $0.name.localizedStandardContains(name) }
+            predicate: #Predicate<ExerciseDefinition> { $0.name == name }
         )
         
-        if let existing = try modelContext.fetch(fetchDescriptor).first {
+        if let existing = try context.fetch(fetchDescriptor).first {
             return existing
         }
         
         // Create new if not found
         let newDefinition = ExerciseDefinition(
             name: name,
-            muscleGroup: muscleGroup ?? "Other"
+            muscleGroup: muscleGroup ?? "Other",
+            isUserDefined: true
         )
-        modelContext.insert(newDefinition)
+        context.insert(newDefinition)
         return newDefinition
     }
 }

@@ -3,11 +3,13 @@ import CoreLocation
 import MapKit
 import SwiftData
 
-// Simple Codable wrapper for CLLocationCoordinate2D
+// Simple Codable wrapper for CLLocationCoordinate2D with altitude and timestamp
 struct Coordinate: Codable, Identifiable {
     var id = UUID()
     var latitude: Double
     var longitude: Double
+    var altitude: Double? = nil // meters above sea level
+    var timestamp: Date? = nil // When this coordinate was recorded
     
     var clCoordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -127,20 +129,59 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         }
         startDate = nil
         
-        // Encode route data
-        let coordinates = route.map { Coordinate(latitude: $0.coordinate.latitude, longitude: $0.coordinate.longitude) }
+        // Encode route data with altitude and timestamp
+        let coordinates = route.map { 
+            Coordinate(latitude: $0.coordinate.latitude, 
+                      longitude: $0.coordinate.longitude,
+                      altitude: $0.altitude,
+                      timestamp: $0.timestamp) 
+        }
         let encoder = JSONEncoder()
         guard let locationsData = try? encoder.encode(coordinates) else {
-            
             return nil
         }
+        
+        // Calculate elevation metrics from route
+        let elevationMetrics = calculateElevationMetrics(from: route)
         
         // Create RunningSession object (but don't save it here)
         return RunningSession(distance: distance / (distanceUnit == "km" ? 1000 : 1609.34), // Convert meters to selected unit
                               distanceUnit: distanceUnit,
                               duration: duration,
                               locations: locationsData,
-                              activityType: activityType)
+                              activityType: activityType,
+                              totalAscent: elevationMetrics?.ascent,
+                              totalDescent: elevationMetrics?.descent,
+                              minElevation: elevationMetrics?.min,
+                              maxElevation: elevationMetrics?.max)
+    }
+    
+    private func calculateElevationMetrics(from locations: [CLLocation]) -> (ascent: Double, descent: Double, min: Double, max: Double)? {
+        let altitudes = locations.map { $0.altitude }
+        guard altitudes.count >= 2 else { return nil }
+        
+        var totalAscent: Double = 0
+        var totalDescent: Double = 0
+        var minAlt = altitudes.first!
+        var maxAlt = altitudes.first!
+        
+        // Calculate ascent/descent with smoothing to avoid GPS noise
+        let smoothingThreshold: Double = 1.0 // Only count changes > 1m
+        
+        for i in 1..<altitudes.count {
+            let diff = altitudes[i] - altitudes[i-1]
+            
+            if diff > smoothingThreshold {
+                totalAscent += diff
+            } else if diff < -smoothingThreshold {
+                totalDescent += abs(diff)
+            }
+            
+            minAlt = min(minAlt, altitudes[i])
+            maxAlt = max(maxAlt, altitudes[i])
+        }
+        
+        return (ascent: totalAscent, descent: totalDescent, min: minAlt, max: maxAlt)
     }
     
     private func startTimer() {
