@@ -143,7 +143,7 @@ struct WeightLogView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("History")
                                 .font(.headline)
-                            LazyVStack(spacing: 8) {
+                            List {
                                 ForEach(weightEntries) { entry in
                                     HStack {
                                         Text(entry.date.formatted(date: .abbreviated, time: .omitted))
@@ -162,7 +162,9 @@ struct WeightLogView: View {
                                         }
                                     }
                                     .foregroundColor(AppTheme.textColor)
-                                    .padding(.vertical, 4)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
                                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                         Button(role: .destructive) {
                                             modelContext.delete(entry)
@@ -171,9 +173,11 @@ struct WeightLogView: View {
                                             Label("Delete", systemImage: "trash")
                                         }
                                     }
-                                    Divider().opacity(0.2)
                                 }
                             }
+                            .listStyle(.plain)
+                            .scrollDisabled(true)
+                            .frame(minHeight: CGFloat(weightEntries.count) * 40)
                         }
                         .floatingTile()
                     }

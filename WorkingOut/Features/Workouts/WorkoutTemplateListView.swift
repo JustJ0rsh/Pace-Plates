@@ -135,11 +135,14 @@ struct WorkoutTemplateListView: View {
                                     }
                                     .padding(.horizontal, AppTheme.padding)
     
-                                    VStack(spacing: 12) {
+                                    List {
                                         ForEach(aiGeneratedTemplates) { template in
                                             TemplateCard(template: template) {
                                                 selectedTemplate = template
                                             }
+                                            .listRowBackground(Color.clear)
+                                            .listRowSeparator(.hidden)
+                                            .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
                                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                                 Button(role: .destructive) {
                                                     modelContext.delete(template)
@@ -151,6 +154,9 @@ struct WorkoutTemplateListView: View {
                                             }
                                         }
                                     }
+                                    .listStyle(.plain)
+                                    .scrollDisabled(true)
+                                    .frame(height: CGFloat(aiGeneratedTemplates.count) * 100)
                                     .padding(.horizontal, AppTheme.padding)
                                 }
                             }
@@ -222,17 +228,23 @@ struct WorkoutTemplateListView: View {
                                     }
                                     
                                     // Template List
-                                    LazyVStack(spacing: 12) {
+                                    List {
                                         ForEach(filteredTemplates) { template in
                                             // Use TemplateCard for imported/custom, BuiltInTemplateCard for built-ins
                                             if template.isBuiltIn {
                                                 BuiltInTemplateCard(template: template) {
                                                     selectedTemplate = template
                                                 }
+                                                .listRowBackground(Color.clear)
+                                                .listRowSeparator(.hidden)
+                                                .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
                                             } else {
                                                 TemplateCard(template: template) {
                                                     selectedTemplate = template
                                                 }
+                                                .listRowBackground(Color.clear)
+                                                .listRowSeparator(.hidden)
+                                                .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
                                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                                     Button(role: .destructive) {
                                                         modelContext.delete(template)
@@ -245,6 +257,9 @@ struct WorkoutTemplateListView: View {
                                             }
                                         }
                                     }
+                                    .listStyle(.plain)
+                                    .scrollDisabled(true)
+                                    .frame(height: CGFloat(filteredTemplates.count) * 100)
                                     .padding(.horizontal, AppTheme.padding)
                                 }
                             }
@@ -262,11 +277,14 @@ struct WorkoutTemplateListView: View {
                                     }
                                     .padding(.horizontal, AppTheme.padding)
                                     
-                                    VStack(spacing: 12) {
+                                    List {
                                         ForEach(aiGeneratedTemplates) { template in
                                             TemplateCard(template: template) {
                                                 selectedTemplate = template
                                             }
+                                            .listRowBackground(Color.clear)
+                                            .listRowSeparator(.hidden)
+                                            .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
                                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                                 Button(role: .destructive) {
                                                     modelContext.delete(template)
@@ -278,6 +296,9 @@ struct WorkoutTemplateListView: View {
                                             }
                                         }
                                     }
+                                    .listStyle(.plain)
+                                    .scrollDisabled(true)
+                                    .frame(height: CGFloat(aiGeneratedTemplates.count) * 100)
                                     .padding(.horizontal, AppTheme.padding)
                                 }
                             }

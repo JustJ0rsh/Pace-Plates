@@ -172,7 +172,7 @@ struct WorkoutLogView: View {
                                 Text("Workouts")
                                     .font(.headline)
                             }
-                            LazyVStack(spacing: 12) {
+                            List {
                                 ForEach(workoutSessions) { session in
                                     NavigationLink {
                                         WorkoutSessionDetailView(session: session)
@@ -204,6 +204,9 @@ struct WorkoutLogView: View {
                                             }
                                         }
                                     }
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+                                .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
                                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                         Button(role: .destructive) {
                                             modelContext.delete(session)
@@ -212,10 +215,12 @@ struct WorkoutLogView: View {
                                             Label("Delete", systemImage: "trash")
                                         }
                                     }
-                                    Divider().opacity(0.2)
                                 }
                                 .onDelete(perform: deleteWorkoutSessions)
                             }
+                            .listStyle(.plain)
+                            .scrollDisabled(true)
+                            .frame(minHeight: CGFloat(workoutSessions.count) * 80)
                         }
                         .floatingTile()
                     }

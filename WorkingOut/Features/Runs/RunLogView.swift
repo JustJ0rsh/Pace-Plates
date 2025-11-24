@@ -212,9 +212,8 @@ struct RunLogView: View {
 
                     if !runningSessions.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            LazyVStack(spacing: 16) {
-                            ForEach(runningSessions) { session in
-                                VStack(spacing: 0) {
+                            List {
+                                ForEach(runningSessions) { session in
                                     Button {
                                         loadingSessionId = session.id
                                         // Trigger navigation after showing loading
@@ -260,7 +259,9 @@ struct RunLogView: View {
                                         }
                                     }
                                     .buttonStyle(.plain)
-                                    .padding(.vertical, 4)
+                                    .listRowBackground(Color.clear)
+                                    .listRowSeparator(.hidden)
+                                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
                                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                         Button(role: .destructive) {
                                             modelContext.delete(session)
@@ -269,14 +270,12 @@ struct RunLogView: View {
                                             Label("Delete", systemImage: "trash")
                                         }
                                     }
-                                    
-                                    if session.id != runningSessions.last?.id {
-                                        Divider().opacity(0.2)
-                                    }
                                 }
+                                .onDelete(perform: deleteRunningSessions)
                             }
-                            .onDelete(perform: deleteRunningSessions)
-                        }
+                            .listStyle(.plain)
+                            .scrollDisabled(true)
+                            .frame(minHeight: CGFloat(runningSessions.count) * 80)
                         }
                         .floatingTile()
                         .onAppear {
@@ -950,68 +949,6 @@ struct RunSessionDetailView: View {
                         .padding(.vertical, 24)
                         .padding(.top, 8)
                         
-                        // Heart Rate Chart
-                        if !heartRateSamples.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack {
-                                    Text("Heart Rate")
-                                        .font(.headline)
-                                    Spacer()
-                                    if let avg = session.avgHeartRate {
-                                        Text("Avg: \(Int(avg)) bpm")
-                                            .font(.subheadline)
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                                
-                                Chart {
-                                    ForEach(Array(heartRateSamples.enumerated()), id: \.offset) { _, sample in
-                                        LineMark(
-                                            x: .value("Time", sample.timestamp),
-                                            y: .value("BPM", sample.bpm)
-                                        )
-                                        .foregroundStyle(.red.gradient)
-                                        .interpolationMethod(.catmullRom)
-                                    }
-                                    
-                                    if let minBPM = heartRateSamples.map({ $0.bpm }).min(),
-                                       let maxBPM = heartRateSamples.map({ $0.bpm }).max() {
-                                        AreaMark(
-                                            x: .value("Time", heartRateSamples.first?.timestamp ?? Date()),
-                                            yStart: .value("Min", minBPM),
-                                            yEnd: .value("Max", maxBPM)
-                                        )
-                                        .foregroundStyle(.red.opacity(0.1))
-                                    }
-                                }
-                                .chartYAxis {
-                                    AxisMarks(position: .leading) { value in
-                                        AxisGridLine()
-                                        AxisValueLabel {
-                                            if let bpm = value.as(Double.self) {
-                                                Text("\(Int(bpm))")
-                                            }
-                                        }
-                                    }
-                                }
-                                .chartXAxis {
-                                    AxisMarks { _ in
-                                        AxisGridLine()
-                                    }
-                                }
-                                .frame(height: 180)
-                            }
-                            .floatingTile()
-                        } else if isLoadingHeartRate {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("Heart Rate")
-                                    .font(.headline)
-                                ProgressView()
-                                    .frame(height: 180)
-                            }
-                            .floatingTile()
-                        }
-                        
                         // Details Tile
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Details")
@@ -1064,7 +1001,7 @@ struct RunSessionDetailView: View {
                 }
             } else {
                 // Stats Tab
-                RunStatsView(session: session, coordinates: coordinates)
+                RunStatsView(session: session, coordinates: coordinates, heartRateSamples: heartRateSamples, isLoadingHeartRate: isLoadingHeartRate)
             }
         }
         .transition(.opacity)
@@ -1194,6 +1131,8 @@ struct RunStatsView: View {
     @Environment(\.modelContext) private var modelContext
     let session: RunningSession
     let coordinates: [CLLocationCoordinate2D]
+    let heartRateSamples: [(timestamp: Date, bpm: Double)]
+    let isLoadingHeartRate: Bool
     
     @State private var loadError: String? = nil
     
@@ -1711,6 +1650,74 @@ struct RunStatsView: View {
                             }
                         }
                         .frame(height: 180)
+                    }
+                    .floatingTile()
+                }
+                
+                // Heart Rate Chart
+                if !heartRateSamples.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "heart.fill")
+                                .foregroundStyle(.red)
+                            Text("Heart Rate Profile")
+                                .font(.headline)
+                            Spacer()
+                            if let avg = session.avgHeartRate {
+                                Text("Avg: \(Int(avg)) bpm")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        
+                        Chart {
+                            ForEach(Array(heartRateSamples.enumerated()), id: \.offset) { _, sample in
+                                LineMark(
+                                    x: .value("Time", sample.timestamp),
+                                    y: .value("BPM", sample.bpm)
+                                )
+                                .foregroundStyle(.red.gradient)
+                                .interpolationMethod(.catmullRom)
+                            }
+                            
+                            if let minBPM = heartRateSamples.map({ $0.bpm }).min(),
+                               let maxBPM = heartRateSamples.map({ $0.bpm }).max() {
+                                AreaMark(
+                                    x: .value("Time", heartRateSamples.first?.timestamp ?? Date()),
+                                    yStart: .value("Min", minBPM),
+                                    yEnd: .value("Max", maxBPM)
+                                )
+                                .foregroundStyle(.red.opacity(0.1))
+                            }
+                        }
+                        .chartYAxis {
+                            AxisMarks(position: .leading) { value in
+                                AxisGridLine()
+                                AxisValueLabel {
+                                    if let bpm = value.as(Double.self) {
+                                        Text("\(Int(bpm))")
+                                    }
+                                }
+                            }
+                        }
+                        .chartXAxis {
+                            AxisMarks { _ in
+                                AxisGridLine()
+                            }
+                        }
+                        .frame(height: 180)
+                    }
+                    .floatingTile()
+                } else if isLoadingHeartRate {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "heart.fill")
+                                .foregroundStyle(.red)
+                            Text("Heart Rate Profile")
+                                .font(.headline)
+                        }
+                        ProgressView()
+                            .frame(height: 180)
                     }
                     .floatingTile()
                 }
