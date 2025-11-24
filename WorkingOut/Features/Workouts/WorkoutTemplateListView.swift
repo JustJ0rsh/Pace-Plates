@@ -140,6 +140,15 @@ struct WorkoutTemplateListView: View {
                                             TemplateCard(template: template) {
                                                 selectedTemplate = template
                                             }
+                                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                                Button(role: .destructive) {
+                                                    modelContext.delete(template)
+                                                    try? modelContext.save()
+                                                    Haptics.notify(.warning)
+                                                } label: {
+                                                    Label("Delete", systemImage: "trash")
+                                                }
+                                            }
                                         }
                                     }
                                     .padding(.horizontal, AppTheme.padding)
@@ -224,6 +233,15 @@ struct WorkoutTemplateListView: View {
                                                 TemplateCard(template: template) {
                                                     selectedTemplate = template
                                                 }
+                                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                                    Button(role: .destructive) {
+                                                        modelContext.delete(template)
+                                                        try? modelContext.save()
+                                                        Haptics.notify(.warning)
+                                                    } label: {
+                                                        Label("Delete", systemImage: "trash")
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -248,6 +266,15 @@ struct WorkoutTemplateListView: View {
                                         ForEach(aiGeneratedTemplates) { template in
                                             TemplateCard(template: template) {
                                                 selectedTemplate = template
+                                            }
+                                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                                Button(role: .destructive) {
+                                                    modelContext.delete(template)
+                                                    try? modelContext.save()
+                                                    Haptics.notify(.warning)
+                                                } label: {
+                                                    Label("Delete", systemImage: "trash")
+                                                }
                                             }
                                         }
                                     }

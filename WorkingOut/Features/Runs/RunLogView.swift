@@ -1481,28 +1481,26 @@ struct RunStatsView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                // Prominent Time & Speed Display
-                HStack(spacing: 40) {
-                    VStack(spacing: 4) {
-                        Text(formatDuration(session.duration))
-                            .font(.system(size: 36, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                        Text("Time")
-                            .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.7))
+                // Timing & Distance Summary
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "clock.fill")
+                            .foregroundStyle(AppTheme.accentColor)
+                        Text("Time & Distance")
+                            .font(.headline)
                     }
                     
-                    VStack(spacing: 4) {
-                        Text(averageSpeed)
-                            .font(.system(size: 36, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                        Text(session.distanceUnit == "mi" ? "mph" : "km/h")
-                            .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.7))
+                    LazyVGrid(columns: [
+                        GridItem(.flexible(minimum: 150)),
+                        GridItem(.flexible(minimum: 150))
+                    ], spacing: 12) {
+                        StatCard(title: "Duration", value: formatDuration(session.duration), subtitle: "")
+                        StatCard(title: "Distance", value: String(format: "%.2f", session.distance), subtitle: session.distanceUnit)
+                        StatCard(title: "Activity", value: session.activityType.capitalized, subtitle: "")
+                        StatCard(title: "Date", value: session.date.formatted(date: .abbreviated, time: .omitted), subtitle: "")
                     }
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 24)
+                .floatingTile()
                 .padding(.top, 8)
                 
                 // Performance Metrics
@@ -1743,29 +1741,8 @@ struct RunStatsView: View {
                         }
                     }
                     .floatingTile()
+                    .padding(.bottom, 80) // Extra padding to avoid tab bar overlap
                 }
-                
-                // Timing & Distance Summary
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "clock.fill")
-                            .foregroundStyle(AppTheme.accentColor)
-                        Text("Time & Distance")
-                            .font(.headline)
-                    }
-                    
-                    LazyVGrid(columns: [
-                        GridItem(.flexible(minimum: 150)),
-                        GridItem(.flexible(minimum: 150))
-                    ], spacing: 12) {
-                        StatCard(title: "Duration", value: formatDuration(session.duration), subtitle: "")
-                        StatCard(title: "Distance", value: String(format: "%.2f", session.distance), subtitle: session.distanceUnit)
-                        StatCard(title: "Activity", value: session.activityType.capitalized, subtitle: "")
-                        StatCard(title: "Date", value: session.date.formatted(date: .abbreviated, time: .omitted), subtitle: "")
-                    }
-                }
-                .floatingTile()
-                .padding(.bottom, 80) // Extra padding to avoid tab bar overlap
             }
             .padding(.horizontal, AppTheme.padding)
         }
