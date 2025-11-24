@@ -553,4 +553,44 @@ final class HealthKitManager: ObservableObject {
             healthStore.execute(query)
         }
     }
+    
+    /// Fetch all heart rate samples for a workout with timestamps
+    func heartRateSamples(for workout: HKWorkout) async throws -> [(timestamp: Date, bpm: Double)] {
+        guard let heartRateType = HKQuantityType.quantityType(forIdentifier: .heartRate) else { return [] }
+        let predicate = HKQuery.predicateForObjects(from: workout)
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(sampleType: heartRateType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                
+                let heartRateSamples = (samples as? [HKQuantitySample]) ?? []
+                let results = heartRateSamples.map { sample in
+                    (timestamp: sample.startDate, bpm: sample.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute())))
+                }
+                continuation.resume(returning: results)
+            }
+            self.healthStore.execute(query)
+        }
+    }
+    
+    /// Get a workout by UUID string
+    func workoutForUUID(_ uuidString: String) async throws -> HKWorkout? {
+        guard let uuid = UUID(uuidString: uuidString) else { return nil }
+        let predicate = HKQuery.predicateForObject(with: uuid)
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(sampleType: .workoutType(), predicate: predicate, limit: 1, sortDescriptors: nil) { _, samples, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                continuation.resume(returning: samples?.first as? HKWorkout)
+            }
+            self.healthStore.execute(query)
+        }
+    }
 }

@@ -28,6 +28,8 @@ struct RunLogView: View {
     private let healthStore = HKHealthStore()
     @State private var pendingDeleteIndex: Int? = nil
     @State private var showDeleteConfirm: Bool = false
+    @State private var loadingSessionId: UUID? = nil
+    @State private var navigationSessionId: UUID? = nil
     
     // Filters
     private enum TimeRange: String, CaseIterable, Identifiable {
@@ -213,8 +215,12 @@ struct RunLogView: View {
                             LazyVStack(spacing: 16) {
                             ForEach(runningSessions) { session in
                                 VStack(spacing: 0) {
-                                    NavigationLink {
-                                        RunSessionDetailView(session: session)
+                                    Button {
+                                        loadingSessionId = session.id
+                                        // Trigger navigation after showing loading
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                            navigationSessionId = session.id
+                                        }
                                     } label: {
                                         HStack(alignment: .top, spacing: 12) {
                                             // Activity type icon
@@ -253,6 +259,7 @@ struct RunLogView: View {
                                             }
                                         }
                                     }
+                                    .buttonStyle(.plain)
                                     .padding(.vertical, 4)
                                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                         Button(role: .destructive) {
@@ -305,6 +312,40 @@ struct RunLogView: View {
                 }
             } message: {
                 Text("Also remove this workout from the Health app?")
+            }
+            .overlay {
+                if loadingSessionId != nil {
+                    ZStack {
+                        Color.black.opacity(0.5)
+                            .ignoresSafeArea()
+                        
+                        VStack(spacing: 20) {
+                            ProgressView()
+                                .scaleEffect(1.8)
+                                .tint(.white)
+                            Text("Loading Run...")
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                        }
+                        .padding(40)
+                        .background(.ultraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 24))
+                        .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
+                    }
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                    .animation(.easeInOut(duration: 0.2), value: loadingSessionId)
+                }
+            }
+            .navigationDestination(item: $navigationSessionId) { sessionId in
+                if let session = runningSessions.first(where: { $0.id == sessionId }) {
+                    RunSessionDetailView(session: session)
+                        .onAppear {
+                            loadingSessionId = nil
+                        }
+                        .onDisappear {
+                            navigationSessionId = nil
+                        }
+                }
             }
             .appBackground(AppTheme.gradientRuns)
             .foregroundColor(AppTheme.textColor)
@@ -796,6 +837,13 @@ struct RunSessionDetailView: View {
               let decoded = try? JSONDecoder().decode([RunCoordinate].self, from: session.locations) else { return [] }
         return decoded.map { $0.cl }
     }
+    
+    // Decode stored coordinates with full data (altitude, timestamp)
+    private var fullCoordinates: [RunCoordinate] {
+        guard !session.locations.isEmpty,
+              let decoded = try? JSONDecoder().decode([RunCoordinate].self, from: session.locations) else { return [] }
+        return decoded
+    }
 
     // Build map region around the route
     @State private var camera: MapCameraPosition = .automatic
@@ -813,6 +861,8 @@ struct RunSessionDetailView: View {
     
     @State private var cachedSegments: [Segment] = []
     @State private var showMap: Bool = false
+    @State private var heartRateSamples: [(timestamp: Date, bpm: Double)] = []
+    @State private var isLoadingHeartRate: Bool = false
 
     private var segments: [Segment] {
         guard coordinates.count > 1 else { return [] }
@@ -855,17 +905,118 @@ struct RunSessionDetailView: View {
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            // Overview Tab
-            ScrollView {
-                VStack(spacing: 16) {
-                    // Details Tile
+        VStack(spacing: 0) {
+            // Segmented control in glass container
+            Picker("View", selection: $selectedTab.animation(.easeInOut(duration: 0.3))) {
+                Text("Overview").tag(0)
+                Text("Stats").tag(1)
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, AppTheme.padding)
+            .padding(.vertical, 12)
+            .background(.ultraThinMaterial)
+            .overlay(alignment: .bottom) {
+                Divider()
+                    .opacity(0.3)
+            }
+            
+            // Content view with animation
+            Group {
+                if selectedTab == 0 {
+                // Overview Tab
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Prominent Time & Distance Display
+                        HStack(spacing: 40) {
+                            VStack(spacing: 4) {
+                                Text(formatDuration(session.duration))
+                                    .font(.system(size: 36, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white)
+                                Text("Time")
+                                    .font(.subheadline)
+                                    .foregroundColor(.white.opacity(0.7))
+                            }
+                            
+                            VStack(spacing: 4) {
+                                Text(String(format: "%.2f", session.distance))
+                                    .font(.system(size: 36, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white)
+                                Text(session.distanceUnit.uppercased())
+                                    .font(.subheadline)
+                                    .foregroundColor(.white.opacity(0.7))
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 24)
+                        .padding(.top, 8)
+                        
+                        // Heart Rate Chart
+                        if !heartRateSamples.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Text("Heart Rate")
+                                        .font(.headline)
+                                    Spacer()
+                                    if let avg = session.avgHeartRate {
+                                        Text("Avg: \(Int(avg)) bpm")
+                                            .font(.subheadline)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                
+                                Chart {
+                                    ForEach(Array(heartRateSamples.enumerated()), id: \.offset) { _, sample in
+                                        LineMark(
+                                            x: .value("Time", sample.timestamp),
+                                            y: .value("BPM", sample.bpm)
+                                        )
+                                        .foregroundStyle(.red.gradient)
+                                        .interpolationMethod(.catmullRom)
+                                    }
+                                    
+                                    if let minBPM = heartRateSamples.map({ $0.bpm }).min(),
+                                       let maxBPM = heartRateSamples.map({ $0.bpm }).max() {
+                                        AreaMark(
+                                            x: .value("Time", heartRateSamples.first?.timestamp ?? Date()),
+                                            yStart: .value("Min", minBPM),
+                                            yEnd: .value("Max", maxBPM)
+                                        )
+                                        .foregroundStyle(.red.opacity(0.1))
+                                    }
+                                }
+                                .chartYAxis {
+                                    AxisMarks(position: .leading) { value in
+                                        AxisGridLine()
+                                        AxisValueLabel {
+                                            if let bpm = value.as(Double.self) {
+                                                Text("\(Int(bpm))")
+                                            }
+                                        }
+                                    }
+                                }
+                                .chartXAxis {
+                                    AxisMarks { _ in
+                                        AxisGridLine()
+                                    }
+                                }
+                                .frame(height: 180)
+                            }
+                            .floatingTile()
+                        } else if isLoadingHeartRate {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Heart Rate")
+                                    .font(.headline)
+                                ProgressView()
+                                    .frame(height: 180)
+                            }
+                            .floatingTile()
+                        }
+                        
+                        // Details Tile
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Details")
                             .font(.headline)
                         Text("Date: \(session.date.formatted())")
-                        Text("Distance: \(String(format: "%.1f", session.distance)) \(session.distanceUnit)")
-                        Text("Duration: \(formatDuration(session.duration))")
                         if hasActual {
                             Text("Calories: \(String(format: "%.0f", session.calories ?? 0)) kcal")
                         } else {
@@ -877,7 +1028,6 @@ struct RunSessionDetailView: View {
                         if let notes = session.notes { Text("Notes: \(notes)") }
                     }
                     .floatingTile()
-                    .padding(.top, 8)
 
                     // Route Tile (unconditional, with empty state)
                     VStack(alignment: .leading, spacing: 8) {
@@ -908,21 +1058,16 @@ struct RunSessionDetailView: View {
                         }
                     }
                     .floatingTile()
-                    .padding(.bottom, 80) // Extra padding to avoid tab bar overlap
+                    .padding(.bottom, 16)
                 }
                 .padding(.horizontal, AppTheme.padding)
-            }
-            .tabItem {
-                Label("Overview", systemImage: "chart.bar.fill")
-            }
-            .tag(0)
-            
-            // Stats Tab
-            RunStatsView(session: session, coordinates: coordinates)
-                .tabItem {
-                    Label("Stats", systemImage: "chart.line.uptrend.xyaxis")
                 }
-                .tag(1)
+            } else {
+                // Stats Tab
+                RunStatsView(session: session, coordinates: coordinates)
+            }
+        }
+        .transition(.opacity)
         }
         .appBackground(AppTheme.gradientRuns)
         .foregroundColor(AppTheme.textColor)
@@ -945,6 +1090,23 @@ struct RunSessionDetailView: View {
                             cachedSegments = segments
                         }
                     }
+                }
+            }
+            
+            // Fetch heart rate samples if this is from HealthKit
+            if let uuid = session.healthWorkoutUUID, !uuid.isEmpty, heartRateSamples.isEmpty {
+                isLoadingHeartRate = true
+                Task { @MainActor in
+                    do {
+                        // Get the HKWorkout from the UUID
+                        if let workout = try await HealthKitManager.shared.workoutForUUID(uuid) {
+                            let samples = try await HealthKitManager.shared.heartRateSamples(for: workout)
+                            heartRateSamples = samples
+                        }
+                    } catch {
+                        print("Failed to fetch heart rate samples: \(error)")
+                    }
+                    isLoadingHeartRate = false
                 }
             }
         }
@@ -1034,6 +1196,13 @@ struct RunStatsView: View {
     let coordinates: [CLLocationCoordinate2D]
     
     @State private var loadError: String? = nil
+    
+    // Decode stored coordinates with full data (altitude, timestamp)
+    private var fullCoordinates: [RunCoordinate] {
+        guard !session.locations.isEmpty,
+              let decoded = try? JSONDecoder().decode([RunCoordinate].self, from: session.locations) else { return [] }
+        return decoded
+    }
     
     // Calculate splits per mile/km based on actual GPS data
     // Returns: (distance in units, display text, elevation in meters above sea level)
@@ -1312,6 +1481,30 @@ struct RunStatsView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
+                // Prominent Time & Speed Display
+                HStack(spacing: 40) {
+                    VStack(spacing: 4) {
+                        Text(formatDuration(session.duration))
+                            .font(.system(size: 36, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                        Text("Time")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                    
+                    VStack(spacing: 4) {
+                        Text(averageSpeed)
+                            .font(.system(size: 36, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                        Text(session.distanceUnit == "mi" ? "mph" : "km/h")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 24)
+                .padding(.top, 8)
+                
                 // Performance Metrics
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 8) {
@@ -1321,7 +1514,10 @@ struct RunStatsView: View {
                             .font(.headline)
                     }
                     
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    LazyVGrid(columns: [
+                        GridItem(.flexible(minimum: 150)),
+                        GridItem(.flexible(minimum: 150))
+                    ], spacing: 12) {
                         StatCard(title: "Avg Pace", value: averagePace, subtitle: "per \(session.distanceUnit)")
                         StatCard(title: "Avg Speed", value: averageSpeed, subtitle: "")
                         StatCard(title: "Calories/Unit", value: caloriesPerUnit, subtitle: "")
@@ -1329,7 +1525,6 @@ struct RunStatsView: View {
                     }
                 }
                 .floatingTile()
-                .padding(.top, 8)
                 
                 // Power (for running power meters) - only show if data exists
                 if session.avgPower != nil || session.maxPower != nil {
@@ -1341,7 +1536,10 @@ struct RunStatsView: View {
                                 .font(.headline)
                         }
                         
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                        LazyVGrid(columns: [
+                            GridItem(.flexible(minimum: 150)),
+                            GridItem(.flexible(minimum: 150))
+                        ], spacing: 12) {
                             StatCard(title: "Avg Power", 
                                    value: session.avgPower.map { String(format: "%.0f", $0) } ?? "N/A", 
                                    subtitle: "W")
@@ -1368,7 +1566,10 @@ struct RunStatsView: View {
                                 .font(.headline)
                         }
                         
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                        LazyVGrid(columns: [
+                            GridItem(.flexible(minimum: 150)),
+                            GridItem(.flexible(minimum: 150))
+                        ], spacing: 12) {
                             StatCard(title: "Avg HR", 
                                    value: session.avgHeartRate.map { String(format: "%.0f", $0) } ?? "N/A", 
                                    subtitle: "bpm")
@@ -1403,7 +1604,10 @@ struct RunStatsView: View {
                                 .font(.headline)
                         }
                         
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                        LazyVGrid(columns: [
+                            GridItem(.flexible(minimum: 150)),
+                            GridItem(.flexible(minimum: 150))
+                        ], spacing: 12) {
                             StatCard(title: "Total Ascent", 
                                    value: session.totalAscent.map { String(format: "%.0f m", $0) } ?? "N/A", 
                                    subtitle: "")
@@ -1466,6 +1670,53 @@ struct RunStatsView: View {
                     .floatingTile()
                 }
                 
+                // Elevation Chart
+                if !fullCoordinates.isEmpty, fullCoordinates.contains(where: { $0.altitude != nil && $0.timestamp != nil }) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "mountain.2.fill")
+                                .foregroundStyle(.green)
+                            Text("Elevation Profile")
+                                .font(.headline)
+                        }
+                        
+                        Chart {
+                            ForEach(fullCoordinates.filter { $0.altitude != nil && $0.timestamp != nil }) { coord in
+                                LineMark(
+                                    x: .value("Time", coord.timestamp!),
+                                    y: .value("Elevation", coord.altitude!)
+                                )
+                                .foregroundStyle(.green.gradient)
+                                .interpolationMethod(.catmullRom)
+                            }
+                            
+                            AreaMark(
+                                x: .value("Time", fullCoordinates.first(where: { $0.timestamp != nil })?.timestamp ?? Date()),
+                                yStart: .value("Min", fullCoordinates.compactMap { $0.altitude }.min() ?? 0),
+                                yEnd: .value("Max", fullCoordinates.compactMap { $0.altitude }.max() ?? 0)
+                            )
+                            .foregroundStyle(.green.opacity(0.1))
+                        }
+                        .chartYAxis {
+                            AxisMarks(position: .leading) { value in
+                                AxisGridLine()
+                                AxisValueLabel {
+                                    if let elevation = value.as(Double.self) {
+                                        Text("\(Int(elevation))m")
+                                    }
+                                }
+                            }
+                        }
+                        .chartXAxis {
+                            AxisMarks { _ in
+                                AxisGridLine()
+                            }
+                        }
+                        .frame(height: 180)
+                    }
+                    .floatingTile()
+                }
+                
                 // Split Times
                 if !splits.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
@@ -1503,7 +1754,10 @@ struct RunStatsView: View {
                             .font(.headline)
                     }
                     
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    LazyVGrid(columns: [
+                        GridItem(.flexible(minimum: 150)),
+                        GridItem(.flexible(minimum: 150))
+                    ], spacing: 12) {
                         StatCard(title: "Duration", value: formatDuration(session.duration), subtitle: "")
                         StatCard(title: "Distance", value: String(format: "%.2f", session.distance), subtitle: session.distanceUnit)
                         StatCard(title: "Activity", value: session.activityType.capitalized, subtitle: "")
@@ -1556,16 +1810,27 @@ private struct StatCard: View {
             Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            
             Text(value)
                 .font(.title3)
                 .fontWeight(.semibold)
-            if !subtitle.isEmpty {
-                Text(subtitle)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            
+            // Always show subtitle space to maintain consistent height
+            Group {
+                if !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(" ")
+                        .font(.caption2)
+                        .foregroundStyle(.clear)
+                }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 80, alignment: .leading)
         .padding(12)
         .background(AppTheme.secondaryBackgroundColor.opacity(0.5))
         .clipShape(RoundedRectangle(cornerRadius: 12))
