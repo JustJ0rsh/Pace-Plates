@@ -15,11 +15,33 @@
 		<dict>
 			<key>CFBundleTypeName</key>
 			<string>Pace &amp; Plates Workout</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
 			<key>LSHandlerRank</key>
 			<string>Owner</string>
 			<key>LSItemContentTypes</key>
 			<array>
-				<string>com.justj0rsh.paceandplates.workout</string>
+				<string>com.justj0rsh.paceandplates.ppworkout</string>
+			</array>
+			<key>CFBundleTypeIconFiles</key>
+			<array>
+				<string>PPWorkoutIcon</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Pace &amp; Plates Workout File</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.justj0rsh.paceandplates.paceplate</string>
+			</array>
+			<key>CFBundleTypeIconFiles</key>
+			<array>
+				<string>PaceplateDocIcon</string>
 			</array>
 		</dict>
 	</array>
@@ -29,15 +51,19 @@
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>public.json</string>
-				<string>public.content</string>
 				<string>public.data</string>
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Pace &amp; Plates Workout</string>
-			<key>UTTypeIconFiles</key>
-			<array/>
+			<key>UTTypeIcons</key>
+			<dict>
+				<key>UTTypeIconFiles</key>
+				<array>
+					<string>PPWorkoutIcon</string>
+				</array>
+			</dict>
 			<key>UTTypeIdentifier</key>
-			<string>com.justj0rsh.paceandplates.workout</string>
+			<string>com.justj0rsh.paceandplates.ppworkout</string>
 			<key>UTTypeTagSpecification</key>
 			<dict>
 				<key>public.filename-extension</key>
@@ -45,9 +71,35 @@
 					<string>ppworkout</string>
 					<string>workout</string>
 				</array>
+				<!-- Removed MIME type to prevent system choosing JSON icon -->
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.json</string>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Pace &amp; Plates Workout File</string>
+			<key>UTTypeIcons</key>
+			<dict>
+				<key>UTTypeIconFiles</key>
+				<array>
+					<string>PaceplateDocIcon</string>
+				</array>
+			</dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.justj0rsh.paceandplates.paceplate</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>paceplate</string>
+				</array>
 				<key>public.mime-type</key>
 				<array>
-					<string>application/json</string>
+					<string>application/x-paceplate</string>
 				</array>
 			</dict>
 		</dict>

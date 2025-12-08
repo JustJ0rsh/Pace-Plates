@@ -295,13 +295,21 @@ struct WorkoutImportView: View {
     }
     
     private func findOrCreateExerciseDefinition(name: String, type: String, muscleGroup: String?, context: ModelContext) throws -> ExerciseDefinition {
-        // Try to find existing definition by name (case insensitive)
-        // Note: localizedStandardContains can be unstable in SwiftData predicates
-        let fetchDescriptor = FetchDescriptor<ExerciseDefinition>(
-            predicate: #Predicate<ExerciseDefinition> { $0.name == name }
-        )
-        
-        if let existing = try context.fetch(fetchDescriptor).first {
+        // Normalize to avoid duplicates that differ only by case/spacing/punctuation
+        func normalize(_ s: String) -> String {
+            var t = s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            t = t.replacingOccurrences(of: "\u{2019}", with: "'")
+            t = t.replacingOccurrences(of: "\u{2018}", with: "'")
+            t = t.replacingOccurrences(of: "\u{2013}", with: "-")
+            t = t.replacingOccurrences(of: "\u{2014}", with: "-")
+            t = t.unicodeScalars.map { CharacterSet.alphanumerics.contains($0) ? Character($0) : " " }.reduce("") { $0 + String($1) }
+            while t.contains("  ") { t = t.replacingOccurrences(of: "  ", with: " ") }
+            return t.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let target = normalize(name)
+        // Fetch once and compare in-memory using normalization for reliability with SwiftData
+        let all = try context.fetch(FetchDescriptor<ExerciseDefinition>())
+        if let existing = all.first(where: { normalize($0.name) == target }) {
             return existing
         }
         

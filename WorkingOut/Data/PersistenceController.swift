@@ -118,10 +118,22 @@ class PersistenceController {
         let context = container.mainContext
         guard let defs = try? context.fetch(FetchDescriptor<ExerciseDefinition>()) else { return 0 }
         
-        // Group by normalized name only (ignoring muscle group for matching purposes to catch "Bench Press" (Chest) vs "Bench Press" (Push))
+        // Group by normalized name (robust to case, spacing, and common punctuation variants)
+        func normalize(_ s: String) -> String {
+            var t = s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            // Normalize smart punctuation to ASCII
+            t = t.replacingOccurrences(of: "\u{2019}", with: "'") // curly apostrophe
+            t = t.replacingOccurrences(of: "\u{2018}", with: "'") // left single quote
+            t = t.replacingOccurrences(of: "\u{2013}", with: "-") // en dash
+            t = t.replacingOccurrences(of: "\u{2014}", with: "-") // em dash
+            // Replace non-alphanumerics with spaces and collapse spaces
+            t = t.unicodeScalars.map { CharacterSet.alphanumerics.contains($0) ? Character($0) : " " }.reduce("") { $0 + String($1) }
+            while t.contains("  ") { t = t.replacingOccurrences(of: "  ", with: " ") }
+            return t.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         var groups: [String: [ExerciseDefinition]] = [:]
         for d in defs {
-            let key = d.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let key = normalize(d.name)
             groups[key, default: []].append(d)
         }
         

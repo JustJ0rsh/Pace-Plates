@@ -12,6 +12,7 @@
 		420B3EFD2EB3E28600F73922 /* RunningWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 420B3EE82EB3E28400F73922 /* RunningWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		420B40FF2EBDA73900F73922 /* GameCenterResources.gamekit in Resources */ = {isa = PBXBuildFile; fileRef = 420B40FE2EBDA73900F73922 /* GameCenterResources.gamekit */; };
 		4226C1812E9DED2A00908453 /* Info 2.plist in Resources */ = {isa = PBXBuildFile; fileRef = 4226C1802E9DED2A00908453 /* Info 2.plist */; };
+		43A0000D2EFF00010000000D /* WorkoutThumbnailExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 43A000022EFF000100000002 /* WorkoutThumbnailExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -32,6 +33,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				420B3EFD2EB3E28600F73922 /* RunningWidgetExtension.appex in Embed Foundation Extensions */,
+				43A0000D2EFF00010000000D /* WorkoutThumbnailExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -47,6 +49,7 @@
 		4226C1802E9DED2A00908453 /* Info 2.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info 2.plist"; sourceTree = "<group>"; };
 		42B50D212D9DE5670082A9FA /* Pace & Plates.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Pace & Plates.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		42FCE1502EA875FA00334FD2 /* WeatherKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WeatherKit.framework; path = System/Library/Frameworks/WeatherKit.framework; sourceTree = SDKROOT; };
+		43A000022EFF000100000002 /* WorkoutThumbnailExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WorkoutThumbnailExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -63,6 +66,13 @@
 				Info.plist,
 			);
 			target = 42B50D202D9DE5670082A9FA /* Pace & Plates */;
+		};
+		43A000072EFF000100000007 /* Exceptions for "WorkoutThumbnailExtension" folder in "WorkoutThumbnailExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 43A000012EFF000100000001 /* WorkoutThumbnailExtension */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -81,6 +91,14 @@
 				42FCE02B2E9F216E00334FD2 /* Exceptions for "WorkingOut" folder in "Pace & Plates" target */,
 			);
 			path = WorkingOut;
+			sourceTree = "<group>";
+		};
+		43A000062EFF000100000006 /* WorkoutThumbnailExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				43A000072EFF000100000007 /* Exceptions for "WorkoutThumbnailExtension" folder in "WorkoutThumbnailExtension" target */,
+			);
+			path = WorkoutThumbnailExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -102,6 +120,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		43A000042EFF000100000004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -112,6 +137,7 @@
 				42B50D232D9DE5670082A9FA /* WorkingOut */,
 				420B3EED2EB3E28400F73922 /* RunningWidget */,
 				42B50D222D9DE5670082A9FA /* Products */,
+				43A000062EFF000100000006 /* WorkoutThumbnailExtension */,
 				4226C17A2E94A47300908453 /* Info.plist */,
 				4226C1802E9DED2A00908453 /* Info 2.plist */,
 				42FCE14F2EA875FA00334FD2 /* Frameworks */,
@@ -123,6 +149,7 @@
 			children = (
 				42B50D212D9DE5670082A9FA /* Pace & Plates.app */,
 				420B3EE82EB3E28400F73922 /* RunningWidgetExtension.appex */,
+				43A000022EFF000100000002 /* WorkoutThumbnailExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -186,6 +213,28 @@
 			productReference = 42B50D212D9DE5670082A9FA /* Pace & Plates.app */;
 			productType = "com.apple.product-type.application";
 		};
+		43A000012EFF000100000001 /* WorkoutThumbnailExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 43A000082EFF000100000008 /* Build configuration list for PBXNativeTarget "WorkoutThumbnailExtension" */;
+			buildPhases = (
+				43A000032EFF000100000003 /* Sources */,
+				43A000042EFF000100000004 /* Frameworks */,
+				43A000052EFF000100000005 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				43A000062EFF000100000006 /* WorkoutThumbnailExtension */,
+			);
+			name = WorkoutThumbnailExtension;
+			packageProductDependencies = (
+			);
+			productName = WorkoutThumbnailExtension;
+			productReference = 43A000022EFF000100000002 /* WorkoutThumbnailExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -220,6 +269,7 @@
 			targets = (
 				42B50D202D9DE5670082A9FA /* Pace & Plates */,
 				420B3EE72EB3E28400F73922 /* RunningWidgetExtension */,
+				43A000012EFF000100000001 /* WorkoutThumbnailExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -241,6 +291,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		43A000052EFF000100000005 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -252,6 +309,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		42B50D1D2D9DE5670082A9FA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		43A000032EFF000100000003 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -277,7 +341,7 @@
 				CODE_SIGN_ENTITLEMENTS = RunningWidget/RunningWidgetExtension.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = JK2CCHMR6P;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RunningWidget/Info.plist;
@@ -309,7 +373,7 @@
 				CODE_SIGN_ENTITLEMENTS = RunningWidget/RunningWidgetExtension.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = JK2CCHMR6P;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RunningWidget/Info.plist;
@@ -465,7 +529,7 @@
 				CODE_SIGN_ENTITLEMENTS = WorkingOut/WorkingOut.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_ASSET_PATHS = "\"WorkingOut/Preview Content\"";
 				DEVELOPMENT_TEAM = JK2CCHMR6P;
 				ENABLE_PREVIEWS = YES;
@@ -512,7 +576,7 @@
 				CODE_SIGN_ENTITLEMENTS = WorkingOut/WorkingOut.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_ASSET_PATHS = "\"WorkingOut/Preview Content\"";
 				DEVELOPMENT_TEAM = JK2CCHMR6P;
 				ENABLE_PREVIEWS = YES;
@@ -550,6 +614,56 @@
 			};
 			name = Release;
 		};
+		43A000092EFF000100000009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 3;
+				DEVELOPMENT_TEAM = JK2CCHMR6P;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "$(SRCROOT)/WorkoutThumbnailExtension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = PPWorkoutThumbnails;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.4.1;
+				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOut.PPWorkoutThumbnail;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		43A0000A2EFF00010000000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 3;
+				DEVELOPMENT_TEAM = JK2CCHMR6P;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "$(SRCROOT)/WorkoutThumbnailExtension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = PPWorkoutThumbnails;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.4.1;
+				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOut.PPWorkoutThumbnail;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -576,6 +690,15 @@
 			buildConfigurations = (
 				42B50D462D9DE5690082A9FA /* Debug */,
 				42B50D472D9DE5690082A9FA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		43A000082EFF000100000008 /* Build configuration list for PBXNativeTarget "WorkoutThumbnailExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				43A000092EFF000100000009 /* Debug */,
+				43A0000A2EFF00010000000A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

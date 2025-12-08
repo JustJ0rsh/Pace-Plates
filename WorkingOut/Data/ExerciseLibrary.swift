@@ -174,21 +174,37 @@ struct ExerciseLibrary {
         // Check if we already have exercises
         let descriptor = FetchDescriptor<ExerciseDefinition>()
         let existingExercises = (try? context.fetch(descriptor)) ?? []
-        let existingNames = Set(existingExercises.map { $0.name })
+        
+        // Normalize names so we don't create duplicates that differ only by case/spacing/punctuation
+        func normalize(_ s: String) -> String {
+            var t = s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            // Normalize common punctuation variants
+            t = t.replacingOccurrences(of: "\u{2019}", with: "'") // curly apostrophe
+            t = t.replacingOccurrences(of: "\u{2018}", with: "'") // left single quote
+            t = t.replacingOccurrences(of: "\u{2013}", with: "-") // en dash
+            t = t.replacingOccurrences(of: "\u{2014}", with: "-") // em dash
+            // Replace non-alphanumerics with spaces and collapse spaces
+            t = t.unicodeScalars.map { CharacterSet.alphanumerics.contains($0) ? Character($0) : " " }.reduce("") { $0 + String($1) }
+            while t.contains("  ") { t = t.replacingOccurrences(of: "  ", with: " ") }
+            return t.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        var seen = Set(existingExercises.map { normalize($0.name) })
         
         // Combine beginner and standard exercises
         let allExercises = beginnerExercises + predefinedExercises
         
-        // Add exercises that don't already exist
+        // Add exercises that don't already exist (using normalized comparison)
         var addedCount = 0
         for exercise in allExercises {
-            if !existingNames.contains(exercise.name) {
+            let key = normalize(exercise.name)
+            if !seen.contains(key) {
                 let exerciseDef = ExerciseDefinition(
                     name: exercise.name,
                     muscleGroup: exercise.muscleGroup,
                     isUserDefined: false
                 )
                 context.insert(exerciseDef)
+                seen.insert(key) // ensure subsequent duplicates in the source lists don't get inserted
                 addedCount += 1
             }
         }

@@ -70,6 +70,10 @@ struct WorkoutSessionDetailView: View {
                 )
             }
             .padding(.horizontal, AppTheme.padding)
+            .padding(.horizontal, AppTheme.padding)
+        }
+        .onChange(of: titleText) { _, _ in
+            didEditTitle = true
         }
         .onTapGesture { notesFocused = false; dismissKeyboard() }
         .sheet(isPresented: $showingDatePicker) {
