@@ -37,6 +37,10 @@ struct WorkoutLogView: View {
     }
     @State private var selectedCategory: String = "All"
     @State private var selectedRange: TimeRange = .days7
+    @State private var selectedChartDate: Date? = nil
+    @State private var lockedChartDate: Date? = nil // Keeps summary open until X is clicked
+    @State private var pendingDeleteSession: WorkoutSession? = nil
+    @State private var showDeleteConfirm: Bool = false
     
     // Dynamic chart domain
     private var last7DaysDomain: ClosedRange<Date> {
@@ -71,14 +75,6 @@ struct WorkoutLogView: View {
                         let data = chartData
                         let dailyVolume = data.dailyVolume
                         let groupedVolume = data.groupedVolume
-                        let calendar = Calendar.current
-                        
-                        let minV = dailyVolume.map { $0.value }.min() ?? 0
-                        let maxV = dailyVolume.map { $0.value }.max() ?? 0
-                        let spanV = max(1.0, maxV - minV)
-                        let padV = max(0.1, spanV * 0.15)
-                        let yLowerV = max(0, minV - padV)
-                        let yUpperV = maxV + padV
 
                         VStack(alignment: .leading, spacing: 8) {
                             // Filters above the chart
@@ -115,51 +111,15 @@ struct WorkoutLogView: View {
                             Text("Total Weight Lifted per Day")
                                 .font(.headline)
                                 .foregroundStyle(AppTheme.textColor)
-
-                            Chart(dailyVolume, id: \.date) { item in
-                                LineMark(
-                                    x: .value("Date", item.date),
-                                    y: .value("Total (\(preferredWeightUnit))", item.value)
-                                )
-                                .interpolationMethod(.linear)
-                                .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                                .foregroundStyle(AppTheme.accentColor)
-
-                                PointMark(
-                                    x: .value("Date", item.date),
-                                    y: .value("Total (\(preferredWeightUnit))", item.value)
-                                )
-                                .symbol(Circle())
-                                .symbolSize(40)
-                                .foregroundStyle(AppTheme.accentColor)
-                            }
-                            .chartYScale(domain: (yLowerV <= yUpperV ? yLowerV...yUpperV : 0...1))
-                            .chartXAxis {
-                                AxisMarks(values: .automatic(desiredCount: 5)) { _ in
-                                    AxisGridLine()
-                                    AxisTick()
-                                    AxisValueLabel(format: .dateTime.month().day())
-                                }
-                            }
-                            .chartXScale(domain: last7DaysDomain)
-                            .chartYAxis { AxisMarks(position: .leading) }
-                            .chartPlotStyle { plot in plot.background(.clear) }
-                            .frame(height: 180)
-                            .foregroundColor(AppTheme.textColor)
-
-                            let today = calendar.startOfDay(for: Date())
-                            if let todayVolume = groupedVolume[today] {
-                                HStack(spacing: 8) {
-                                    Text(String(format: "%.0f", todayVolume))
-                                        .font(.system(size: 28, weight: .semibold, design: .rounded))
-                                        .monospacedDigit()
-                                    Text(preferredWeightUnit)
-                                        .font(.headline)
-                                        .foregroundStyle(.secondary)
-                                    Spacer()
-                                }
-                                .padding(.top, 4)
-                            }
+                            WorkoutVolumeChartSection(
+                                dailyVolume: dailyVolume,
+                                groupedVolume: groupedVolume,
+                                preferredWeightUnit: preferredWeightUnit,
+                                xDomain: last7DaysDomain,
+                                selectedChartDate: $selectedChartDate,
+                                lockedChartDate: $lockedChartDate,
+                                workoutSessions: workoutSessions
+                            )
                         }
                         .floatingTile()
                     }
@@ -177,50 +137,31 @@ struct WorkoutLogView: View {
                                     NavigationLink {
                                         WorkoutSessionDetailView(session: session)
                                     } label: {
-                                        HStack(alignment: .top) {
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text(session.title.isEmpty ? session.date.formatted(date: .abbreviated, time: .shortened) : session.title)
-                                                    .font(.headline)
-                                                if let notes = session.notes, !notes.isEmpty {
-                                                    Text(notes)
-                                                        .font(.subheadline)
-                                                        .foregroundStyle(.secondary)
-                                                        .lineLimit(1)
-                                                }
-                                                Text("\(session.exerciseLogs?.count ?? 0) exercises")
-                                                    .font(.caption)
-                                                    .foregroundStyle(.secondary)
+                                        WorkoutSessionRowContent(
+                                            session: session,
+                                            isEditing: isEditing,
+                                            onDelete: {
+                                                pendingDeleteSession = session
+                                                showDeleteConfirm = true
                                             }
-                                            .foregroundColor(AppTheme.textColor)
-                                            Spacer(minLength: 8)
-                                            if isEditing {
-                                                Button(role: .destructive) {
-                                                    if let idx = workoutSessions.firstIndex(where: { $0.id == session.id }) {
-                                                        deleteWorkoutSessions(offsets: IndexSet(integer: idx))
-                                                    }
-                                                } label: {
-                                                    Image(systemName: "trash")
-                                                }
-                                            }
-                                        }
+                                        )
                                     }
-                                .listRowBackground(Color.clear)
-                                .listRowSeparator(.hidden)
-                                .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
-                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    .listRowBackground(Color.clear)
+                                    .listRowSeparator(.hidden)
+                                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                         Button(role: .destructive) {
-                                            modelContext.delete(session)
-                                            try? modelContext.save()
+                                            pendingDeleteSession = session
+                                            showDeleteConfirm = true
                                         } label: {
                                             Label("Delete", systemImage: "trash")
                                         }
                                     }
                                 }
-                                .onDelete(perform: deleteWorkoutSessions)
                             }
                             .listStyle(.plain)
                             .scrollDisabled(true)
-                            .frame(minHeight: CGFloat(workoutSessions.count) * 80)
+                            .frame(height: CGFloat(workoutSessions.count) * 55)
                         }
                         .floatingTile()
                     }
@@ -281,6 +222,23 @@ struct WorkoutLogView: View {
                     allowDateEdit: session.id == pastSessionID,
                     isNewSession: session.id == newlyCreatedSessionID
                 )
+            }
+            .alert("Delete Workout?", isPresented: $showDeleteConfirm) {
+                Button("Cancel", role: .cancel) { pendingDeleteSession = nil }
+                Button("Delete", role: .destructive) {
+                    if let session = pendingDeleteSession {
+                        withAnimation {
+                            modelContext.delete(session)
+                            try? modelContext.save()
+                        }
+                    }
+                    pendingDeleteSession = nil
+                }
+            } message: {
+                if let session = pendingDeleteSession {
+                    let title = session.title.isEmpty ? session.date.formatted(date: .abbreviated, time: .shortened) : session.title
+                    Text("Delete \"\(title)\" and all its exercise logs?")
+                }
             }
         }
     }
@@ -378,5 +336,271 @@ struct WorkoutLogView: View {
     private func availableCategories() -> [String] {
         let groups = Set(exerciseDefinitions.map { $0.muscleGroup.trimmingCharacters(in: .whitespacesAndNewlines) })
         return groups.filter { !$0.isEmpty }.sorted()
+    }
+}
+
+// MARK: - Optimized Workout Session Row Content
+private struct WorkoutSessionRowContent: View {
+    let session: WorkoutSession
+    let isEditing: Bool
+    let onDelete: () -> Void
+    
+    var body: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(session.title.isEmpty ? session.date.formatted(date: .abbreviated, time: .shortened) : session.title)
+                    .font(.headline)
+                if let notes = session.notes, !notes.isEmpty {
+                    Text(notes)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Text("\(session.exerciseLogs?.count ?? 0) exercises")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .foregroundColor(AppTheme.textColor)
+            Spacer(minLength: 8)
+            if isEditing {
+                Button(role: .destructive, action: onDelete) {
+                    Image(systemName: "trash")
+                }
+            }
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Extracted subview to lower type-checking complexity
+private struct WorkoutVolumeChartSection: View {
+    let dailyVolume: [(date: Date, value: Double)]
+    let groupedVolume: [Date: Double]
+    let preferredWeightUnit: String
+    let xDomain: ClosedRange<Date>
+    @Binding var selectedChartDate: Date?
+    @Binding var lockedChartDate: Date?
+    let workoutSessions: [WorkoutSession]
+
+    var body: some View {
+        let minV = dailyVolume.map { $0.value }.min() ?? 0
+        let maxV = dailyVolume.map { $0.value }.max() ?? 0
+        let spanV = max(1.0, maxV - minV)
+        let padV = max(0.1, spanV * 0.15)
+        let yLowerV = max(0, minV - padV)
+        let yUpperV = maxV + padV
+        let yDomain: ClosedRange<Double> = (yLowerV <= yUpperV) ? (yLowerV...yUpperV) : (0...1)
+        let calendar = Calendar.current
+        let labelUnit = "Total (\(preferredWeightUnit))"
+        let points: [VolumePoint] = dailyVolume.map { .init(date: $0.date, value: $0.value) }
+
+        VStack(alignment: .leading, spacing: 8) {
+            VolumeChart(points: points, labelUnit: labelUnit, xDomain: xDomain, yDomain: yDomain, selectedChartDate: $selectedChartDate, lockedChartDate: $lockedChartDate)
+
+            // Use locked date to keep summary open until X is clicked
+            if let lockedDate = lockedChartDate,
+               let selectedPoint = points.first(where: { calendar.isDate($0.date, inSameDayAs: lockedDate) }) {
+                let sessionsOnDay = workoutSessions.filter { calendar.isDate($0.date, inSameDayAs: lockedDate) }
+                let counts = countsForSessions(sessionsOnDay)
+
+                SelectionSummary(
+                    date: lockedDate,
+                    valueText: String(format: "%.0f %@", selectedPoint.value, preferredWeightUnit),
+                    sessionsOnDay: sessionsOnDay,
+                    exerciseCount: counts.exercises,
+                    setCount: counts.sets,
+                    onClose: { withAnimation(.easeOut(duration: 0.2)) { lockedChartDate = nil; selectedChartDate = nil } }
+                )
+            }
+
+            let today = calendar.startOfDay(for: Date())
+            if let todayVolume = groupedVolume[today] {
+                HStack(spacing: 8) {
+                    Text(String(format: "%.0f", todayVolume))
+                        .font(.system(size: 28, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                    Text(preferredWeightUnit)
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.top, 4)
+            }
+        }
+    }
+
+    // Precompute simple counts without nested reduces for better type-checking
+    private func countsForSessions(_ sessions: [WorkoutSession]) -> (exercises: Int, sets: Int) {
+        var exerciseCount = 0
+        var setCount = 0
+        for s in sessions {
+            let logs = s.exerciseLogs ?? []
+            exerciseCount += logs.count
+            // Each ExerciseLog represents a single set
+            setCount += logs.count
+        }
+        return (exerciseCount, setCount)
+    }
+}
+
+// Lightweight model to reduce generic tuple complexity in Chart
+private struct VolumePoint: Identifiable {
+    var id: Date { date }
+    let date: Date
+    let value: Double
+}
+
+// Minimal chart-only view to isolate Chart DSL generics
+private struct VolumeChart: View {
+    let points: [VolumePoint]
+    let labelUnit: String
+    let xDomain: ClosedRange<Date>
+    let yDomain: ClosedRange<Double>
+    @Binding var selectedChartDate: Date?
+    @Binding var lockedChartDate: Date?
+
+    var body: some View {
+        Chart(points) { item in
+            LineMark(
+                x: .value("Date", item.date),
+                y: .value(labelUnit, item.value)
+            )
+            .interpolationMethod(.linear)
+            .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            .foregroundStyle(AppTheme.accentColor)
+
+            PointMark(
+                x: .value("Date", item.date),
+                y: .value(labelUnit, item.value)
+            )
+            .symbol(Circle())
+            .symbolSize(40)
+            .foregroundStyle(AppTheme.accentColor)
+
+            // Use locked date for persistent highlight
+            if let displayDate = lockedChartDate ?? selectedChartDate,
+               Calendar.current.isDate(item.date, inSameDayAs: displayDate) {
+                RuleMark(x: .value("Selected", item.date))
+                    .foregroundStyle(AppTheme.accentColor.opacity(0.3))
+                    .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 5]))
+
+                PointMark(
+                    x: .value("Date", item.date),
+                    y: .value(labelUnit, item.value)
+                )
+                .symbol(Circle())
+                .symbolSize(100)
+                .foregroundStyle(AppTheme.accentColor)
+            }
+        }
+        .chartYScale(domain: yDomain)
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 5)) { _ in
+                AxisGridLine()
+                AxisTick()
+                AxisValueLabel(format: .dateTime.month().day())
+            }
+        }
+        .chartXScale(domain: xDomain)
+        .chartYAxis { AxisMarks(position: .leading) }
+        .chartPlotStyle { plot in plot.background(.clear) }
+        .chartXSelection(value: $selectedChartDate)
+        .onChange(of: selectedChartDate) { _, newDate in
+            // When user taps a new point, lock it
+            if let newDate = newDate {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    lockedChartDate = newDate
+                }
+            }
+        }
+        .frame(height: 180)
+        .foregroundColor(AppTheme.textColor)
+    }
+}
+
+// Selection summary view to avoid large inline ViewBuilder
+private struct SelectionSummary: View {
+    let date: Date
+    let valueText: String
+    let sessionsOnDay: [WorkoutSession]
+    let exerciseCount: Int
+    let setCount: Int
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(date.formatted(date: .abbreviated, time: .omitted))
+                    .font(.headline)
+                Spacer()
+                Button(action: onClose) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Divider().opacity(0.3)
+
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Total Volume")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(valueText)
+                        .font(.title3.bold())
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Workouts")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("\(sessionsOnDay.count)")
+                        .font(.title3.bold())
+                }
+            }
+
+            if !sessionsOnDay.isEmpty {
+                Divider().opacity(0.3)
+
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Exercises")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("\(exerciseCount)")
+                            .font(.subheadline.bold())
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Total Sets")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("\(setCount)")
+                            .font(.subheadline.bold())
+                    }
+                }
+
+                ForEach(sessionsOnDay.prefix(2)) { session in
+                    HStack(spacing: 8) {
+                        Image(systemName: "figure.strengthtraining.traditional")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.accentColor)
+                        Text(session.title.isEmpty ? session.date.formatted(date: .omitted, time: .shortened) : session.title)
+                            .font(.subheadline)
+                            .lineLimit(1)
+                    }
+                }
+
+                if sessionsOnDay.count > 2 {
+                    Text("+ \(sessionsOnDay.count - 2) more")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(12)
+        .background(AppTheme.secondaryBackgroundColor)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .transition(.opacity.combined(with: .scale(scale: 0.95)))
     }
 }

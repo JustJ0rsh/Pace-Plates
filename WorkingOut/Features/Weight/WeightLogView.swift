@@ -9,6 +9,10 @@ struct WeightLogView: View {
     @State private var isEditing: Bool = false
     @AppStorage("weightGoal") private var weightGoal: String = "lose" // "gain" or "lose"
     @AppStorage("weightUnit") private var preferredWeightUnit = "lbs"
+    @State private var selectedChartDate: Date? = nil
+    @State private var lockedChartDate: Date? = nil // Keeps summary open until X is clicked
+    @State private var pendingDeleteEntry: WeightEntry? = nil
+    @State private var showDeleteConfirm: Bool = false
     
     // Time filter
     private enum TimeRange: String, CaseIterable, Identifiable {
@@ -76,58 +80,16 @@ struct WeightLogView: View {
                                     .font(.headline)
                                     .foregroundStyle(AppTheme.textColor)
                             }
-
-                            let data = chartPrep(entries: weightEntries, preferredWeightUnit: preferredWeightUnit, xDomain: last7DaysDomain)
-
-                            Chart(data.sorted) { entry in
-                                LineMark(
-                                    x: .value("Date", entry.date),
-                                    y: .value("Weight", convertWeight(entry.weight, from: entry.weightUnit, to: preferredWeightUnit))
-                                )
-                                .interpolationMethod(.linear)
-                                .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                                .symbol(Circle())
-                                .symbolSize(data.convertedWeights.count <= 8 ? 40 : 0)
-                                .foregroundStyle(AppTheme.accentColor)
-                            }
-                            .chartYScale(domain: data.yLower <= data.yUpper ? data.yLower...data.yUpper : 0...1)
-                            .chartXAxis {
-                                AxisMarks(values: .automatic(desiredCount: 5)) { value in
-                                    AxisGridLine()
-                                    AxisTick()
-                                    AxisValueLabel(format: .dateTime.month().day())
-                                }
-                            }
-                            .chartXScale(domain: last7DaysDomain)
-                            .chartYAxis { AxisMarks(position: .leading) }
-                            .chartPlotStyle { plot in plot.background(.clear) }
-                            .frame(height: 200)
-                            .foregroundColor(AppTheme.textColor)
-
-                            if let latest = data.latest, let oldest = data.oldest {
-                                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                    Text(String(format: "%.1f", convertWeight(latest.weight, from: latest.weightUnit, to: preferredWeightUnit)))
-                                        .font(.system(size: 32, weight: .semibold, design: .rounded))
-                                        .monospacedDigit()
-                                    Text(preferredWeightUnit)
-                                        .font(.headline)
-                                        .foregroundStyle(.secondary)
-                                    Spacer()
-                                    if data.sorted.count >= 2 {
-                                        let latestConv = convertWeight(latest.weight, from: latest.weightUnit, to: preferredWeightUnit)
-                                        let oldestConv = convertWeight(oldest.weight, from: oldest.weightUnit, to: preferredWeightUnit)
-                                        let delta = latestConv - oldestConv
-                                        let isUp = delta >= 0
-                                        let arrow = isUp ? "arrow.up" : "arrow.down"
-                                        let deltaText = String(format: "%.1f", abs(delta))
-                                        let isGoodChange: Bool = (weightGoal == "gain") ? isUp : !isUp
-                                        Label("\(deltaText) \(preferredWeightUnit)", systemImage: arrow)
-                                            .font(.subheadline)
-                                            .foregroundStyle(isGoodChange ? .green : .red)
-                                    }
-                                }
-                                .padding(.top, 4)
-                            }
+                            // Compute and render the chart section in a smaller subview
+                            let filtered = chartPrep(entries: weightEntries, preferredWeightUnit: preferredWeightUnit, xDomain: last7DaysDomain).sorted
+                            WeightChartSection(
+                                entries: filtered,
+                                preferredWeightUnit: preferredWeightUnit,
+                                weightGoal: weightGoal,
+                                xDomain: last7DaysDomain,
+                                selectedChartDate: $selectedChartDate,
+                                lockedChartDate: $lockedChartDate
+                            )
                         } else {
                             ContentUnavailableView(
                                 "No Weight Logged",
@@ -145,30 +107,21 @@ struct WeightLogView: View {
                                 .font(.headline)
                             List {
                                 ForEach(weightEntries) { entry in
-                                    HStack {
-                                        Text(entry.date.formatted(date: .abbreviated, time: .omitted))
-                                        Spacer()
-                                        Text("\(String(format: "%.1f", entry.weight)) \(entry.weightUnit)")
-                                            .foregroundStyle(.secondary)
-                                        if isEditing {
-                                            Button(role: .destructive) {
-                                                if let idx = weightEntries.firstIndex(where: { $0.id == entry.id }) {
-                                                    deleteWeightEntries(offsets: IndexSet(integer: idx))
-                                                }
-                                            } label: {
-                                                Image(systemName: "trash")
-                                            }
-                                            .padding(.leading, 8)
+                                    WeightEntryRowContent(
+                                        entry: entry,
+                                        isEditing: isEditing,
+                                        onDelete: {
+                                            pendingDeleteEntry = entry
+                                            showDeleteConfirm = true
                                         }
-                                    }
-                                    .foregroundColor(AppTheme.textColor)
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
-                            .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
-                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    )
+                                    .listRowBackground(Color.clear)
+                                    .listRowSeparator(.hidden)
+                                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                         Button(role: .destructive) {
-                                            modelContext.delete(entry)
-                                            try? modelContext.save()
+                                            pendingDeleteEntry = entry
+                                            showDeleteConfirm = true
                                         } label: {
                                             Label("Delete", systemImage: "trash")
                                         }
@@ -177,7 +130,7 @@ struct WeightLogView: View {
                             }
                             .listStyle(.plain)
                             .scrollDisabled(true)
-                            .frame(minHeight: CGFloat(weightEntries.count) * 40)
+                            .frame(height: CGFloat(weightEntries.count) * 44)
                         }
                         .floatingTile()
                     }
@@ -209,6 +162,22 @@ struct WeightLogView: View {
             }
             .sheet(isPresented: $showingLogWeightSheet) {
                 LogWeightView()
+            }
+            .alert("Delete Weight Entry?", isPresented: $showDeleteConfirm) {
+                Button("Cancel", role: .cancel) { pendingDeleteEntry = nil }
+                Button("Delete", role: .destructive) {
+                    if let entry = pendingDeleteEntry {
+                        withAnimation {
+                            modelContext.delete(entry)
+                            try? modelContext.save()
+                        }
+                    }
+                    pendingDeleteEntry = nil
+                }
+            } message: {
+                if let entry = pendingDeleteEntry {
+                    Text("Delete the weight entry from \(entry.date.formatted(date: .abbreviated, time: .omitted))?")
+                }
             }
         }
     }
@@ -243,4 +212,206 @@ struct WeightLogView: View {
 
         return (sorted, convertedWeights, yLower, yUpper, latest, oldest)
     }
-} 
+}
+
+// MARK: - Optimized Weight Entry Row Content
+private struct WeightEntryRowContent: View {
+    let entry: WeightEntry
+    let isEditing: Bool
+    let onDelete: () -> Void
+    
+    var body: some View {
+        HStack {
+            Text(entry.date.formatted(date: .abbreviated, time: .omitted))
+            Spacer()
+            Text("\(String(format: "%.1f", entry.weight)) \(entry.weightUnit)")
+                .foregroundStyle(.secondary)
+            if isEditing {
+                Button(role: .destructive, action: onDelete) {
+                    Image(systemName: "trash")
+                }
+                .padding(.leading, 8)
+            }
+        }
+        .foregroundColor(AppTheme.textColor)
+        .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Extracted subview to lower type-checking complexity
+private struct WeightChartSection: View {
+    let entries: [WeightEntry]
+    let preferredWeightUnit: String
+    let weightGoal: String
+    let xDomain: ClosedRange<Date>
+    @Binding var selectedChartDate: Date?
+    @Binding var lockedChartDate: Date?
+
+    private func convertWeight(_ value: Double, from unit: String, to target: String) -> Double {
+        if unit == target { return value }
+        if unit == "kg" && target == "lbs" { return value * 2.20462 }
+        if unit == "lbs" && target == "kg" { return value / 2.20462 }
+        return value
+    }
+
+    var body: some View {
+        // Precompute light-weight values to help the type-checker
+        let convertedWeights = entries.map { convertWeight($0.weight, from: $0.weightUnit, to: preferredWeightUnit) }
+        let cMin = convertedWeights.min() ?? 0
+        let cMax = convertedWeights.max() ?? 0
+        let cSpan = max(1.0, cMax - cMin)
+        let cPad = max(0.5, cSpan * 0.15)
+        let yLower = cMin - cPad
+        let yUpper = cMax + cPad
+        let yDomain: ClosedRange<Double> = (yLower <= yUpper) ? (yLower...yUpper) : (0...1)
+
+        VStack(alignment: .leading, spacing: 8) {
+            Chart(entries) { entry in
+                LineMark(
+                    x: .value("Date", entry.date),
+                    y: .value("Weight", convertWeight(entry.weight, from: entry.weightUnit, to: preferredWeightUnit))
+                )
+                .interpolationMethod(.linear)
+                .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                .symbol(Circle())
+                .symbolSize(convertedWeights.count <= 8 ? 40 : 0)
+                .foregroundStyle(AppTheme.accentColor)
+
+                // Use locked date for persistent highlight
+                if let displayDate = lockedChartDate ?? selectedChartDate,
+                   Calendar.current.isDate(entry.date, inSameDayAs: displayDate) {
+                    RuleMark(x: .value("Selected", entry.date))
+                        .foregroundStyle(AppTheme.accentColor.opacity(0.3))
+                        .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 5]))
+
+                    PointMark(
+                        x: .value("Date", entry.date),
+                        y: .value("Weight", convertWeight(entry.weight, from: entry.weightUnit, to: preferredWeightUnit))
+                    )
+                    .symbol(Circle())
+                    .symbolSize(100)
+                    .foregroundStyle(AppTheme.accentColor)
+                }
+            }
+            .chartYScale(domain: yDomain)
+            .chartXAxis {
+                AxisMarks(values: .automatic(desiredCount: 5)) { _ in
+                    AxisGridLine()
+                    AxisTick()
+                    AxisValueLabel(format: .dateTime.month().day())
+                }
+            }
+            .chartXScale(domain: xDomain)
+            .chartYAxis { AxisMarks(position: .leading) }
+            .chartPlotStyle { plot in plot.background(.clear) }
+            .chartXSelection(value: $selectedChartDate)
+            .onChange(of: selectedChartDate) { _, newDate in
+                // When user taps a new point, lock it
+                if let newDate = newDate {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        lockedChartDate = newDate
+                    }
+                }
+            }
+            .frame(height: 200)
+            .foregroundColor(AppTheme.textColor)
+
+            // Selected-day summary (uses locked date to stay open until X is clicked)
+            if let lockedDate = lockedChartDate,
+               let selectedEntry = entries.first(where: { Calendar.current.isDate($0.date, inSameDayAs: lockedDate) }) {
+                let selectedDate = lockedDate
+                let entriesOnDay = entries.filter { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }
+                let previousEntry = entries.filter { $0.date < Calendar.current.startOfDay(for: selectedDate) }.last
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text(selectedDate.formatted(date: .abbreviated, time: .omitted))
+                            .font(.headline)
+                        Spacer()
+                        Button {
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                lockedChartDate = nil
+                                selectedChartDate = nil
+                            }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Divider().opacity(0.3)
+
+                    HStack(spacing: 16) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Weight")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(String(format: "%.1f %@", convertWeight(selectedEntry.weight, from: selectedEntry.weightUnit, to: preferredWeightUnit), preferredWeightUnit))
+                                .font(.title3.bold())
+                        }
+
+                        if let prev = previousEntry {
+                            let currentWeight = convertWeight(selectedEntry.weight, from: selectedEntry.weightUnit, to: preferredWeightUnit)
+                            let prevWeight = convertWeight(prev.weight, from: prev.weightUnit, to: preferredWeightUnit)
+                            let change = currentWeight - prevWeight
+                            let isUp = change >= 0
+                            let isGoodChange = (weightGoal == "gain") ? isUp : !isUp
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Change")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                HStack(spacing: 4) {
+                                    Image(systemName: isUp ? "arrow.up" : "arrow.down")
+                                        .font(.caption)
+                                    Text(String(format: "%.1f %@", abs(change), preferredWeightUnit))
+                                        .font(.subheadline.bold())
+                                }
+                                .foregroundStyle(isGoodChange ? .green : .red)
+                            }
+                        }
+                    }
+
+                    if entriesOnDay.count > 1 {
+                        Divider().opacity(0.3)
+                        Text("\(entriesOnDay.count) entries this day")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    // WeightEntry has no notes field
+                }
+                .padding(12)
+                .background(AppTheme.secondaryBackgroundColor)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            }
+
+            // Latest vs oldest summary
+            if let latest = entries.last, let oldest = entries.first {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(String(format: "%.1f", convertWeight(latest.weight, from: latest.weightUnit, to: preferredWeightUnit)))
+                        .font(.system(size: 32, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                    Text(preferredWeightUnit)
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if entries.count >= 2 {
+                        let latestConv = convertWeight(latest.weight, from: latest.weightUnit, to: preferredWeightUnit)
+                        let oldestConv = convertWeight(oldest.weight, from: oldest.weightUnit, to: preferredWeightUnit)
+                        let delta = latestConv - oldestConv
+                        let isUp = delta >= 0
+                        let arrow = isUp ? "arrow.up" : "arrow.down"
+                        let deltaText = String(format: "%.1f", abs(delta))
+                        let isGoodChange: Bool = (weightGoal == "gain") ? isUp : !isUp
+                        Label("\(deltaText) \(preferredWeightUnit)", systemImage: arrow)
+                            .font(.subheadline)
+                            .foregroundStyle(isGoodChange ? .green : .red)
+                    }
+                }
+                .padding(.top, 4)
+            }
+        }
+    }
+}

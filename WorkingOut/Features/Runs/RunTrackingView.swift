@@ -606,29 +606,43 @@ struct RunTrackingProView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    shouldFollowUser = true
-                    recenterOnUser()
-                    runTracker.lastFollowUpdate = nil
-                } label: {
-                    Image(systemName: "location.fill")
+                HStack(spacing: 16) {
+                    Button {
+                        shouldFollowUser = true
+                        recenterOnUser()
+                        runTracker.lastFollowUpdate = nil
+                    } label: {
+                        Image(systemName: "location.fill")
+                    }
+                    .disabled(runTracker.authorizationStatus == .denied || runTracker.authorizationStatus == .restricted)
+                    .help("Center on current location")
+                    
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
                 }
-                .disabled(runTracker.authorizationStatus == .denied || runTracker.authorizationStatus == .restricted)
-                .help("Center on current location")
             }
         }
         #else
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    shouldFollowUser = true
-                    recenterOnUser()
-                    runTracker.lastFollowUpdate = nil
-                } label: {
-                    Image(systemName: "location.fill")
+                HStack(spacing: 16) {
+                    Button {
+                        shouldFollowUser = true
+                        recenterOnUser()
+                        runTracker.lastFollowUpdate = nil
+                    } label: {
+                        Image(systemName: "location.fill")
+                    }
+                    .disabled(runTracker.authorizationStatus == .denied || runTracker.authorizationStatus == .restricted)
+                    .help("Center on current location")
+                    
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
                 }
-                .disabled(runTracker.authorizationStatus == .denied || runTracker.authorizationStatus == .restricted)
-                .help("Center on current location")
             }
         }
         #endif

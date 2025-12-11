@@ -30,6 +30,10 @@ struct RunLogView: View {
     @State private var showDeleteConfirm: Bool = false
     @State private var loadingSessionId: UUID? = nil
     @State private var navigationSessionId: UUID? = nil
+    @State private var selectedChartDate: Date? = nil
+    @State private var pendingSwipeDeleteSession: RunningSession? = nil
+    @State private var showSwipeDeleteConfirm: Bool = false
+    @State private var lockedChartDate: Date? = nil // Keeps summary open until X is clicked
     
     // Filters
     private enum TimeRange: String, CaseIterable, Identifiable {
@@ -194,6 +198,22 @@ struct RunLogView: View {
                                 .symbol(Circle())
                                 .symbolSize(40)
                                 .foregroundStyle(AppTheme.accentColor)
+                                
+                                // Selection indicator (use locked date for persistent highlight)
+                                if let displayDate = lockedChartDate ?? selectedChartDate,
+                                   Calendar.current.isDate(item.date, inSameDayAs: displayDate) {
+                                    RuleMark(x: .value("Selected", item.date))
+                                        .foregroundStyle(AppTheme.accentColor.opacity(0.3))
+                                        .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 5]))
+                                    
+                                    PointMark(
+                                        x: .value("Date", item.date),
+                                        y: .value("Distance (\(unitLabel))", item.value)
+                                    )
+                                    .symbol(Circle())
+                                    .symbolSize(100)
+                                    .foregroundStyle(AppTheme.accentColor)
+                                }
                             }
                             .chartYScale(domain: (yLower <= yUpper ? yLower...yUpper : 0...1))
                             .chartXAxis {
@@ -204,8 +224,90 @@ struct RunLogView: View {
                             .chartXScale(domain: last7DaysDomain)
                             .chartYAxis { AxisMarks(position: .leading) }
                             .chartPlotStyle { plot in plot.background(.clear) }
+                            .chartXSelection(value: $selectedChartDate)
+                            .onChange(of: selectedChartDate) { _, newDate in
+                                // When user taps a new point, lock it
+                                if let newDate = newDate {
+                                    withAnimation(.easeOut(duration: 0.2)) {
+                                        lockedChartDate = newDate
+                                    }
+                                }
+                            }
                             .frame(height: 200)
                             .foregroundColor(AppTheme.textColor)
+                            
+                            // Data summary popup when a point is locked (stays until X is clicked)
+                            if let lockedDate = lockedChartDate,
+                               let selectedPoint = daily.first(where: { Calendar.current.isDate($0.date, inSameDayAs: lockedDate) }) {
+                                let selectedDate = lockedDate
+                                let sessionsOnDay = filteredSessions.filter { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }
+                                
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Text(selectedDate.formatted(date: .abbreviated, time: .omitted))
+                                            .font(.headline)
+                                        Spacer()
+                                        Button {
+                                            withAnimation(.easeOut(duration: 0.2)) {
+                                                lockedChartDate = nil
+                                                selectedChartDate = nil
+                                            }
+                                        } label: {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                    
+                                    Divider().opacity(0.3)
+                                    
+                                    HStack(spacing: 16) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Total Distance")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                            Text(String(format: "%.2f %@", selectedPoint.value, unitLabel))
+                                                .font(.title3.bold())
+                                        }
+                                        
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Activities")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                            Text("\(sessionsOnDay.count)")
+                                                .font(.title3.bold())
+                                        }
+                                    }
+                                    
+                                    if !sessionsOnDay.isEmpty {
+                                        Divider().opacity(0.3)
+                                        
+                                        ForEach(sessionsOnDay.prefix(3)) { session in
+                                            HStack(spacing: 8) {
+                                                Image(systemName: activityIcon(for: session.activityType))
+                                                    .font(.caption)
+                                                    .foregroundStyle(AppTheme.accentColor)
+                                                Text("\(String(format: "%.2f", session.distance)) \(session.distanceUnit)")
+                                                    .font(.subheadline)
+                                                Text("•")
+                                                    .foregroundStyle(.secondary)
+                                                Text(formatDuration(session.duration))
+                                                    .font(.subheadline)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                        
+                                        if sessionsOnDay.count > 3 {
+                                            Text("+ \(sessionsOnDay.count - 3) more")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                }
+                                .padding(12)
+                                .background(AppTheme.secondaryBackgroundColor)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                            }
                         }
                     }
                     .floatingTile()
@@ -216,72 +318,45 @@ struct RunLogView: View {
                                 ForEach(runningSessions) { session in
                                     Button {
                                         loadingSessionId = session.id
-                                        // Trigger navigation after showing loading
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                                             navigationSessionId = session.id
                                         }
                                     } label: {
-                                        HStack(alignment: .top, spacing: 12) {
-                                            // Activity type icon
-                                            Image(systemName: activityIcon(for: session.activityType))
-                                                .font(.title2)
-                                                .foregroundStyle(AppTheme.accentColor)
-                                                .frame(width: 32)
-                                            
-                                            VStack(alignment: .leading, spacing: 4) {
-                                                Text(session.date.formatted(date: .abbreviated, time: .shortened))
-                                                    .font(.headline)
-                                                Text("\(String(format: "%.1f", session.distance)) \(session.distanceUnit) • \(String(format: "%.0f", caloriesFor(session))) kcal")
-                                                    .font(.subheadline)
-                                                HStack(spacing: 4) {
-                                                    Text(formatDuration(session.duration))
-                                                    Text("•")
-                                                    Text(formatPace(distance: session.distance, duration: session.duration, unit: session.distanceUnit))
-                                                }
-                                                .font(.subheadline)
-                                                .foregroundStyle(.secondary)
-                                                if let place = locationCache[session.id], !place.isEmpty {
-                                                    Text(place)
-                                                        .font(.caption)
-                                                        .foregroundStyle(.secondary)
+                                        RunSessionRowContent(
+                                            session: session,
+                                            locationName: locationCache[session.id],
+                                            isEditing: isEditing,
+                                            onDelete: {
+                                                if let idx = runningSessions.firstIndex(where: { $0.id == session.id }) {
+                                                    pendingDeleteIndex = idx
+                                                    showDeleteConfirm = true
                                                 }
                                             }
-                                            .foregroundColor(AppTheme.textColor)
-                                            Spacer(minLength: 8)
-                                            if isEditing {
-                                                Button(role: .destructive) {
-                                                    if let idx = runningSessions.firstIndex(where: { $0.id == session.id }) {
-                                                        pendingDeleteIndex = idx
-                                                        showDeleteConfirm = true
-                                                    }
-                                                } label: { Image(systemName: "trash") }
-                                            }
-                                        }
+                                        )
                                     }
                                     .buttonStyle(.plain)
                                     .listRowBackground(Color.clear)
                                     .listRowSeparator(.hidden)
                                     .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
-                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                         Button(role: .destructive) {
-                                            modelContext.delete(session)
-                                            try? modelContext.save()
+                                            pendingSwipeDeleteSession = session
+                                            showSwipeDeleteConfirm = true
                                         } label: {
                                             Label("Delete", systemImage: "trash")
                                         }
                                     }
                                 }
-                                .onDelete(perform: deleteRunningSessions)
                             }
                             .listStyle(.plain)
                             .scrollDisabled(true)
-                            .frame(minHeight: CGFloat(runningSessions.count) * 80)
+                            .frame(height: CGFloat(runningSessions.count) * 80)
                         }
                         .floatingTile()
                         .onAppear {
                             prefetchLocationNames()
                         }
-                        .onChange(of: runningSessions) {
+                        .onChange(of: runningSessions.count) {
                             hasPrefetchedLocations = false
                             prefetchLocationNames()
                         }
@@ -307,6 +382,29 @@ struct RunLogView: View {
                             deleteRunningSessions(offsets: IndexSet(integer: idx))
                         }
                         pendingDeleteIndex = nil
+                    }
+                }
+            } message: {
+                Text("Also remove this workout from the Health app?")
+            }
+            .alert("Delete Run?", isPresented: $showSwipeDeleteConfirm) {
+                Button("Cancel", role: .cancel) { pendingSwipeDeleteSession = nil }
+                Button("Delete on Device", role: .destructive) {
+                    if let session = pendingSwipeDeleteSession {
+                        modelContext.delete(session)
+                        try? modelContext.save()
+                    }
+                    pendingSwipeDeleteSession = nil
+                }
+                Button("Delete on Device + Health", role: .destructive) {
+                    Task { @MainActor in
+                        if let session = pendingSwipeDeleteSession {
+                            let meters: Double = (session.distanceUnit == "mi") ? (session.distance * 1609.34) : (session.distance * 1000.0)
+                            try? await HealthKitManager.shared.deleteRun(uuidString: session.healthWorkoutUUID, endDate: session.date, duration: session.duration, distanceMeters: meters)
+                            modelContext.delete(session)
+                            try? modelContext.save()
+                        }
+                        pendingSwipeDeleteSession = nil
                     }
                 }
             } message: {
@@ -779,6 +877,125 @@ struct RunLogView: View {
         // Mark as prefetched if we've started fetching all available sessions
         if sessionsToFetch.count <= fetchCount {
             hasPrefetchedLocations = true
+        }
+    }
+}
+
+// MARK: - Optimized Run Session Row Content
+private struct RunSessionRowContent: View {
+    let session: RunningSession
+    let locationName: String?
+    let isEditing: Bool
+    let onDelete: () -> Void
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: activityIcon(for: session.activityType))
+                .font(.title2)
+                .foregroundStyle(AppTheme.accentColor)
+                .frame(width: 32)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(session.date.formatted(date: .abbreviated, time: .shortened))
+                    .font(.headline)
+                Text("\(String(format: "%.1f", session.distance)) \(session.distanceUnit) • \(String(format: "%.0f", estimatedCalories)) kcal")
+                    .font(.subheadline)
+                HStack(spacing: 4) {
+                    Text(formattedDuration)
+                    Text("•")
+                    Text(formattedPace)
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                if let place = locationName, !place.isEmpty {
+                    Text(place)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .foregroundColor(AppTheme.textColor)
+            Spacer(minLength: 8)
+            if isEditing {
+                Button(role: .destructive, action: onDelete) {
+                    Image(systemName: "trash")
+                }
+            }
+        }
+    }
+    
+    private var formattedDuration: String {
+        let hours = Int(session.duration) / 3600
+        let minutes = Int(session.duration) / 60 % 60
+        let seconds = Int(session.duration) % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            return String(format: "%02d:%02d", minutes, seconds)
+        }
+    }
+    
+    private var formattedPace: String {
+        guard session.distance > 0, session.duration > 0 else { return "—" }
+        let minutesPerUnit = (session.duration / 60.0) / session.distance
+        let mins = Int(minutesPerUnit)
+        let secs = Int((minutesPerUnit - Double(mins)) * 60)
+        return String(format: "%d:%02d/%@", mins, secs, session.distanceUnit)
+    }
+    
+    private var estimatedCalories: Double {
+        if let c = session.calories, c > 0 { return c }
+        let hours = max(session.duration / 3600.0, 0.0001)
+        let miles = (session.distanceUnit == "mi") ? session.distance : session.distance / 1.60934
+        let mph = miles / hours
+        let met: Double = {
+            switch session.activityType {
+            case "cycling":
+                switch mph {
+                case ..<10: return 4.0
+                case 10..<12: return 6.0
+                case 12..<14: return 8.0
+                case 14..<16: return 10.0
+                case 16..<19: return 12.0
+                default: return 16.0
+                }
+            case "rowing":
+                switch mph {
+                case ..<3: return 4.0
+                case 3..<4.5: return 7.0
+                default: return 10.0
+                }
+            case "elliptical": return 5.5
+            case "stairStepper", "stairClimbing": return 8.0
+            default:
+                switch mph {
+                case ..<2.5: return 2.5
+                case 2.5..<3.0: return 3.3
+                case 3.0..<3.5: return 3.8
+                case 3.5..<4.0: return 4.3
+                case 4.0..<5.0: return 5.0
+                case 5.0..<5.5: return 8.3
+                case 5.5..<6.0: return 9.0
+                case 6.0..<7.0: return 9.8
+                case 7.0..<8.0: return 11.0
+                case 8.0..<9.0: return 11.8
+                case 9.0..<10.0: return 12.8
+                default: return 14.5
+                }
+            }
+        }()
+        let minutes = session.duration / 60.0
+        return max(met * 3.5 * 70.0 / 200.0 * minutes, 0)
+    }
+    
+    private func activityIcon(for type: String) -> String {
+        switch type {
+        case "walking": return "figure.walk"
+        case "hiking": return "figure.hiking"
+        case "cycling": return "bicycle"
+        case "rowing": return "figure.rower"
+        case "elliptical": return "figure.core.training"
+        case "stairStepper", "stairClimbing": return "figure.stairs"
+        default: return "figure.run"
         }
     }
 }

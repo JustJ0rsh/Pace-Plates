@@ -28,32 +28,36 @@ struct ContentView: View {
     // @State private var importErrorMessage: String = ""
 
     var body: some View {
-        VStack(spacing: 0) {
-            TabView {
-                // Left side
-                NavigationStack { HomeView() }
-                    .tabItem { Label("Home", systemImage: "house.fill") }
-                NavigationStack { WorkoutLogView() }
-                    .tabItem { Label("Workouts", systemImage: "figure.strengthtraining.traditional") }
-                
-                // Middle tab: AI (show if supported, hide if device is not eligible)
-                if shouldShowAITab() {
-                    NavigationStack { AIPlannerView() }
-                        .tabItem { Label("AI", systemImage: "sparkles") }
-                }
-                
-                // Right side
-                NavigationStack { RunLogView() }
-                    .tabItem { Label("Runs", systemImage: "figure.run") }
-                NavigationStack { WeightLogView() }
-                    .tabItem { Label("Weight", systemImage: "scalemass.fill") }
-            }
-            .background(AppTheme.backgroundColor.ignoresSafeArea())
-            .tint(AppTheme.accentColor)
-            .preferredColorScheme(.dark)
-            .modelContainer(persistenceController.container)
+        TabView {
+            // Left side - Use Group to prevent unnecessary NavigationStack recreation
+            NavigationStack { HomeView() }
+                .tabItem { Label("Home", systemImage: "house.fill") }
+                .tag(0)
             
+            NavigationStack { WorkoutLogView() }
+                .tabItem { Label("Workouts", systemImage: "figure.strengthtraining.traditional") }
+                .tag(1)
+            
+            // Middle tab: AI (show if supported, hide if device is not eligible)
+            if shouldShowAITab() {
+                NavigationStack { AIPlannerView() }
+                    .tabItem { Label("AI", systemImage: "sparkles") }
+                    .tag(2)
+            }
+            
+            // Right side
+            NavigationStack { RunLogView() }
+                .tabItem { Label("Runs", systemImage: "figure.run") }
+                .tag(3)
+            
+            NavigationStack { WeightLogView() }
+                .tabItem { Label("Weight", systemImage: "scalemass.fill") }
+                .tag(4)
         }
+        .background(AppTheme.backgroundColor.ignoresSafeArea())
+        .tint(AppTheme.accentColor)
+        .preferredColorScheme(.dark)
+        .modelContainer(persistenceController.container)
         .onAppear {
             // Check Apple Intelligence availability
             aiAvailability = WorkoutPlanGenerator.shared.availability()

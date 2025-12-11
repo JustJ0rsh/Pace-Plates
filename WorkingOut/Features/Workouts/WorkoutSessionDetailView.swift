@@ -9,6 +9,7 @@ struct WorkoutSessionDetailView: View {
     // MARK: Properties
     
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     let session: WorkoutSession
     let allowDateEdit: Bool
     let isNewSession: Bool
@@ -114,7 +115,15 @@ struct WorkoutSessionDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                shareMenu
+                HStack(spacing: 16) {
+                    shareMenu
+                    
+                    Button("Done") {
+                        dismissKeyboard()
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
             }
         }
         .sheet(isPresented: $showingAddExercise) {
