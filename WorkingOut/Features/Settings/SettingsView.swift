@@ -26,6 +26,9 @@ struct SettingsView: View {
     @AppStorage("reminderHour") private var reminderHour: Int = 9
     @AppStorage("reminderMinute") private var reminderMinute: Int = 0
     @State private var reminderTime: Date = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date()) ?? Date()
+    @State private var confirmExport: Bool = false
+    @State private var confirmImport: Bool = false
+    @State private var confirmDedup: Bool = false
     
     var body: some View {
         NavigationStack {
@@ -91,7 +94,11 @@ struct SettingsView: View {
                         }
                     }
                     .buttonStyle(.plain)
-                    .sheet(isPresented: $showHeightPicker) { HeightPickerSheet(heightUnit: $heightUnit, heightValue: $heightValue) }
+                    .sheet(isPresented: $showHeightPicker) {
+                        HeightPickerSheet(heightUnit: $heightUnit, heightValue: $heightValue)
+                            .presentationDetents([.height(340), .medium])
+                            .presentationDragIndicator(.visible)
+                    }
 
                     HStack {
                         Text("Goal Weight")
@@ -189,12 +196,12 @@ struct SettingsView: View {
 
                 Section("Backup") {
                     Button {
-                        exportTapped()
+                        confirmExport = true
                     } label: {
                         Label("Export Data", systemImage: "square.and.arrow.up")
                     }
                     Button {
-                        showImporter = true
+                        confirmImport = true
                     } label: {
                         Label("Import Data", systemImage: "square.and.arrow.down")
                     }
@@ -209,7 +216,7 @@ struct SettingsView: View {
                     }
                     
                     Button {
-                        deduplicateAllData()
+                        confirmDedup = true
                     } label: {
                         Label("Remove All Duplicates", systemImage: "sparkles")
                             .foregroundColor(.blue)
@@ -253,6 +260,24 @@ struct SettingsView: View {
             } message: {
                 Text(alertMessage)
             }
+            .alert("Export Data?", isPresented: $confirmExport) {
+                Button("Cancel", role: .cancel) {}
+                Button("Export") { exportTapped() }
+            } message: {
+                Text("Create a backup file to share or save?")
+            }
+            .alert("Import Data?", isPresented: $confirmImport) {
+                Button("Cancel", role: .cancel) {}
+                Button("Import") { showImporter = true }
+            } message: {
+                Text("Importing will replace existing items when conflicts occur.")
+            }
+            .alert("Remove Duplicates?", isPresented: $confirmDedup) {
+                Button("Cancel", role: .cancel) {}
+                Button("Remove", role: .destructive) { deduplicateAllData() }
+            } message: {
+                Text("We will scan workouts, runs, and templates to drop duplicates.")
+            }
             .alert("Delete All Data?", isPresented: $confirmDeleteAll) {
                 Button("Cancel", role: .cancel) {}
                 Button("Delete", role: .destructive) { deleteAllEverywhere() }
@@ -262,10 +287,33 @@ struct SettingsView: View {
             }
         }
         .ignoresSafeArea(.keyboard)
-        // Provide a keyboard toolbar for numeric fields to dismiss the keyboard
+        // Provide a keyboard toolbar for numeric fields with back/next navigation
         .toolbar { 
             ToolbarItemGroup(placement: .keyboard) {
+                // Back button - go to previous field
+                Button {
+                    if goalWeightFocused {
+                        goalWeightFocused = false
+                        ageFocused = true
+                    }
+                } label: {
+                    Image(systemName: "chevron.up")
+                }
+                .disabled(ageFocused)
+                
+                // Next button - go to next field
+                Button {
+                    if ageFocused {
+                        ageFocused = false
+                        goalWeightFocused = true
+                    }
+                } label: {
+                    Image(systemName: "chevron.down")
+                }
+                .disabled(goalWeightFocused)
+                
                 Spacer()
+                
                 Button("Done") {
                     ageFocused = false
                     heightFocused = false

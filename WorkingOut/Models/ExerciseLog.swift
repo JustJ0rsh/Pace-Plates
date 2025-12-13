@@ -26,6 +26,8 @@ final class ExerciseLog {
     var exerciseType: String? = "strength"  // "strength" or "cardio"
     
     var isCompleted: Bool = false // Track if the set was completed
+    // When true, reps should be doubled (per-side isolation work)
+    var isIsolated: Bool = false
     
     @Relationship(deleteRule: .nullify) var exerciseDefinition: ExerciseDefinition?
     @Relationship(deleteRule: .nullify) var workoutSession: WorkoutSession?
@@ -65,6 +67,35 @@ final class ExerciseLog {
     // Helper computed properties
     var isCardio: Bool {
         exerciseType == "cardio"
+    }
+
+    // Uses the isolation flag to return the effective total reps
+    var effectiveReps: Int {
+        isIsolated ? reps * 2 : reps
+    }
+
+    // Show a multiplier tag when isolation is enabled
+    var isolationMultiplierText: String? {
+        isIsolated ? "x2" : nil
+    }
+
+    // Display-friendly reps string (e.g., "12 reps" or "12 x 2")
+    var displayRepsText: String {
+        isIsolated ? "\(reps) x 2" : "\(reps) reps"
+    }
+
+    // Offer the isolation toggle for common unilateral keywords or any user-created exercise
+    var shouldOfferIsolationToggle: Bool {
+        let lowerName = exerciseName?.lowercased() ?? ""
+        let isolationTokens = [
+            " iso", "iso ", "iso-", "isolated", "isolation",
+            " uni", "uni ", "uni-", "unilateral",
+            " single", "single-", "single ", "single-arm", "single arm", "single-leg", "single leg",
+            " one-arm", " one arm", "1-arm", "1 arm"
+        ]
+        let keywordMatch = isolationTokens.contains { lowerName.contains($0) }
+        let isUserDefined = exerciseDefinition?.isUserDefined ?? false
+        return keywordMatch || isUserDefined
     }
     
     var formattedDuration: String? {

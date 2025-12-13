@@ -51,7 +51,7 @@ struct WorkoutImportView: View {
                                         .foregroundStyle(AppTheme.textColor)
                                     
                                     ForEach(exercise.sets) { set in
-                                        HStack {
+                                        HStack(spacing: 6) {
                                             Text("Set \(set.setNumber)")
                                                 .foregroundStyle(.secondary)
                                                 .frame(width: 50, alignment: .leading)
@@ -66,7 +66,7 @@ struct WorkoutImportView: View {
                                                         .foregroundStyle(AppTheme.textColor)
                                                 }
                                             } else {
-                                                Text("\(set.reps) reps @ \(String(format: "%.1f", set.weight)) \(set.weightUnit)")
+                                                Text("\(set.displayRepsText) @ \(String(format: "%.1f", set.weight)) \(set.weightUnit)")
                                                     .foregroundStyle(AppTheme.textColor)
                                             }
                                         }
@@ -197,7 +197,8 @@ struct WorkoutImportView: View {
                             }
                             detailedNotes.append(setInfo)
                         } else {
-                            detailedNotes.append("Set \(index + 1): \(set.reps) reps @ \(String(format: "%.1f", set.weight)) \(set.weightUnit)")
+                            let repsText = "\(set.displayRepsText) @ \(String(format: "%.1f", set.weight)) \(set.weightUnit)"
+                            detailedNotes.append("Set \(index + 1): \(repsText)")
                         }
                         if let setNotes = set.notes, !setNotes.isEmpty {
                             detailedNotes.append("  Note: \(setNotes)")

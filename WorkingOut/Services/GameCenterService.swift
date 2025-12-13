@@ -124,7 +124,7 @@ final class GameCenterService: NSObject {
         for log in logs where (log.exerciseType ?? "strength") == "strength" {
             let name = (log.exerciseName ?? "").lowercased()
             let weightLbs = lbs(from: log.weight, unit: log.weightUnit)
-            sessionVolumeLbs += Double(log.reps) * weightLbs
+            sessionVolumeLbs += Double(log.effectiveReps) * weightLbs
 
             if name.contains("bench") { bestBench = max(bestBench, weightLbs) }
             if name.contains("squat") { bestSquat = max(bestSquat, weightLbs) }

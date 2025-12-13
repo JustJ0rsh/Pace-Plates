@@ -565,7 +565,7 @@ final class WorkoutPlanGenerator {
             
             for log in logs {
                 let w = convertWeight(log.weight, from: log.weightUnit, to: weightUnit)
-                let logVolume = Double(log.reps) * w
+                let logVolume = Double(log.effectiveReps) * w
                 sessionVolume += logVolume
                 totalLifted += logVolume
                 

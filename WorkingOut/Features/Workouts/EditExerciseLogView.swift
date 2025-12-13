@@ -23,6 +23,8 @@ struct EditExerciseLogView: View {
     
     // Notes field
     @State private var notesText: String
+    // Isolation toggle for unilateral work
+    @State private var isIsolated: Bool
     
     @State private var historyExerciseName: String? = nil
 
@@ -52,6 +54,7 @@ struct EditExerciseLogView: View {
         
         // Initialize notes field
         _notesText = State(initialValue: log.notes ?? "")
+        _isIsolated = State(initialValue: log.isIsolated)
     }
     
     @AppStorage("weightUnit") private var preferredWeightUnit = "lbs"
@@ -99,6 +102,10 @@ struct EditExerciseLogView: View {
         let isStrengthRow = strengthRowTokens.contains(where: { name.contains($0) }) && !name.contains("rowing") && !name.contains("rower")
         
         return looksCardio && !isStrengthRow
+    }
+
+    private var shouldShowIsolationControl: Bool {
+        !isCardioExercise && log.shouldOfferIsolationToggle
     }
 
     var body: some View {
@@ -218,6 +225,40 @@ struct EditExerciseLogView: View {
                             Text("lbs").tag("lbs")
                             Text("kg").tag("kg")
                         }
+
+                        if shouldShowIsolationControl {
+                            Button {
+                                isIsolated.toggle()
+                            } label: {
+                                HStack(alignment: .center, spacing: 10) {
+                                    Image(systemName: isIsolated ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(isIsolated ? .green : .secondary)
+                                        .font(.title3)
+
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(isIsolated ? "Double reps active (x2)" : "Double reps (x2)")
+                                            .foregroundColor(AppTheme.textColor)
+                                        Text("Use for iso / uni / single-side sets")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+
+                                    Spacer()
+
+                                    if isIsolated {
+                                        Text("x2")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(AppTheme.secondaryBackgroundColor.opacity(0.8))
+                                            .clipShape(Capsule())
+                                    }
+                                }
+                                .padding(.vertical, 4)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                 }
                 
@@ -294,11 +335,11 @@ struct EditExerciseLogView: View {
                                                 .foregroundColor(AppTheme.textColor)
                                             ForEach(workout.sets, id: \.id) { set in
                                                 let weightString = String(format: "%.1f", set.weight)
-                                                HStack {
+                                                HStack(spacing: 8) {
                                                     Text("Set \(set.setNumber)")
                                                         .foregroundColor(AppTheme.textColor)
                                                     Spacer()
-                                                    Text("\(set.reps) reps @ \(weightString) \(set.weightUnit)")
+                                                    Text("\(set.displayRepsText) @ \(weightString) \(set.weightUnit)")
                                                         .foregroundStyle(.secondary)
                                                 }
                                             }
@@ -359,6 +400,9 @@ struct EditExerciseLogView: View {
                             modelContext.delete(log)
                         }
                     }
+                    
+                    // Persist isolation choice only for strength work
+                    log.isIsolated = isCardioExercise ? false : isIsolated
                     
                     // Save notes
                     log.notes = notesText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : notesText
@@ -423,6 +467,7 @@ struct EditExerciseLogView: View {
         
         // Save notes (store nil if empty to save space)
         log.notes = notesText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : notesText
+        log.isIsolated = isCardioExercise ? false : isIsolated
         
         try? modelContext.save()
         repsFocused = false

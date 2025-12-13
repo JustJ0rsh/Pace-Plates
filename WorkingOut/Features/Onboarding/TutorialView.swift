@@ -1,9 +1,11 @@
 import SwiftUI
+import UIKit
 
 struct TutorialView: View {
     var onFinish: (() -> Void)?
 
     @State private var page: Int = 0
+    private let pageCount: Int = 4
     
     // Profile setup state
     @AppStorage("measurementSystem") private var measurementSystem: String = "imperial"
@@ -20,6 +22,13 @@ struct TutorialView: View {
     @State private var showHeightPicker: Bool = false
     @FocusState private var ageFocused: Bool
     @FocusState private var goalWeightFocused: Bool
+    @State private var ageText: String = ""
+    @State private var goalWeightText: String = ""
+    @State private var isKeyboardVisible: Bool = false
+
+    private var isEditingProfileField: Bool {
+        page == 3 && (isKeyboardVisible || ageFocused || goalWeightFocused)
+    }
 
     var body: some View {
         NavigationStack {
@@ -62,36 +71,84 @@ struct TutorialView: View {
                     profileSetupPage()
                         .tag(3)
                 }
-                .tabViewStyle(.page(indexDisplayMode: .always))
+                // Avoid toggling the built-in page indicator during keyboard transitions,
+                // which can cause TabView to re-measure and "flash" its layout height.
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                HStack {
-                    Button("Skip") { 
-                        didCompleteProfileSetup = true
-                        onFinish?()
+                // LAYOUT CONTROL: When `isEditingProfileField` is true (keyboard showing), these
+                // bottom controls are removed from the VStack layout entirely, allowing the
+                // TabView/ScrollView above to expand downward closer to the keyboard.
+                // To RAISE the content (more space above keyboard): keep these in layout (use opacity instead of if)
+                // To LOWER the content (less space above keyboard): this current approach removes them from layout
+                if !isEditingProfileField {
+                    // Custom page indicator.
+                    HStack(spacing: 8) {
+                        ForEach(0..<pageCount, id: \.self) { idx in
+                            Circle()
+                                .fill((idx == page) ? AppTheme.textColor.opacity(0.9) : AppTheme.textColor.opacity(0.25))
+                                .frame(width: idx == page ? 7 : 6, height: idx == page ? 7 : 6)
+                        }
                     }
-                    .foregroundStyle(.secondary)
-                    Spacer()
-                    if page < 3 {
-                        Button("Next") { withAnimation { page += 1 } }
-                            .buttonStyle(.borderedProminent)
-                    } else {
-                        Button("Get Started") {
+                    .frame(height: 18)
+                    .allowsHitTesting(false)
+
+                    HStack {
+                        Button("Skip") {
                             didCompleteProfileSetup = true
                             onFinish?()
                         }
-                        .buttonStyle(.borderedProminent)
+                        .foregroundStyle(.secondary)
+                        Spacer()
+                        if page < 3 {
+                            Button("Next") { withAnimation { page += 1 } }
+                                .buttonStyle(.borderedProminent)
+                        } else {
+                            Button("Get Started") {
+                                didCompleteProfileSetup = true
+                                onFinish?()
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
                     }
                 }
             }
             .padding()
-            .appBackground(AppTheme.gradientHome)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background { AppTheme.gradientHome.ignoresSafeArea() }
             .foregroundColor(AppTheme.textColor)
             .sheet(isPresented: $showHeightPicker) {
                 HeightPickerSheet(heightUnit: $heightUnit, heightValue: $heightValue)
+                    .presentationDetents([.height(340), .medium])
+                    .presentationDragIndicator(.visible)
             }
+            // TOOLBAR: Must be on NavigationStack level to appear on first tap
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
+                    // Back button - go to previous field
+                    Button {
+                        if goalWeightFocused {
+                            goalWeightFocused = false
+                            ageFocused = true
+                        }
+                    } label: {
+                        Image(systemName: "chevron.up")
+                    }
+                    .disabled(ageFocused)
+                    
+                    // Next button - go to next field
+                    Button {
+                        if ageFocused {
+                            ageFocused = false
+                            goalWeightFocused = true
+                        }
+                    } label: {
+                        Image(systemName: "chevron.down")
+                    }
+                    .disabled(goalWeightFocused)
+                    
                     Spacer()
+                    
                     Button("Done") {
                         ageFocused = false
                         goalWeightFocused = false
@@ -99,7 +156,32 @@ struct TutorialView: View {
                     }
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                // Make layout changes happen in sync with the keyboard animation to avoid "jumping" gaps.
+                if page == 3 { isKeyboardVisible = true }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                isKeyboardVisible = false
+            }
         }
+    }
+
+    private func sanitizeDigits(_ text: String) -> String {
+        String(text.filter { $0.isNumber })
+    }
+
+    private func sanitizeDecimal(_ text: String) -> String {
+        var out = ""
+        var hasDot = false
+        for ch in text {
+            if ch.isNumber {
+                out.append(ch)
+            } else if (ch == "." || ch == ",") && !hasDot {
+                out.append(".")
+                hasDot = true
+            }
+        }
+        return out
     }
 
     @ViewBuilder
@@ -137,7 +219,7 @@ struct TutorialView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
-                .padding(.top)
+                .padding(.top, 8)
                 
                 VStack(spacing: 20) {
                     // Units Section
@@ -162,8 +244,8 @@ struct TutorialView: View {
                         }
                     }
                     .padding()
-                    .background(Color.white.opacity(0.05))
-                    .cornerRadius(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .floatingTile()
                     
                     // Profile Section
                     VStack(alignment: .leading, spacing: 12) {
@@ -186,15 +268,25 @@ struct TutorialView: View {
                         // Age Input
                         HStack {
                             Text("Age")
+                                .foregroundColor(AppTheme.textColor)
                             Spacer()
-                            TextField("0", value: $age, format: .number)
+                            TextField("25", text: $ageText)
                                 .keyboardType(.numberPad)
                                 .multilineTextAlignment(.trailing)
                                 .frame(maxWidth: 100)
                                 .focused($ageFocused)
-                                .padding(8)
-                                .background(Color.white.opacity(0.1))
-                                .cornerRadius(8)
+                                .foregroundColor(AppTheme.textColor)
+                                .tint(AppTheme.accentColor)
+                        }
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(AppTheme.secondaryBackgroundColor)
+                        .cornerRadius(12)
+                        .onChange(of: ageText) { _, newValue in
+                            let sanitized = sanitizeDigits(newValue)
+                            if sanitized != newValue { ageText = sanitized }
+                            age = Int(sanitized) ?? 0
                         }
                         
                         // Height Picker
@@ -203,48 +295,58 @@ struct TutorialView: View {
                         } label: {
                             HStack {
                                 Text("Height")
+                                    .foregroundColor(AppTheme.textColor)
                                 Spacer()
                                 if heightUnit == "in" {
-                                    let totalInches = Int(round(heightValue))
+                                    let totalInches = heightValue > 0 ? Int(round(heightValue)) : (5 * 12 + 8)
                                     let feet = max(0, totalInches / 12)
                                     let inches = max(0, min(11, totalInches % 12))
                                     Text("\(feet)′ \(inches)″")
-                                        .foregroundStyle(heightValue > 0 ? .primary : .secondary)
+                                        .foregroundStyle(.secondary)
                                 } else {
-                                    if heightValue > 0 {
-                                        Text(String(format: "%.1f cm", heightValue))
-                                            .foregroundStyle(.primary)
-                                    } else {
-                                        Text("0.0 cm")
-                                            .foregroundStyle(.secondary)
-                                    }
+                                    Text(String(format: "%.1f", heightValue > 0 ? heightValue : 175.0))
+                                        .foregroundStyle(.secondary)
+                                    Text("cm")
+                                        .foregroundStyle(.secondary)
                                 }
                             }
-                            .padding(8)
-                            .background(Color.white.opacity(0.1))
-                            .cornerRadius(8)
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(AppTheme.secondaryBackgroundColor)
+                            .cornerRadius(12)
                         }
                         .buttonStyle(.plain)
                         
                         // Goal Weight
                         HStack {
                             Text("Goal Weight")
+                                .foregroundColor(AppTheme.textColor)
                             Spacer()
-                            TextField("0", value: $targetWeight, format: .number.precision(.fractionLength(0...1)))
+                            TextField(weightUnit == "kg" ? "80" : "180", text: $goalWeightText)
                                 .keyboardType(.decimalPad)
                                 .multilineTextAlignment(.trailing)
                                 .frame(maxWidth: 80)
                                 .focused($goalWeightFocused)
-                                .padding(8)
-                                .background(Color.white.opacity(0.1))
-                                .cornerRadius(8)
+                                .foregroundColor(AppTheme.textColor)
+                                .tint(AppTheme.accentColor)
                             Text(weightUnit)
                                 .foregroundStyle(.secondary)
                         }
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(AppTheme.secondaryBackgroundColor)
+                        .cornerRadius(12)
+                        .onChange(of: goalWeightText) { _, newValue in
+                            let sanitized = sanitizeDecimal(newValue)
+                            if sanitized != newValue { goalWeightText = sanitized }
+                            targetWeight = Double(sanitized) ?? 0
+                        }
                     }
                     .padding()
-                    .background(Color.white.opacity(0.05))
-                    .cornerRadius(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .floatingTile()
                     
                     // Goals Section
                     VStack(alignment: .leading, spacing: 12) {
@@ -260,13 +362,24 @@ struct TutorialView: View {
                         .pickerStyle(.segmented)
                     }
                     .padding()
-                    .background(Color.white.opacity(0.05))
-                    .cornerRadius(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .floatingTile()
                 }
                 .padding(.horizontal)
             }
         }
         .scrollDismissesKeyboard(.interactively)
+        .onAppear {
+            // Seed text fields from saved values, but don't show "0" as actual text
+            if ageText.isEmpty { ageText = age > 0 ? String(age) : "" }
+            if goalWeightText.isEmpty {
+                if targetWeight > 0 {
+                    goalWeightText = String(format: targetWeight.truncatingRemainder(dividingBy: 1) == 0 ? "%.0f" : "%.1f", targetWeight)
+                } else {
+                    goalWeightText = ""
+                }
+            }
+        }
     }
 }
 

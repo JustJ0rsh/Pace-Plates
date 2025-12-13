@@ -788,7 +788,7 @@ struct AIConversationSheet: View {
             guard lower.contains("run:") && (lower.contains(" mi") || lower.contains(" km")) else { return line }
 
             // Extract distance after "Run:" token
-            let distRegex = try! NSRegularExpression(pattern: "run:\\s*([0-9]+(?:\\.[0-9]+)?)\\s*(mi|km)", options: [.caseInsensitive])
+            guard let distRegex = try? NSRegularExpression(pattern: "run:\\s*([0-9]+(?:\\.[0-9]+)?)\\s*(mi|km)", options: [.caseInsensitive]) else { return line }
             let range = NSRange(line.startIndex..., in: line)
             guard let match = distRegex.firstMatch(in: line, range: range), match.numberOfRanges >= 3,
                   let dRange = Range(match.range(at: 1), in: line),
@@ -799,8 +799,8 @@ struct AIConversationSheet: View {
             let distanceInUserUnit: Double = unitFound == unit ? distVal : (unitFound == "mi" ? distVal * 1.60934 : distVal / 1.60934)
 
             // Time patterns
-            let hmsRegex = try! NSRegularExpression(pattern: "\\b(in|for)\\s+(\\d{1,3}):(\\d{2})(?::(\\d{2}))?", options: [.caseInsensitive])
-            let minRegex = try! NSRegularExpression(pattern: "\\b(in|for)\\s+(\\d{1,3})\\s*(min|mins|minutes)", options: [.caseInsensitive])
+            guard let hmsRegex = try? NSRegularExpression(pattern: "\\b(in|for)\\s+(\\d{1,3}):(\\d{2})(?::(\\d{2}))?", options: [.caseInsensitive]),
+                  let minRegex = try? NSRegularExpression(pattern: "\\b(in|for)\\s+(\\d{1,3})\\s*(min|mins|minutes)", options: [.caseInsensitive]) else { return line }
 
             if let m = hmsRegex.firstMatch(in: line, range: range), m.numberOfRanges >= 4,
                let hRange = Range(m.range(at: 2), in: line), let mRange = Range(m.range(at: 3), in: line) {

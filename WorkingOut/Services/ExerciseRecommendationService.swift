@@ -27,7 +27,7 @@ enum ExerciseRecommendationService {
 
             for log in arr {
                 let weight = convertWeight(log.weight, from: log.weightUnit, to: preferredUnit)
-                let reps = max(log.reps, 1)
+                let reps = max(log.effectiveReps, 1)
                 let e1rm = epley1RM(weight: weight, reps: reps)
                 if e1rm > bestE1RM { bestE1RM = e1rm }
 

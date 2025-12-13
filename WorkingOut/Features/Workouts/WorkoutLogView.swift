@@ -280,25 +280,6 @@ struct WorkoutLogView: View {
         return value
     }
 
-    private static func backgroundGradient() -> some View {
-        let base = AppTheme.backgroundColor
-        let ui = UIColor(base)
-        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        _ = ui.getRed(&r, green: &g, blue: &b, alpha: &a)
-        let factor: CGFloat = 0.85 // lower = darker; tweak to taste
-        let darker = Color(red: Double(r * factor), green: Double(g * factor), blue: Double(b * factor), opacity: 1.0)
-
-        let gradient = LinearGradient(
-            colors: [
-                Color(red: Double(r), green: Double(g), blue: Double(b), opacity: 1.0),
-                darker
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        return gradient.ignoresSafeArea(.container, edges: .all)
-    }
-
     private var chartData: (dailyVolume: [(date: Date, value: Double)], groupedVolume: [Date: Double]) {
         let calendar = Calendar.current
         let domain = last7DaysDomain
@@ -315,7 +296,7 @@ struct WorkoutLogView: View {
                     if group != selectedCategory { return acc }
                 }
                 let weightInPreferred = convertWeight(log.weight, from: log.weightUnit, to: preferredWeightUnit)
-                return acc + (Double(log.reps) * weightInPreferred)
+                return acc + (Double(log.effectiveReps) * weightInPreferred)
             }
             return (date: session.date, volume: total)
         }

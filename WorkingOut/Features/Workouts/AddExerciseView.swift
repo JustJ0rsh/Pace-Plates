@@ -181,7 +181,7 @@ struct AddExerciseView: View {
                                                     Text("Set \(set.setNumber)")
                                                         .fontWeight(.medium)
                                                     Spacer()
-                                                    Text("\(set.reps) reps")
+                                                Text("\(set.displayRepsText)")
                                                     Text("@")
                                                         .foregroundStyle(.secondary)
                                                     Text("\(String(format: "%.1f", set.weight)) \(set.weightUnit)")

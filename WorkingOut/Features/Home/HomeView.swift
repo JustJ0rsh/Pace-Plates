@@ -113,7 +113,7 @@ struct HomeView: View {
             let total = (session.exerciseLogs ?? []).reduce(0.0) { acc, log in
                 let unit = log.weightUnit
                 let weightInPreferred = convertWeight(log.weight, from: unit, to: preferredWeightUnit)
-                return acc + (Double(log.reps) * weightInPreferred)
+                return acc + (Double(log.effectiveReps) * weightInPreferred)
             }
             return (date: session.date, volume: total)
         }

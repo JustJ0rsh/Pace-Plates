@@ -232,6 +232,7 @@ struct WorkoutSessionDetailView: View {
         )
         copy.exerciseDefinition = log.exerciseDefinition
         copy.workoutSession = session
+        copy.isIsolated = log.isIsolated
         if var arr = session.exerciseLogs { arr.append(copy); session.exerciseLogs = arr } else { session.exerciseLogs = [copy] }
         try? modelContext.save()
     }
@@ -349,7 +350,8 @@ struct WorkoutSessionDetailView: View {
                         }
                         text += parts.joined(separator: " | ")
                     } else {
-                        text += "\(log.reps) reps @ \(String(format: "%.1f", log.weight)) \(log.weightUnit)"
+                        let repsText = "\(log.displayRepsText) @ \(String(format: "%.1f", log.weight)) \(log.weightUnit)"
+                        text += log.isIsolated ? "\(repsText)" : repsText
                     }
                 } else {
                     // Structure only
@@ -431,7 +433,7 @@ struct ExerciseLogRow: View {
                     }
                 }
             } else {
-                Text("\(log.reps) reps @ \(String(format: "%.1f", log.weight)) \(log.weightUnit)")
+                Text("\(log.displayRepsText) @ \(String(format: "%.1f", log.weight)) \(log.weightUnit)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

@@ -150,6 +150,7 @@ struct WorkoutExercisesTile: View {
                                         )
                                         next.exerciseDefinition = base.exerciseDefinition
                                         next.workoutSession = session
+                                        next.isIsolated = base.isIsolated
                                         if var arr = session.exerciseLogs { arr.append(next); session.exerciseLogs = arr } else { session.exerciseLogs = [next] }
                                         try? modelContext.save()
                                         editingLog = next
@@ -243,7 +244,7 @@ struct WorkoutSessionExerciseRow: View {
                                 }
                             }
                         } else {
-                            Text("\(log.reps) reps @ \(String(format: "%.1f", log.weight)) \(log.weightUnit)")
+                            Text("\(log.displayRepsText) @ \(String(format: "%.1f", log.weight)) \(log.weightUnit)")
                                 .foregroundStyle(.secondary)
                         }
                     }

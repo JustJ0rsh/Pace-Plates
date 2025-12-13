@@ -156,7 +156,7 @@ final class WorkoutTemplateService {
                 name: name,
                 order: index,
                 sets: sets,
-                reps: firstLog.reps,
+                reps: firstLog.effectiveReps,
                 suggestedWeight: firstLog.weight,
                 weightUnit: firstLog.weightUnit,
                 notes: firstLog.notes
@@ -203,7 +203,7 @@ final class WorkoutTemplateService {
                 name: name,
                 order: index,
                 sets: sets,
-                reps: firstLog.reps,
+                reps: firstLog.effectiveReps,
                 suggestedWeight: firstLog.weight,
                 weightUnit: firstLog.weightUnit,
                 notes: firstLog.notes

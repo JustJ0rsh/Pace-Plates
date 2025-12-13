@@ -182,13 +182,6 @@ struct WeightLogView: View {
         }
     }
     
-    private func deleteWeightEntries(offsets: IndexSet) {
-        withAnimation { // Added animation
-            offsets.map { weightEntries[$0] }.forEach(modelContext.delete)
-            try? modelContext.save() // Save after deleting
-        }
-    }
-    
     private func chartPrep(entries: [WeightEntry], preferredWeightUnit: String, xDomain: ClosedRange<Date>) -> (
         sorted: [WeightEntry],
         convertedWeights: [Double],

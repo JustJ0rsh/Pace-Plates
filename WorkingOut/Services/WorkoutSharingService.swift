@@ -30,6 +30,15 @@ struct SharedExerciseSet: Codable, Identifiable {
     var distance: Double?
     var distanceUnit: String?
     var notes: String?
+    var isIsolated: Bool = false
+
+    var effectiveReps: Int {
+        isIsolated ? reps * 2 : reps
+    }
+
+    var displayRepsText: String {
+        isIsolated ? "\(reps) x 2" : "\(reps) reps"
+    }
 }
 
 import UniformTypeIdentifiers
@@ -232,7 +241,8 @@ class WorkoutSharingService {
                     durationSeconds: log.durationSeconds,
                     distance: log.distance,
                     distanceUnit: log.distanceUnit,
-                    notes: log.notes
+                    notes: log.notes,
+                    isIsolated: log.isIsolated
                 )
             }
             
