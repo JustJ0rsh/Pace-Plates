@@ -93,6 +93,11 @@
 			path = WorkingOut;
 			sourceTree = "<group>";
 		};
+		42BF62EF2EEE7663009C9FA9 /* AchievementImages */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AchievementImages;
+			sourceTree = "<group>";
+		};
 		43A000062EFF000100000006 /* WorkoutThumbnailExtension */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -141,6 +146,7 @@
 				4226C17A2E94A47300908453 /* Info.plist */,
 				4226C1802E9DED2A00908453 /* Info 2.plist */,
 				42FCE14F2EA875FA00334FD2 /* Frameworks */,
+				42BF62EF2EEE7663009C9FA9 /* AchievementImages */,
 			);
 			sourceTree = "<group>";
 		};
@@ -205,6 +211,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				42B50D232D9DE5670082A9FA /* WorkingOut */,
+				42BF62EF2EEE7663009C9FA9 /* AchievementImages */,
 			);
 			name = "Pace & Plates";
 			packageProductDependencies = (
