@@ -30,6 +30,7 @@ class TemplateSeeder {
         _ = deduplicateBuiltInTemplates(context: context)
         _ = deduplicateImportedTemplates(context: context)
         _ = backfillExerciseCountsIfNeeded(context: context)
+        _ = backfillAITemplateMetadataIfNeeded(context: context)
 
         let allBuiltInTemplates = BuiltInTemplateLibrary.allTemplates
 
@@ -225,6 +226,48 @@ extension TemplateSeeder {
                 t.exerciseCount = exercises.count
                 changed += 1
             }
+        }
+
+        if changed > 0 { try? context.save() }
+        return changed
+    }
+
+    /// Backfill AI template grouping fields for older templates created before we stored plan metadata.
+    /// Safe to call multiple times.
+    @discardableResult
+    func backfillAITemplateMetadataIfNeeded(context: ModelContext) -> Int {
+        let fetch = FetchDescriptor<WorkoutTemplate>(
+            predicate: #Predicate {
+                $0.isBuiltIn == false &&
+                $0.experienceLevel != "Imported" &&
+                $0.aiPlanHash == nil &&
+                $0.sourceAIConversationId != nil
+            }
+        )
+        guard let items = try? context.fetch(fetch), !items.isEmpty else { return 0 }
+
+        func parseDayPrefix(_ title: String) -> (index: Int?, dayTitle: String) {
+            let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let parts = trimmed.split(separator: ":", maxSplits: 1).map(String.init)
+            if parts.count == 2, let n = Int(parts[0].trimmingCharacters(in: .whitespacesAndNewlines)) {
+                let dayTitle = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                return (max(0, n - 1), dayTitle.isEmpty ? trimmed : dayTitle)
+            }
+            return (nil, trimmed)
+        }
+
+        var changed = 0
+        for t in items {
+            guard let convoID = t.sourceAIConversationId else { continue }
+            t.aiPlanHash = convoID.uuidString
+            if t.aiPlanTitle == nil { t.aiPlanTitle = "AI Plan" }
+            if t.aiWeekTitle == nil { t.aiWeekTitle = "Week 1" }
+
+            let parsed = parseDayPrefix(t.title)
+            if t.aiDayIndex == nil { t.aiDayIndex = parsed.index }
+            if t.aiDayTitle == nil { t.aiDayTitle = parsed.dayTitle }
+
+            changed += 1
         }
 
         if changed > 0 { try? context.save() }

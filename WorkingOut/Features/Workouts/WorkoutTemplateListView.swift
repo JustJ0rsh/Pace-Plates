@@ -7,6 +7,14 @@ struct WorkoutTemplateListView: View {
         case aiGenerated
     }
 
+    private struct AITemplateGroup: Identifiable {
+        let id: String
+        let title: String
+        let subtitle: String?
+        let templates: [WorkoutTemplate]
+        let sortDate: Date
+    }
+
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Query(sort: [SortDescriptor<WorkoutTemplate>(\.createdDate, order: .reverse)]) private var templates: [WorkoutTemplate]
@@ -29,7 +37,34 @@ struct WorkoutTemplateListView: View {
     private var aiGeneratedTemplates: [WorkoutTemplate] {
         templates.filter { !$0.isBuiltIn && $0.experienceLevel != "Imported" }
     }
-    
+
+    private var aiTemplateGroups: [AITemplateGroup] {
+        let candidates = aiGeneratedTemplates.filter { $0.aiPlanHash != nil || $0.sourceAIConversationId != nil }
+        let grouped = Dictionary(grouping: candidates) { t in
+            t.aiPlanHash ?? t.sourceAIConversationId?.uuidString ?? "ungrouped"
+        }
+
+        return grouped.map { (key, groupTemplates) in
+            let title = groupTemplates.first?.aiPlanTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let weekTitle = groupTemplates.first?.aiWeekTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let sorted = groupTemplates.sorted { a, b in
+                let aiA = a.aiDayIndex ?? Int.max
+                let aiB = b.aiDayIndex ?? Int.max
+                if aiA != aiB { return aiA < aiB }
+                return a.createdDate < b.createdDate
+            }
+            let date = sorted.first?.createdDate ?? Date.distantPast
+            return AITemplateGroup(
+                id: key,
+                title: (title?.isEmpty == false ? title! : "AI Plan"),
+                subtitle: (weekTitle?.isEmpty == false ? weekTitle : nil),
+                templates: sorted,
+                sortDate: date
+            )
+        }
+        .sorted { $0.sortDate > $1.sortDate }
+    }
+
     // Filter templates - includes both built-in and imported
     private var filteredTemplates: [WorkoutTemplate] {
         if selectedLibraryTab == .aiGenerated {
@@ -90,17 +125,20 @@ struct WorkoutTemplateListView: View {
     
     // Section Headers
     private var sectionTitle: String {
+        if selectedLibraryTab == .aiGenerated { return "AI Templates" }
         if selectedExperienceLevel == "Imported" { return "Imported Templates" }
         if selectedExperienceLevel == "Custom" { return "Custom Programs" }
         return "Workout Programs"
     }
     
     private var sectionIcon: String {
+        if selectedLibraryTab == .aiGenerated { return "sparkles" }
         if selectedExperienceLevel == "Imported" { return "square.and.arrow.down.fill" }
         return "books.vertical.fill"
     }
     
     private var sectionColor: Color {
+        if selectedLibraryTab == .aiGenerated { return .purple }
         if selectedExperienceLevel == "Imported" { return .blue }
         return .orange
     }
@@ -131,7 +169,7 @@ struct WorkoutTemplateListView: View {
                 ZStack(alignment: .bottom) {
                     List {
                         // MARK: - Custom & Imported Templates Combined
-                        if !builtInTemplates.isEmpty || !importedTemplates.isEmpty {
+                        if !builtInTemplates.isEmpty || !importedTemplates.isEmpty || !aiGeneratedTemplates.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
                                 HStack {
                                     Image(systemName: sectionIcon)
@@ -213,30 +251,77 @@ struct WorkoutTemplateListView: View {
                             .listRowSeparator(.hidden)
                             .listRowInsets(EdgeInsets(top: 16, leading: 0, bottom: 4, trailing: 0))
 
-                            ForEach(filteredTemplates) { template in
-                                if selectedLibraryTab == .programs, template.isBuiltIn {
-                                    BuiltInTemplateCard(template: template) {
-                                        selectedTemplate = template
+                            if selectedLibraryTab == .aiGenerated && searchText.isEmpty && !aiTemplateGroups.isEmpty {
+                                ForEach(aiTemplateGroups) { group in
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "sparkles")
+                                                .foregroundColor(.purple)
+                                            Text(group.title)
+                                                .font(.headline)
+                                                .foregroundColor(AppTheme.textColor)
+                                            Spacer()
+                                            Text("\(group.templates.count) days")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        if let subtitle = group.subtitle, !subtitle.isEmpty {
+                                            Text(subtitle)
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                        }
                                     }
                                     .padding(.horizontal, AppTheme.padding)
+                                    .padding(.top, 6)
                                     .listRowBackground(Color.clear)
                                     .listRowSeparator(.hidden)
-                                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
-                                } else {
-                                    TemplateCard(template: template) {
-                                        selectedTemplate = template
+                                    .listRowInsets(EdgeInsets(top: 10, leading: 0, bottom: 0, trailing: 0))
+
+                                    ForEach(group.templates) { template in
+                                        TemplateCard(template: template) {
+                                            selectedTemplate = template
+                                        }
+                                        .padding(.horizontal, AppTheme.padding)
+                                        .listRowBackground(Color.clear)
+                                        .listRowSeparator(.hidden)
+                                        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                            Button(role: .destructive) {
+                                                modelContext.delete(template)
+                                                try? modelContext.save()
+                                                Haptics.notify(.warning)
+                                            } label: {
+                                                Label("Delete", systemImage: "trash")
+                                            }
+                                        }
                                     }
-                                    .padding(.horizontal, AppTheme.padding)
-                                    .listRowBackground(Color.clear)
-                                    .listRowSeparator(.hidden)
-                                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
-                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                        Button(role: .destructive) {
-                                            modelContext.delete(template)
-                                            try? modelContext.save()
-                                            Haptics.notify(.warning)
-                                        } label: {
-                                            Label("Delete", systemImage: "trash")
+                                }
+                            } else {
+                                ForEach(filteredTemplates) { template in
+                                    if selectedLibraryTab == .programs, template.isBuiltIn {
+                                        BuiltInTemplateCard(template: template) {
+                                            selectedTemplate = template
+                                        }
+                                        .padding(.horizontal, AppTheme.padding)
+                                        .listRowBackground(Color.clear)
+                                        .listRowSeparator(.hidden)
+                                        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                                    } else {
+                                        TemplateCard(template: template) {
+                                            selectedTemplate = template
+                                        }
+                                        .padding(.horizontal, AppTheme.padding)
+                                        .listRowBackground(Color.clear)
+                                        .listRowSeparator(.hidden)
+                                        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                            Button(role: .destructive) {
+                                                modelContext.delete(template)
+                                                try? modelContext.save()
+                                                Haptics.notify(.warning)
+                                            } label: {
+                                                Label("Delete", systemImage: "trash")
+                                            }
                                         }
                                     }
                                 }
@@ -683,9 +768,29 @@ struct ExerciseTemplateRow: View {
                     .fontWeight(.medium)
                 
                 HStack(spacing: 8) {
-                    Text("\(exercise.sets)×\(exercise.reps)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if exercise.sets > 0 && exercise.reps > 0 {
+                        Text("\(exercise.sets)×\(exercise.reps)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if let notes = exercise.notes,
+                              let firstLine = notes.split(separator: "\n").first
+                    {
+                        let line = String(firstLine)
+                        if line.hasPrefix("Set 1:") {
+                            Text(line.replacingOccurrences(of: "Set 1:", with: "").trimmingCharacters(in: .whitespacesAndNewlines))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else if !line.isEmpty {
+                            Text(line)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    } else {
+                        Text("Activity")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     
                     if let weight = exercise.suggestedWeight {
                         Text("@ \(String(format: "%.1f", weight)) \(exercise.weightUnit)")

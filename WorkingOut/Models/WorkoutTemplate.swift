@@ -10,6 +10,14 @@ final class WorkoutTemplate {
     var sourceAIConversationId: UUID?
     var importSourceSessionID: UUID?
     var exerciseCount: Int = 0
+
+    // AI plan metadata (used to group templates created from a weekly plan)
+    var aiPlanHash: String?
+    var aiPlanTitle: String?
+    var aiWeekTitle: String?
+    var aiDayIndex: Int?
+    var aiDayType: String?
+    var aiDayTitle: String?
     @Relationship(deleteRule: .cascade, inverse: \TemplateExercise.template) var exercises: [TemplateExercise]?
     @Relationship(deleteRule: .nullify, inverse: \WorkoutSession.generatedTemplate) var sourceSession: WorkoutSession?
     
@@ -30,6 +38,12 @@ final class WorkoutTemplate {
          sourceAIConversationId: UUID? = nil,
          importSourceSessionID: UUID? = nil,
          exerciseCount: Int = 0,
+         aiPlanHash: String? = nil,
+         aiPlanTitle: String? = nil,
+         aiWeekTitle: String? = nil,
+         aiDayIndex: Int? = nil,
+         aiDayType: String? = nil,
+         aiDayTitle: String? = nil,
          isBuiltIn: Bool = false,
          experienceLevel: String? = nil,
          goal: String? = nil,
@@ -45,6 +59,12 @@ final class WorkoutTemplate {
         self.sourceAIConversationId = sourceAIConversationId
         self.importSourceSessionID = importSourceSessionID
         self.exerciseCount = exerciseCount
+        self.aiPlanHash = aiPlanHash
+        self.aiPlanTitle = aiPlanTitle
+        self.aiWeekTitle = aiWeekTitle
+        self.aiDayIndex = aiDayIndex
+        self.aiDayType = aiDayType
+        self.aiDayTitle = aiDayTitle
         self.isBuiltIn = isBuiltIn
         self.experienceLevel = experienceLevel
         self.goal = goal

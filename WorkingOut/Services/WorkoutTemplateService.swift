@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import CryptoKit
 
 #if canImport(FoundationModels)
 import FoundationModels
@@ -8,7 +9,86 @@ import FoundationModels
 final class WorkoutTemplateService {
     static let shared = WorkoutTemplateService()
     private init() {}
-    
+
+    // MARK: - AI Plan Template Creation (Idempotent)
+
+    func createTemplatesFromPlan(conversation: AIConversation, context: ModelContext) -> [WorkoutTemplate] {
+        #if canImport(FoundationModels)
+        if let json = conversation.structuredPlanJSON,
+           let plan = decodePlan(jsonString: json)
+        {
+            return createTemplatesFromStructuredPlan(plan: plan, conversation: conversation, context: context)
+        }
+        #endif
+        return createTemplatesFromMarkdownPlan(conversation: conversation, context: context, includeRestDays: true)
+    }
+
+    #if canImport(FoundationModels)
+    private func createTemplatesFromStructuredPlan(plan: WorkoutPlan, conversation: AIConversation, context: ModelContext) -> [WorkoutTemplate] {
+        guard let week = plan.weeks.first else { return [] }
+
+        let planHash = stablePlanHash(structuredPlanJSON: conversation.structuredPlanJSON, markdown: conversation.response)
+        let planTitle = plan.title
+
+        var result: [WorkoutTemplate] = []
+        for (dayIndex, day) in week.days.enumerated() {
+            let title = prefixedDayTitle(day.title, dayIndex: dayIndex)
+            let existing = findExistingTemplate(planHash: planHash, dayIndex: dayIndex, context: context)
+
+            let template = existing ?? WorkoutTemplate(
+                title: title,
+                notes: nil,
+                sourceAIConversationId: conversation.id,
+                aiPlanHash: planHash,
+                aiPlanTitle: planTitle,
+                aiWeekTitle: week.title,
+                aiDayIndex: dayIndex,
+                aiDayType: day.type.rawValue,
+                aiDayTitle: day.title,
+                isBuiltIn: false
+            )
+
+            template.title = title
+            template.sourceAIConversationId = conversation.id
+            template.aiPlanHash = planHash
+            template.aiPlanTitle = planTitle
+            template.aiWeekTitle = week.title
+            template.aiDayIndex = dayIndex
+            template.aiDayType = day.type.rawValue
+            template.aiDayTitle = day.title
+            template.isBuiltIn = false
+            template.templateDescription = templateDescription(for: day)
+            template.notes = notesSummary(for: day)
+
+            if existing == nil { context.insert(template) }
+            deleteTemplateExercises(template, context: context)
+
+            var createdExercises = 0
+            for (index, item) in day.items.enumerated() {
+                let mapped = mapItemToTemplateExercise(item, order: index, defaultWeightUnit: plan.unit)
+                let templateExercise = TemplateExercise(
+                    name: mapped.name,
+                    order: mapped.order,
+                    sets: mapped.sets,
+                    reps: mapped.reps,
+                    suggestedWeight: mapped.suggestedWeight,
+                    weightUnit: mapped.weightUnit,
+                    notes: mapped.notes
+                )
+                templateExercise.template = template
+                context.insert(templateExercise)
+                if mapped.countsTowardExerciseCount { createdExercises += 1 }
+            }
+
+            template.exerciseCount = createdExercises
+            result.append(template)
+        }
+
+        try? context.save()
+        return result
+    }
+    #endif
+
     /// Creates a WorkoutTemplate from an AI conversation's structured plan
     /// - Parameters:
     ///   - conversation: The AI conversation containing a structured plan JSON
@@ -45,62 +125,59 @@ final class WorkoutTemplateService {
             
             let day = week.days[dayIndex]
             
-            // Only create templates for workout days (not rest days)
-            if day.type == .rest || day.type == .activeRecovery {
-                print("⚠️ Selected day is a rest/recovery day, no exercises to template")
-                return nil
-            }
-            
-            // Create the template
-            let template = WorkoutTemplate(
-                title: day.title,
-                notes: day.items.first?.notes,
-                sourceAIConversationId: conversation.id
+            let planHash = stablePlanHash(structuredPlanJSON: jsonString, markdown: conversation.response)
+            let planTitle = plan.title
+            let title = prefixedDayTitle(day.title, dayIndex: dayIndex)
+
+            // Idempotent: update an existing template for this plan/day if present.
+            let existing = findExistingTemplate(planHash: planHash, dayIndex: dayIndex, context: context)
+
+            let template = existing ?? WorkoutTemplate(
+                title: title,
+                notes: nil,
+                sourceAIConversationId: conversation.id,
+                aiPlanHash: planHash,
+                aiPlanTitle: planTitle,
+                aiWeekTitle: plan.weeks.first?.title,
+                aiDayIndex: dayIndex,
+                aiDayType: day.type.rawValue,
+                aiDayTitle: day.title,
+                isBuiltIn: false
             )
+
+            template.title = title
+            template.aiPlanHash = planHash
+            template.aiPlanTitle = planTitle
+            template.aiWeekTitle = plan.weeks.first?.title
+            template.aiDayIndex = dayIndex
+            template.aiDayType = day.type.rawValue
+            template.aiDayTitle = day.title
+            template.isBuiltIn = false
+
+            // Provide a useful summary even for rest/recovery/yoga-style days.
+            template.templateDescription = templateDescription(for: day)
+            template.notes = notesSummary(for: day)
             
-            context.insert(template)
+            if existing == nil { context.insert(template) }
+            deleteTemplateExercises(template, context: context)
             
             // Create template exercises from the day's items
             var createdExercises = 0
             for (index, item) in day.items.enumerated() {
-                // Only include strength exercises (with sets/reps)
-                guard let sets = item.sets, let reps = item.reps else {
-                    continue
-                }
-                
-                // Parse suggested weight if available
-                let suggestedWeight: Double?
-                let weightUnit: String
-                
-                if let weightString = item.suggestedWeight, !weightString.isEmpty {
-                    // Try to extract number from string like "185 lbs" or "80kg"
-                    let components = weightString.components(separatedBy: .whitespaces)
-                    suggestedWeight = Double(components.first ?? "")
-                    
-                    // Determine unit
-                    if weightString.lowercased().contains("kg") {
-                        weightUnit = "kg"
-                    } else {
-                        weightUnit = "lbs"
-                    }
-                } else {
-                    suggestedWeight = nil
-                    weightUnit = plan.unit.lowercased().contains("kg") ? "kg" : "lbs"
-                }
-                
+                let mapped = mapItemToTemplateExercise(item, order: index, defaultWeightUnit: plan.unit)
                 let templateExercise = TemplateExercise(
-                    name: item.name,
-                    order: index,
-                    sets: sets,
-                    reps: reps,
-                    suggestedWeight: suggestedWeight,
-                    weightUnit: weightUnit,
-                    notes: item.notes
+                    name: mapped.name,
+                    order: mapped.order,
+                    sets: mapped.sets,
+                    reps: mapped.reps,
+                    suggestedWeight: mapped.suggestedWeight,
+                    weightUnit: mapped.weightUnit,
+                    notes: mapped.notes
                 )
                 
                 templateExercise.template = template
                 context.insert(templateExercise)
-                createdExercises += 1
+                if mapped.countsTowardExerciseCount { createdExercises += 1 }
             }
             
             template.exerciseCount = createdExercises
@@ -345,44 +422,16 @@ final class WorkoutTemplateService {
         return result
     }
     
-    /// Gets all available workout days from an AI conversation's plan
-    /// - Parameter conversation: The AI conversation containing a structured plan
-    /// - Returns: Array of day titles and indices, or empty array if parsing fails
-    func getAvailableWorkoutDays(from conversation: AIConversation) -> [(index: Int, title: String, type: String)] {
-        #if canImport(FoundationModels)
-        guard let jsonString = conversation.structuredPlanJSON,
-              let data = jsonString.data(using: .utf8) else {
-            // Try markdown parsing if no structured JSON
-            return getAvailableWorkoutDaysFromMarkdown(conversation: conversation)
-        }
-        
-        do {
-            let decoder = JSONDecoder()
-            let plan = try decoder.decode(WorkoutPlan.self, from: data)
-            
-            guard let week = plan.weeks.first else {
-                return []
-            }
-            
-            return week.days.enumerated()
-                .filter { $0.element.type != .rest && $0.element.type != .activeRecovery }
-                .map { (index: $0.offset, title: $0.element.title, type: String(describing: $0.element.type)) }
-            
-        } catch {
-            print("❌ Failed to parse plan: \(error)")
-            return getAvailableWorkoutDaysFromMarkdown(conversation: conversation)
-        }
-        #else
-        return []
-        #endif
-    }
-    
     /// Creates templates from markdown-based AI plan (creates a template for each workout day)
     /// - Parameters:
     ///   - conversation: The AI conversation containing markdown plan
     ///   - context: The ModelContext to insert templates into
     /// - Returns: Array of created templates
     func createTemplatesFromMarkdownPlan(conversation: AIConversation, context: ModelContext) -> [WorkoutTemplate] {
+        createTemplatesFromMarkdownPlan(conversation: conversation, context: context, includeRestDays: false)
+    }
+
+    func createTemplatesFromMarkdownPlan(conversation: AIConversation, context: ModelContext, includeRestDays: Bool) -> [WorkoutTemplate] {
         let workoutDays = parseWorkoutDaysFromMarkdown(text: conversation.response)
         var templates: [WorkoutTemplate] = []
         // Build baselines once for recommended weights
@@ -406,25 +455,47 @@ final class WorkoutTemplateService {
         let preferredUnit = "lbs"
         let baselineMap: [String: ExerciseBaseline] = [:]
         #endif
+
+        let planHash = stablePlanHash(structuredPlanJSON: conversation.structuredPlanJSON, markdown: conversation.response)
+        let planTitle = derivePlanTitle(conversation: conversation)
         
-        for (_, day) in workoutDays.enumerated() {
-            // Skip rest days
-            let isRest = day.title.lowercased().contains("rest") || 
-                         day.title.lowercased().contains("recovery") ||
-                         day.details.lowercased().contains("rest day")
-            
-            if isRest { continue }
-            
-            // Create template
-            let template = WorkoutTemplate(
-                title: day.title,
+        for (dayIndex, day) in workoutDays.enumerated() {
+            let isRest = day.title.lowercased().contains("rest") ||
+                day.title.lowercased().contains("recovery") ||
+                day.details.lowercased().contains("rest day")
+
+            if isRest && !includeRestDays { continue }
+
+            let title = prefixedDayTitle(day.title, dayIndex: dayIndex)
+            let existing = findExistingTemplate(planHash: planHash, dayIndex: dayIndex, context: context)
+            let template = existing ?? WorkoutTemplate(
+                title: title,
                 notes: day.details,
                 sourceAIConversationId: conversation.id,
+                aiPlanHash: planHash,
+                aiPlanTitle: planTitle,
+                aiWeekTitle: "Week 1",
+                aiDayIndex: dayIndex,
+                aiDayType: isRest ? "rest" : "workout",
+                aiDayTitle: day.title,
                 isBuiltIn: false
             )
+
+            template.title = title
+            template.notes = day.details
+            template.sourceAIConversationId = conversation.id
+            template.aiPlanHash = planHash
+            template.aiPlanTitle = planTitle
+            template.aiWeekTitle = "Week 1"
+            template.aiDayIndex = dayIndex
+            template.aiDayType = isRest ? "rest" : "workout"
+            template.aiDayTitle = day.title
+            template.isBuiltIn = false
+            template.templateDescription = isRest ? "Rest / Recovery" : "AI plan day"
             
-            context.insert(template)
+            if existing == nil { context.insert(template) }
             templates.append(template)
+            deleteTemplateExercises(template, context: context)
             
             // Parse exercises from markdown details
             let exercises = parseExercisesFromMarkdown(details: day.details, weightUnit: preferredUnit)
@@ -463,15 +534,207 @@ final class WorkoutTemplateService {
         try? context.save()
         return templates
     }
+
+    func getAvailableWorkoutDays(from conversation: AIConversation) -> [(index: Int, title: String, type: String)] {
+        #if canImport(FoundationModels)
+        if let jsonString = conversation.structuredPlanJSON,
+           let plan = decodePlan(jsonString: jsonString),
+           let week = plan.weeks.first
+        {
+            return week.days.enumerated().map { (index: $0.offset, title: $0.element.title, type: String(describing: $0.element.type)) }
+        }
+        #endif
+        let workoutDays = parseWorkoutDaysFromMarkdown(text: conversation.response)
+        if workoutDays.isEmpty { return [] }
+        return workoutDays.enumerated().map { (index: $0.offset, title: $0.element.title, type: $0.element.title.lowercased().contains("rest") ? "rest" : "day") }
+    }
+
+    // MARK: - Helpers
+
+    #if canImport(FoundationModels)
+    private func decodePlan(jsonString: String) -> WorkoutPlan? {
+        guard let data = jsonString.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(WorkoutPlan.self, from: data)
+    }
+    #endif
+
+    private func stablePlanHash(structuredPlanJSON: String?, markdown: String) -> String {
+        let source = (structuredPlanJSON?.isEmpty == false ? structuredPlanJSON! : markdown)
+        let data = Data(source.utf8)
+        let digest = SHA256.hash(data: data)
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func derivePlanTitle(conversation: AIConversation) -> String {
+        #if canImport(FoundationModels)
+        if let jsonString = conversation.structuredPlanJSON,
+           let plan = decodePlan(jsonString: jsonString)
+        {
+            return plan.title
+        }
+        #endif
+        let firstLine = conversation.response.split(separator: "\n").first.map(String.init) ?? ""
+        let trimmedFirst = firstLine.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "#", with: "")
+        if trimmedFirst.count >= 6 { return trimmedFirst }
+        let prompt = conversation.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        return prompt.isEmpty ? "AI Plan" : prompt
+    }
+
+    private func findExistingTemplate(planHash: String, dayIndex: Int, context: ModelContext) -> WorkoutTemplate? {
+        let hash: String? = planHash
+        let idx: Int? = dayIndex
+        let descriptor = FetchDescriptor<WorkoutTemplate>(
+            predicate: #Predicate { t in
+                t.aiPlanHash == hash && t.aiDayIndex == idx
+            }
+        )
+        return (try? context.fetch(descriptor))?.first
+    }
+
+    private func deleteTemplateExercises(_ template: WorkoutTemplate, context: ModelContext) {
+        if let existing = template.exercises {
+            for ex in existing { context.delete(ex) }
+        }
+    }
+
+    #if canImport(FoundationModels)
+    private func templateDescription(for day: Day) -> String {
+        switch day.type {
+        case .rest: return "Rest day"
+        case .activeRecovery: return "Active recovery"
+        case .runEasy, .runTempo, .runIntervals, .longRun: return "Run"
+        case .cyclingEndurance: return "Cycling"
+        case .rowing: return "Rowing"
+        case .swimming: return "Swimming"
+        case .strengthUpper, .strengthLower, .fullBodyStrength: return "Strength training"
+        }
+    }
+
+    private func notesSummary(for day: Day) -> String? {
+        // Prefer a compact summary; keep per-item detail inside TemplateExercise notes.
+        if day.items.isEmpty {
+            return day.type == .rest ? "Rest and recover. Light walking and mobility optional." : nil
+        }
+        // If there’s a single activity with no sets/reps, surface it.
+        if day.items.count == 1, let item = day.items.first, item.sets == nil, item.reps == nil {
+            return activitySummary(item: item)
+        }
+        return nil
+    }
+
+    private struct MappedItem {
+        let name: String
+        let order: Int
+        let sets: Int
+        let reps: Int
+        let suggestedWeight: Double?
+        let weightUnit: String
+        let notes: String?
+        let countsTowardExerciseCount: Bool
+    }
+
+    private func mapItemToTemplateExercise(_ item: Item, order: Int, defaultWeightUnit: String) -> MappedItem {
+        if let sets = item.sets, let reps = item.reps {
+            let (suggestedWeight, weightUnit) = parseSuggestedWeight(item.suggestedWeight, defaultUnit: defaultWeightUnit)
+            return MappedItem(
+                name: item.name,
+                order: order,
+                sets: sets,
+                reps: reps,
+                suggestedWeight: suggestedWeight,
+                weightUnit: weightUnit,
+                notes: item.notes,
+                countsTowardExerciseCount: true
+            )
+        }
+
+        // Cardio / yoga / recovery activity:
+        // - If duration/distance present, encode a "Set 1: mm:ss ..." line so workout creation can generate a cardio log.
+        // - Otherwise store a summary and avoid generating logs later by using 0 sets.
+        let summary = activitySummary(item: item)
+        if item.durationMinutes != nil || item.distance != nil {
+            let firstLine = cardioSetLine(item: item)
+            var lines: [String] = [firstLine]
+            if let pace = item.pace, !pace.isEmpty { lines.append("Pace: \(pace)") }
+            if let effort = item.effort, !effort.isEmpty { lines.append("Effort: \(effort)") }
+            if let notes = item.notes, !notes.isEmpty { lines.append(notes) }
+            return MappedItem(
+                name: item.name,
+                order: order,
+                sets: 1,
+                reps: 0,
+                suggestedWeight: nil,
+                weightUnit: defaultWeightUnit.lowercased().contains("kg") ? "kg" : "lbs",
+                notes: lines.joined(separator: "\n"),
+                countsTowardExerciseCount: true
+            )
+        }
+        return MappedItem(
+            name: item.name,
+            order: order,
+            sets: 0,
+            reps: 0,
+            suggestedWeight: nil,
+            weightUnit: defaultWeightUnit.lowercased().contains("kg") ? "kg" : "lbs",
+            notes: summary,
+            countsTowardExerciseCount: true
+        )
+    }
+
+    private func parseSuggestedWeight(_ weightString: String?, defaultUnit: String) -> (Double?, String) {
+        guard let weightString, !weightString.isEmpty else {
+            return (nil, defaultUnit.lowercased().contains("kg") ? "kg" : "lbs")
+        }
+        let components = weightString.components(separatedBy: .whitespaces)
+        let suggestedWeight = Double(components.first ?? "")
+        let unit: String
+        if weightString.lowercased().contains("kg") {
+            unit = "kg"
+        } else {
+            unit = "lbs"
+        }
+        return (suggestedWeight, unit)
+    }
+
+    private func activitySummary(item: Item) -> String {
+        var parts: [String] = []
+        if let minutes = item.durationMinutes {
+            parts.append("Duration: \(minutes) min")
+        }
+        if let dist = item.distance, let unit = item.distanceUnit {
+            parts.append("Distance: \(String(format: "%.2f", dist)) \(unit)")
+        }
+        if let pace = item.pace, !pace.isEmpty {
+            parts.append("Pace: \(pace)")
+        }
+        if let effort = item.effort, !effort.isEmpty {
+            parts.append("Effort: \(effort)")
+        }
+        if let notes = item.notes, !notes.isEmpty {
+            parts.append(notes)
+        }
+        return parts.isEmpty ? (item.notes ?? "") : parts.joined(separator: " • ")
+    }
+
+    private func cardioSetLine(item: Item) -> String {
+        let minutes = item.durationMinutes ?? 0
+        let seconds = 0
+        let time = "\(minutes):\(String(format: "%02d", seconds))"
+        if let dist = item.distance, let unit = item.distanceUnit {
+            return "Set 1: \(time) \(String(format: "%.2f", dist)) \(unit)"
+        }
+        return "Set 1: \(time)"
+    }
+
+    #endif
+
+    private func prefixedDayTitle(_ title: String, dayIndex: Int) -> String {
+        let prefix = "\(dayIndex + 1):"
+        if title.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix(prefix) { return title }
+        return "\(dayIndex + 1): \(title)"
+    }
     
     // MARK: - Private Markdown Parsing Helpers
-    
-    private func getAvailableWorkoutDaysFromMarkdown(conversation: AIConversation) -> [(index: Int, title: String, type: String)] {
-        let workoutDays = parseWorkoutDaysFromMarkdown(text: conversation.response)
-        return workoutDays.enumerated()
-            .filter { !$0.element.title.lowercased().contains("rest") && !$0.element.title.lowercased().contains("recovery") }
-            .map { (index: $0.offset, title: $0.element.title, type: "workout") }
-    }
     
     private func parseWorkoutDaysFromMarkdown(text: String) -> [(title: String, details: String)] {
         var workoutDays: [(String, String)] = []

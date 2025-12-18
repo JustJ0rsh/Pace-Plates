@@ -930,8 +930,8 @@ struct AIConversationSheet: View {
             structuredPlanJSON: structuredPlanJSON
         )
         
-        // Create templates from the plan
-        let templates = WorkoutTemplateService.shared.createTemplatesFromMarkdownPlan(
+        // Create templates from the plan (structured JSON preferred; includes rest/recovery days)
+        let templates = WorkoutTemplateService.shared.createTemplatesFromPlan(
             conversation: tempConvo,
             context: modelContext
         )
