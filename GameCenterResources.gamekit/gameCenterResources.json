@@ -3,225 +3,187 @@
     "version" : "2024-11-15"
   },
   "resources" : {
-	    "achievementImages" : {
-	      "streak_day_30-en-US" : [
-	        {
-	          "localID" : "streak_day_30-en-US",
-	          "url" : "en-US\/AchievementImage-streak_day_30-en-US.png"
-	        }
-	      ],
-	      "streak_days_007-en-US" : [
-	        {
-	          "localID" : "streak_days_007-en-US",
-	          "url" : "en-US\/AchievementImage-streak_days_007-en-US.png"
-	        }
-	      ],
-	      "streak_days_014-en-US" : [
-	        {
-	          "localID" : "streak_days_014-en-US",
-	          "url" : "en-US\/AchievementImage-streak_days_014-en-US.png"
-	        }
-	      ],
-	      "streak_days_030-en-US" : [
-	        {
-	          "localID" : "streak_days_030-en-US",
-	          "url" : "en-US\/AchievementImage-streak_days_030-en-US.png"
-	        }
-	      ],
-	      "streak_days_060-en-US" : [
-	        {
-	          "localID" : "streak_days_060-en-US",
-	          "url" : "en-US\/AchievementImage-streak_days_060-en-US.png"
-	        }
-	      ],
-	      "streak_days_090-en-US" : [
-	        {
-	          "localID" : "streak_days_090-en-US",
-	          "url" : "en-US\/AchievementImage-streak_days_090-en-US.png"
-	        }
-	      ],
-	      "streak_days_120-en-US" : [
-	        {
-	          "localID" : "streak_days_120-en-US",
-	          "url" : "en-US\/AchievementImage-streak_days_120-en-US.png"
-	        }
-	      ],
-	      "streak_days_150-en-US" : [
-	        {
-	          "localID" : "streak_days_150-en-US",
-	          "url" : "en-US\/AchievementImage-streak_days_150-en-US.png"
-	        }
-	      ],
-	      "streak_days_180-en-US" : [
-	        {
-	          "localID" : "streak_days_180-en-US",
-	          "url" : "en-US\/AchievementImage-streak_days_180-en-US.png"
-	        }
-	      ],
-	      "streak_days_210-en-US" : [
-	        {
-	          "localID" : "streak_days_210-en-US",
-	          "url" : "en-US\/AchievementImage-streak_days_210-en-US.png"
-	        }
-	      ],
-	      "streak_days_240-en-US" : [
-	        {
-	          "localID" : "streak_days_240-en-US",
-	          "url" : "en-US\/AchievementImage-streak_days_240-en-US.png"
-	        }
-	      ],
-	      "streak_days_270-en-US" : [
-	        {
-	          "localID" : "streak_days_270-en-US",
-	          "url" : "en-US\/AchievementImage-streak_days_270-en-US.png"
-	        }
-	      ],
-	      "streak_days_300-en-US" : [
-	        {
-	          "localID" : "streak_days_300-en-US",
-	          "url" : "en-US\/AchievementImage-streak_days_300-en-US.png"
-	        }
-	      ],
-	      "streak_days_330-en-US" : [
-	        {
-	          "localID" : "streak_days_330-en-US",
-	          "url" : "en-US\/AchievementImage-streak_days_330-en-US.png"
-	        }
-	      ],
-	      "streak_days_365-en-US" : [
-	        {
-	          "localID" : "streak_days_365-en-US",
-	          "url" : "en-US\/AchievementImage-streak_days_365-en-US.png"
-	        }
-	      ],
-	      "streak_weeks_004-en-US" : [
-	        {
-	          "localID" : "streak_weeks_004-en-US",
-	          "url" : "en-US\/AchievementImage-streak_weeks_004-en-US.png"
-	        }
-	      ],
-	      "streak_weeks_008-en-US" : [
-	        {
-	          "localID" : "streak_weeks_008-en-US",
-	          "url" : "en-US\/AchievementImage-streak_weeks_008-en-US.png"
-	        }
-	      ],
-	      "streak_weeks_012-en-US" : [
-	        {
-	          "localID" : "streak_weeks_012-en-US",
-	          "url" : "en-US\/AchievementImage-streak_weeks_012-en-US.png"
-	        }
-	      ],
-	      "streak_weeks_016-en-US" : [
-	        {
-	          "localID" : "streak_weeks_016-en-US",
-	          "url" : "en-US\/AchievementImage-streak_weeks_016-en-US.png"
-	        }
-	      ],
-	      "streak_weeks_020-en-US" : [
-	        {
-	          "localID" : "streak_weeks_020-en-US",
-	          "url" : "en-US\/AchievementImage-streak_weeks_020-en-US.png"
-	        }
-	      ],
-	      "streak_weeks_024-en-US" : [
-	        {
-	          "localID" : "streak_weeks_024-en-US",
-	          "url" : "en-US\/AchievementImage-streak_weeks_024-en-US.png"
-	        }
-	      ],
-	      "streak_weeks_028-en-US" : [
-	        {
-	          "localID" : "streak_weeks_028-en-US",
-	          "url" : "en-US\/AchievementImage-streak_weeks_028-en-US.png"
-	        }
-	      ],
-	      "streak_weeks_032-en-US" : [
-	        {
-	          "localID" : "streak_weeks_032-en-US",
-	          "url" : "en-US\/AchievementImage-streak_weeks_032-en-US.png"
-	        }
-	      ],
-	      "streak_weeks_036-en-US" : [
-	        {
-	          "localID" : "streak_weeks_036-en-US",
-	          "url" : "en-US\/AchievementImage-streak_weeks_036-en-US.png"
-	        }
-	      ],
-	      "streak_weeks_040-en-US" : [
-	        {
-	          "localID" : "streak_weeks_040-en-US",
-	          "url" : "en-US\/AchievementImage-streak_weeks_040-en-US.png"
-	        }
-	      ],
-	      "streak_weeks_044-en-US" : [
-	        {
-	          "localID" : "streak_weeks_044-en-US",
-	          "url" : "en-US\/AchievementImage-streak_weeks_044-en-US.png"
-	        }
-	      ],
-	      "streak_weeks_048-en-US" : [
-	        {
-	          "localID" : "streak_weeks_048-en-US",
-	          "url" : "en-US\/AchievementImage-streak_weeks_048-en-US.png"
-	        }
-	      ],
-	      "streak_weeks_052-en-US" : [
-	        {
-	          "localID" : "streak_weeks_052-en-US",
-	          "url" : "en-US\/AchievementImage-streak_weeks_052-en-US.png"
-	        }
-	      ],
-	      "streak_weeks_054-en-US" : [
-	        {
-	          "localID" : "streak_weeks_054-en-US",
-	          "url" : "en-US\/AchievementImage-streak_weeks_054-en-US.png"
-	        }
-	      ]
-	    },
-	    "leaderboardImages" : {
-	      "Bench-en-US" : [
-	        {
-	          "localID" : "Bench-en-US",
-	          "url" : "en-US\/LeaderboardImage-Bench-en-US.png"
-	        }
-	      ],
-	      "Squat-en-US" : [
-	        {
-	          "localID" : "Squat-en-US",
-	          "url" : "en-US\/LeaderboardImage-Squat-en-US.png"
-	        }
-	      ],
-	      "Deadlift-en-US" : [
-	        {
-	          "localID" : "Deadlift-en-US",
-	          "url" : "en-US\/LeaderboardImage-Deadlift-en-US.png"
-	        }
-	      ],
-	      "Best_Session_Volume-en-US" : [
-	        {
-	          "localID" : "Best_Session_Volume-en-US",
-	          "url" : "en-US\/LeaderboardImage-Best_Session_Volume-en-US.png"
-	        }
-	      ],
-	      "Longest_Run-en-US" : [
-	        {
-	          "localID" : "Longest_Run-en-US",
-	          "url" : "en-US\/LeaderboardImage-Longest_Run-en-US.png"
-	        }
-	      ],
-	      "Fastest_Run-en-US" : [
-	        {
-	          "localID" : "Fastest_Run-en-US",
-	          "url" : "en-US\/LeaderboardImage-Fastest_Run-en-US.png"
-	        }
-	      ]
-	    },
-	    "achievementLocalizations" : {
-	      "streak_day_30" : [
-	        {
-	          "afterEarnedDescription" : "30 Days in a Row of Workouts",
-	          "beforeEarnedDescription" : "30 Days in a Row of Workouts",
+    "achievementImages" : {
+      "streak_day_30-en-US" : [
+        {
+          "localID" : "streak_day_30-en-US",
+          "url" : "en-US\/AchievementImage-streak_day_30-en-US.png"
+        }
+      ],
+      "streak_days_007-en-US" : [
+        {
+          "localID" : "streak_days_007-en-US",
+          "url" : "en-US\/AchievementImage-streak_days_007-en-US.png"
+        }
+      ],
+      "streak_days_014-en-US" : [
+        {
+          "localID" : "streak_days_014-en-US",
+          "url" : "en-US\/AchievementImage-streak_days_014-en-US.png"
+        }
+      ],
+      "streak_days_030-en-US" : [
+        {
+          "localID" : "streak_days_030-en-US",
+          "url" : "en-US\/AchievementImage-streak_days_030-en-US.png"
+        }
+      ],
+      "streak_days_060-en-US" : [
+        {
+          "localID" : "streak_days_060-en-US",
+          "url" : "en-US\/AchievementImage-streak_days_060-en-US.png"
+        }
+      ],
+      "streak_days_090-en-US" : [
+        {
+          "localID" : "streak_days_090-en-US",
+          "url" : "en-US\/AchievementImage-streak_days_090-en-US.png"
+        }
+      ],
+      "streak_days_120-en-US" : [
+        {
+          "localID" : "streak_days_120-en-US",
+          "url" : "en-US\/AchievementImage-streak_days_120-en-US.png"
+        }
+      ],
+      "streak_days_150-en-US" : [
+        {
+          "localID" : "streak_days_150-en-US",
+          "url" : "en-US\/AchievementImage-streak_days_150-en-US.png"
+        }
+      ],
+      "streak_days_180-en-US" : [
+        {
+          "localID" : "streak_days_180-en-US",
+          "url" : "en-US\/AchievementImage-streak_days_180-en-US.png"
+        }
+      ],
+      "streak_days_210-en-US" : [
+        {
+          "localID" : "streak_days_210-en-US",
+          "url" : "en-US\/AchievementImage-streak_days_210-en-US.png"
+        }
+      ],
+      "streak_days_240-en-US" : [
+        {
+          "localID" : "streak_days_240-en-US",
+          "url" : "en-US\/AchievementImage-streak_days_240-en-US.png"
+        }
+      ],
+      "streak_days_270-en-US" : [
+        {
+          "localID" : "streak_days_270-en-US",
+          "url" : "en-US\/AchievementImage-streak_days_270-en-US.png"
+        }
+      ],
+      "streak_days_300-en-US" : [
+        {
+          "localID" : "streak_days_300-en-US",
+          "url" : "en-US\/AchievementImage-streak_days_300-en-US.png"
+        }
+      ],
+      "streak_days_330-en-US" : [
+        {
+          "localID" : "streak_days_330-en-US",
+          "url" : "en-US\/AchievementImage-streak_days_330-en-US.png"
+        }
+      ],
+      "streak_days_365-en-US" : [
+        {
+          "localID" : "streak_days_365-en-US",
+          "url" : "en-US\/AchievementImage-streak_days_365-en-US.png"
+        }
+      ],
+      "streak_weeks_004-en-US" : [
+        {
+          "localID" : "streak_weeks_004-en-US",
+          "url" : "en-US\/AchievementImage-streak_weeks_004-en-US.png"
+        }
+      ],
+      "streak_weeks_008-en-US" : [
+        {
+          "localID" : "streak_weeks_008-en-US",
+          "url" : "en-US\/AchievementImage-streak_weeks_008-en-US.png"
+        }
+      ],
+      "streak_weeks_012-en-US" : [
+        {
+          "localID" : "streak_weeks_012-en-US",
+          "url" : "en-US\/AchievementImage-streak_weeks_012-en-US.png"
+        }
+      ],
+      "streak_weeks_016-en-US" : [
+        {
+          "localID" : "streak_weeks_016-en-US",
+          "url" : "en-US\/AchievementImage-streak_weeks_016-en-US.png"
+        }
+      ],
+      "streak_weeks_020-en-US" : [
+        {
+          "localID" : "streak_weeks_020-en-US",
+          "url" : "en-US\/AchievementImage-streak_weeks_020-en-US.png"
+        }
+      ],
+      "streak_weeks_024-en-US" : [
+        {
+          "localID" : "streak_weeks_024-en-US",
+          "url" : "en-US\/AchievementImage-streak_weeks_024-en-US.png"
+        }
+      ],
+      "streak_weeks_028-en-US" : [
+        {
+          "localID" : "streak_weeks_028-en-US",
+          "url" : "en-US\/AchievementImage-streak_weeks_028-en-US.png"
+        }
+      ],
+      "streak_weeks_032-en-US" : [
+        {
+          "localID" : "streak_weeks_032-en-US",
+          "url" : "en-US\/AchievementImage-streak_weeks_032-en-US.png"
+        }
+      ],
+      "streak_weeks_036-en-US" : [
+        {
+          "localID" : "streak_weeks_036-en-US",
+          "url" : "en-US\/AchievementImage-streak_weeks_036-en-US.png"
+        }
+      ],
+      "streak_weeks_040-en-US" : [
+        {
+          "localID" : "streak_weeks_040-en-US",
+          "url" : "en-US\/AchievementImage-streak_weeks_040-en-US.png"
+        }
+      ],
+      "streak_weeks_044-en-US" : [
+        {
+          "localID" : "streak_weeks_044-en-US",
+          "url" : "en-US\/AchievementImage-streak_weeks_044-en-US.png"
+        }
+      ],
+      "streak_weeks_048-en-US" : [
+        {
+          "localID" : "streak_weeks_048-en-US",
+          "url" : "en-US\/AchievementImage-streak_weeks_048-en-US.png"
+        }
+      ],
+      "streak_weeks_052-en-US" : [
+        {
+          "localID" : "streak_weeks_052-en-US",
+          "url" : "en-US\/AchievementImage-streak_weeks_052-en-US.png"
+        }
+      ],
+      "streak_weeks_054-en-US" : [
+        {
+          "localID" : "streak_weeks_054-en-US",
+          "url" : "en-US\/AchievementImage-streak_weeks_054-en-US.png"
+        }
+      ]
+    },
+    "achievementLocalizations" : {
+      "streak_day_30" : [
+        {
+          "afterEarnedDescription" : "30 Days in a Row of Workouts",
+          "beforeEarnedDescription" : "30 Days in a Row of Workouts",
           "locale" : "en-US",
           "localID" : "streak_day_30-en-US",
           "name" : "Streak Day 30"
@@ -790,6 +752,44 @@
         "vendorIdentifier" : "streak_weeks_054"
       }
     ],
+    "leaderboardImages" : {
+      "Bench-en-US" : [
+        {
+          "localID" : "Bench-en-US",
+          "url" : "en-US\/LeaderboardImage-Bench-en-US.png"
+        }
+      ],
+      "Best_Session_Volume-en-US" : [
+        {
+          "localID" : "Best_Session_Volume-en-US",
+          "url" : "en-US\/LeaderboardImage-Best_Session_Volume-en-US.png"
+        }
+      ],
+      "Deadlift-en-US" : [
+        {
+          "localID" : "Deadlift-en-US",
+          "url" : "en-US\/LeaderboardImage-Deadlift-en-US.png"
+        }
+      ],
+      "Fastest_Run-en-US" : [
+        {
+          "localID" : "Fastest_Run-en-US",
+          "url" : "en-US\/LeaderboardImage-Fastest_Run-en-US.png"
+        }
+      ],
+      "Longest_Run-en-US" : [
+        {
+          "localID" : "Longest_Run-en-US",
+          "url" : "en-US\/LeaderboardImage-Longest_Run-en-US.png"
+        }
+      ],
+      "Squat-en-US" : [
+        {
+          "localID" : "Squat-en-US",
+          "url" : "en-US\/LeaderboardImage-Squat-en-US.png"
+        }
+      ]
+    },
     "leaderboardLocalizations" : {
       "Bench" : [
         {
@@ -854,6 +854,9 @@
     },
     "leaderboards" : [
       {
+        "activityProperties" : {
+
+        },
         "archived" : false,
         "defaultFormatter" : "INTEGER",
         "recurrenceDuration" : "PT168H",
@@ -868,6 +871,9 @@
         "visibility" : "SHOW_FOR_ALL"
       },
       {
+        "activityProperties" : {
+
+        },
         "archived" : false,
         "defaultFormatter" : "INTEGER",
         "recurrenceDuration" : "PT168H",
@@ -882,6 +888,9 @@
         "visibility" : "SHOW_FOR_ALL"
       },
       {
+        "activityProperties" : {
+
+        },
         "archived" : false,
         "defaultFormatter" : "INTEGER",
         "recurrenceDuration" : "PT168H",
@@ -896,6 +905,9 @@
         "visibility" : "SHOW_FOR_ALL"
       },
       {
+        "activityProperties" : {
+
+        },
         "archived" : false,
         "defaultFormatter" : "INTEGER",
         "recurrenceDuration" : "PT168H",
@@ -910,6 +922,9 @@
         "visibility" : "SHOW_FOR_ALL"
       },
       {
+        "activityProperties" : {
+
+        },
         "archived" : false,
         "defaultFormatter" : "DECIMAL_POINT_2_PLACE",
         "recurrenceDuration" : "PT168H",
@@ -924,6 +939,9 @@
         "visibility" : "SHOW_FOR_ALL"
       },
       {
+        "activityProperties" : {
+
+        },
         "archived" : false,
         "defaultFormatter" : "DECIMAL_POINT_2_PLACE",
         "recurrenceDuration" : "PT168H",

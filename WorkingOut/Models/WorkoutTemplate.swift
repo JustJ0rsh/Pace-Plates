@@ -8,6 +8,8 @@ final class WorkoutTemplate {
     var notes: String?
     var createdDate: Date = Date()
     var sourceAIConversationId: UUID?
+    var importSourceSessionID: UUID?
+    var exerciseCount: Int = 0
     @Relationship(deleteRule: .cascade, inverse: \TemplateExercise.template) var exercises: [TemplateExercise]?
     @Relationship(deleteRule: .nullify, inverse: \WorkoutSession.generatedTemplate) var sourceSession: WorkoutSession?
     
@@ -26,6 +28,8 @@ final class WorkoutTemplate {
          notes: String? = nil, 
          createdDate: Date = Date(), 
          sourceAIConversationId: UUID? = nil,
+         importSourceSessionID: UUID? = nil,
+         exerciseCount: Int = 0,
          isBuiltIn: Bool = false,
          experienceLevel: String? = nil,
          goal: String? = nil,
@@ -39,6 +43,8 @@ final class WorkoutTemplate {
         self.notes = notes
         self.createdDate = createdDate
         self.sourceAIConversationId = sourceAIConversationId
+        self.importSourceSessionID = importSourceSessionID
+        self.exerciseCount = exerciseCount
         self.isBuiltIn = isBuiltIn
         self.experienceLevel = experienceLevel
         self.goal = goal
@@ -49,4 +55,3 @@ final class WorkoutTemplate {
         self.templateDescription = templateDescription
     }
 }
-

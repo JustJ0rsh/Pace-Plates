@@ -134,8 +134,60 @@ struct WorkoutImportView: View {
                     print("⚠️  WARNING: Database appears empty. This context might not be connected properly.")
                 }
                 
-                // Keep the original name but add (Imported) suffix
-                let uniqueTitle = "\(sharedSession.title) (Imported)"
+                // Keep the original name but add (Imported) suffix (only once)
+                let baseTitle = sharedSession.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                let importedTitle = baseTitle.hasSuffix("(Imported)") ? baseTitle : "\(baseTitle) (Imported)"
+                let importKey = makeImportedTemplateKey(from: sharedSession)
+                let sourceSessionID: UUID? = sharedSession.id
+
+                // Prevent duplicates on re-import (by stable shared session id)
+                do {
+                    let bySource = try persistentContext.fetch(FetchDescriptor<WorkoutTemplate>(
+                        predicate: #Predicate { t in
+                            t.isBuiltIn == false &&
+                            t.experienceLevel == "Imported" &&
+                            t.importSourceSessionID == sourceSessionID
+                        }
+                    ))
+                    if let existing = bySource.first {
+                        print("✅ Import skipped (already imported): '\(existing.title)'")
+                        Haptics.notify(.success)
+                        isSaving = false
+                        dismiss()
+                        return
+                    }
+                }
+
+                // Backward-compatibility: prevent duplicates for older imports that didn't store source ids
+                // by comparing against an import-derived content key.
+                let sameTitle = try persistentContext.fetch(FetchDescriptor<WorkoutTemplate>(
+                    predicate: #Predicate { t in
+                        t.isBuiltIn == false &&
+                        t.experienceLevel == "Imported" &&
+                        t.title == importedTitle
+                    }
+                ))
+                if sameTitle.contains(where: { makeImportedTemplateKey(from: $0) == importKey }) {
+                    print("✅ Import skipped (duplicate content): '\(importedTitle)'")
+                    Haptics.notify(.success)
+                    isSaving = false
+                    dismiss()
+                    return
+                }
+
+                // If the title is already taken by a different import, create a unique title.
+                let uniqueTitle: String = {
+                    guard !sameTitle.isEmpty else { return importedTitle }
+                    var i = 2
+                    while true {
+                        let candidate = "\(importedTitle) \(i)"
+                        let existing = (try? persistentContext.fetch(FetchDescriptor<WorkoutTemplate>(
+                            predicate: #Predicate { $0.title == candidate }
+                        ))) ?? []
+                        if existing.isEmpty { return candidate }
+                        i += 1
+                    }
+                }()
                 
                 print("📝 Creating imported template: '\(uniqueTitle)'")
                 print("   Source has \(sharedSession.exercises.count) exercises:")
@@ -153,6 +205,7 @@ struct WorkoutImportView: View {
                     experienceLevel: "Imported",
                     goal: "Imported"
                 )
+                newTemplate.importSourceSessionID = sharedSession.id
                 
                 // Insert template first
                 persistentContext.insert(newTemplate)
@@ -221,6 +274,8 @@ struct WorkoutImportView: View {
                     exerciseCount += 1
                     print("   Added exercise \(exerciseCount): \(sharedExercise.name) (\(sharedExercise.sets.count) sets)")
                 }
+
+                newTemplate.exerciseCount = exerciseCount
                 
                 // Explicitly save to catch any errors immediately
                 print("💾 Saving template to database...")
@@ -293,6 +348,89 @@ struct WorkoutImportView: View {
                 saveError = "Failed to save template: \(error.localizedDescription)"
             }
         }
+    }
+
+    private func makeImportedTemplateKey(from session: SharedWorkoutSession) -> String {
+        func normalize(_ s: String) -> String {
+            var t = s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            t = t.replacingOccurrences(of: "\u{2019}", with: "'")
+            t = t.replacingOccurrences(of: "\u{2018}", with: "'")
+            while t.contains("  ") { t = t.replacingOccurrences(of: "  ", with: " ") }
+            return t
+        }
+
+        let exercises = session.exercises.sorted { $0.order < $1.order }
+        var parts: [String] = []
+        parts.append("title:\(normalize(session.title))")
+        parts.append("notes:\(normalize(session.notes ?? ""))")
+        for ex in exercises {
+            let reps = ex.sets.first?.reps ?? 0
+            let weight = ex.sets.first?.weight
+            let weightUnit = ex.sets.first?.weightUnit ?? "lbs"
+
+            // Match the same notes formatting used during import so we can dedupe older imports
+            // (before we started persisting importSourceSessionID).
+            var detailedNotes: [String] = []
+            for (index, set) in ex.sets.enumerated() {
+                if ex.type == "cardio" {
+                    var setInfo = "Set \(index + 1):"
+                    if let duration = set.durationSeconds {
+                        setInfo += " \(duration / 60):\(String(format: "%02d", duration % 60))"
+                    }
+                    if let distance = set.distance, let unit = set.distanceUnit {
+                        setInfo += " \(String(format: "%.2f", distance)) \(unit)"
+                    }
+                    detailedNotes.append(setInfo)
+                } else {
+                    let repsText = "\(set.displayRepsText) @ \(String(format: "%.1f", set.weight)) \(set.weightUnit)"
+                    detailedNotes.append("Set \(index + 1): \(repsText)")
+                }
+                if let setNotes = set.notes, !setNotes.isEmpty {
+                    detailedNotes.append("  Note: \(setNotes)")
+                }
+            }
+            let combinedNotes = detailedNotes.joined(separator: "\n")
+
+            parts.append([
+                "ex",
+                "o:\(ex.order)",
+                "n:\(normalize(ex.name))",
+                "s:\(ex.sets.count)",
+                "r:\(reps)",
+                "w:\(weight.map { String(format: "%.3f", $0) } ?? "nil")",
+                "u:\(normalize(weightUnit))",
+                "notes:\(normalize(combinedNotes))"
+            ].joined(separator: "|"))
+        }
+        return parts.joined(separator: "||")
+    }
+
+    private func makeImportedTemplateKey(from template: WorkoutTemplate) -> String {
+        func normalize(_ s: String) -> String {
+            var t = s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            t = t.replacingOccurrences(of: "\u{2019}", with: "'")
+            t = t.replacingOccurrences(of: "\u{2018}", with: "'")
+            while t.contains("  ") { t = t.replacingOccurrences(of: "  ", with: " ") }
+            return t
+        }
+
+        let exercises = (template.exercises ?? []).sorted { $0.order < $1.order }
+        var parts: [String] = []
+        parts.append("title:\(normalize(template.title))")
+        parts.append("notes:\(normalize(template.notes ?? ""))")
+        for ex in exercises {
+            parts.append([
+                "ex",
+                "o:\(ex.order)",
+                "n:\(normalize(ex.name))",
+                "s:\(ex.sets)",
+                "r:\(ex.reps)",
+                "w:\(ex.suggestedWeight.map { String(format: "%.3f", $0) } ?? "nil")",
+                "u:\(normalize(ex.weightUnit))",
+                "notes:\(normalize(ex.notes ?? ""))"
+            ].joined(separator: "|"))
+        }
+        return parts.joined(separator: "||")
     }
     
     private func findOrCreateExerciseDefinition(name: String, type: String, muscleGroup: String?, context: ModelContext) throws -> ExerciseDefinition {

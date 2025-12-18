@@ -5,36 +5,50 @@ import SwiftData
 @MainActor
 class TemplateSeeder {
     static let shared = TemplateSeeder()
-    
+
     private init() {}
     
     /// Check if built-in templates have been seeded
     func hasSeeded(context: ModelContext) -> Bool {
-        UserDefaults.standard.bool(forKey: "hasSeededBuiltInTemplates_v1")
+        var descriptor = FetchDescriptor<WorkoutTemplate>(
+            predicate: #Predicate<WorkoutTemplate> { $0.isBuiltIn == true }
+        )
+        descriptor.fetchLimit = 1
+        let hasAnyBuiltIns = ((try? context.fetch(descriptor)) ?? []).isEmpty == false
+        if hasAnyBuiltIns {
+            // Heal legacy state where the DB was restored but UserDefaults didn't come along.
+            UserDefaults.standard.set(true, forKey: "hasSeededBuiltInTemplates_v1")
+        }
+        return hasAnyBuiltIns
     }
     
     /// Seed all built-in templates into the database
     func seedBuiltInTemplates(context: ModelContext) async throws {
-        // Check if already seeded
-        if hasSeeded(context: context) {
-            print("✅ Built-in templates already seeded")
-            // Run idempotent rename/migration pass for advanced template names
-            try? await renameAdvancedTemplateTitlesIfNeeded(context: context)
-            return
-        }
-        
-        print("🌱 Seeding built-in workout templates...")
-        
+        // Run idempotent rename/migration pass for advanced template names
+        try? await renameAdvancedTemplateTitlesIfNeeded(context: context)
+        // Remove any previously-created duplicates before we decide what to insert
+        _ = deduplicateBuiltInTemplates(context: context)
+        _ = deduplicateImportedTemplates(context: context)
+        _ = backfillExerciseCountsIfNeeded(context: context)
+
         let allBuiltInTemplates = BuiltInTemplateLibrary.allTemplates
-        var count = 0
-        
-        for templateData in allBuiltInTemplates {
-            // Create the template
+
+        // Fetch existing built-ins by title so seeding is idempotent even if
+        // UserDefaults is lost (e.g., app redownload with CloudKit restore).
+        let existingBuiltIns = (try? context.fetch(FetchDescriptor<WorkoutTemplate>(
+            predicate: #Predicate { $0.isBuiltIn == true }
+        ))) ?? []
+        let existingTitles = Set(existingBuiltIns.map { $0.title })
+
+        var insertedCount = 0
+        for templateData in allBuiltInTemplates where !existingTitles.contains(templateData.title) {
             let template = WorkoutTemplate(
                 title: templateData.title,
                 notes: templateData.description,
                 createdDate: Date(),
                 sourceAIConversationId: nil,
+                importSourceSessionID: nil,
+                exerciseCount: templateData.exercises.count,
                 isBuiltIn: true,
                 experienceLevel: templateData.experienceLevel,
                 goal: templateData.goal,
@@ -44,10 +58,8 @@ class TemplateSeeder {
                 muscleGroups: templateData.muscleGroups,
                 templateDescription: templateData.description
             )
-            
             context.insert(template)
-            
-            // Create exercises for this template
+
             for exerciseData in templateData.exercises {
                 let exercise = TemplateExercise(
                     name: exerciseData.name,
@@ -58,23 +70,23 @@ class TemplateSeeder {
                     weightUnit: exerciseData.weightUnit,
                     notes: exerciseData.notes
                 )
-                
                 exercise.template = template
                 context.insert(exercise)
             }
-            
-            count += 1
+
+            insertedCount += 1
         }
-        
-        // Save all templates
-        try context.save()
-        
-        // Mark as seeded
+
+        if insertedCount > 0 {
+            print("🌱 Seeding built-in workout templates... (adding \(insertedCount) new)")
+            try context.save()
+            print("✅ Successfully seeded \(insertedCount) built-in workout templates")
+        } else {
+            print("✅ Built-in templates already seeded")
+        }
+
+        // Mark as seeded (legacy flag)
         UserDefaults.standard.set(true, forKey: "hasSeededBuiltInTemplates_v1")
-        
-        print("✅ Successfully seeded \(count) built-in workout templates")
-        // Apply any post-seed migrations (e.g., title renames)
-        try? await renameAdvancedTemplateTitlesIfNeeded(context: context)
     }
     
     /// Force reseed (for development/testing)
@@ -121,5 +133,101 @@ extension TemplateSeeder {
             }
         }
         if changed { try? context.save() }
+    }
+
+    /// Remove duplicate built-in templates by title, keeping a single copy.
+    /// Returns the number of templates deleted. Safe to call multiple times.
+    @discardableResult
+    func deduplicateBuiltInTemplates(context: ModelContext) -> Int {
+        let fetch = FetchDescriptor<WorkoutTemplate>(
+            predicate: #Predicate { $0.isBuiltIn == true }
+        )
+        guard let items = try? context.fetch(fetch), items.count > 1 else { return 0 }
+
+        func normalize(_ s: String) -> String {
+            s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }
+
+        var groups: [String: [WorkoutTemplate]] = [:]
+        for t in items {
+            groups[normalize(t.title), default: []].append(t)
+        }
+
+        var deleted = 0
+        var changed = false
+        for (_, group) in groups where group.count > 1 {
+            // Keep the one with the earliest createdDate (more stable for users who customized titles/notes later).
+            let keeper = group.sorted { $0.createdDate < $1.createdDate }.first!
+            for dup in group where dup.id != keeper.id {
+                context.delete(dup)
+                deleted += 1
+                changed = true
+            }
+        }
+
+        if changed { try? context.save() }
+        return deleted
+    }
+
+    /// Remove duplicate imported templates created from the same shared session id,
+    /// keeping a single copy. Returns the number of templates deleted.
+    @discardableResult
+    func deduplicateImportedTemplates(context: ModelContext) -> Int {
+        let fetch = FetchDescriptor<WorkoutTemplate>(
+            predicate: #Predicate {
+                $0.isBuiltIn == false &&
+                $0.importSourceSessionID != nil
+            }
+        )
+        guard let items = try? context.fetch(fetch), items.count > 1 else { return 0 }
+
+        var groups: [UUID: [WorkoutTemplate]] = [:]
+        for t in items {
+            guard let id = t.importSourceSessionID else { continue }
+            groups[id, default: []].append(t)
+        }
+
+        var deleted = 0
+        var changed = false
+        for (_, group) in groups where group.count > 1 {
+            let keeper = group.sorted { $0.createdDate < $1.createdDate }.first!
+            for dup in group where dup.id != keeper.id {
+                context.delete(dup)
+                deleted += 1
+                changed = true
+            }
+        }
+
+        if changed { try? context.save() }
+        return deleted
+    }
+
+    /// Fill `exerciseCount` without faulting the exercises relationship for built-ins.
+    /// Safe to call multiple times.
+    @discardableResult
+    func backfillExerciseCountsIfNeeded(context: ModelContext) -> Int {
+        let all = (try? context.fetch(FetchDescriptor<WorkoutTemplate>())) ?? []
+        guard !all.isEmpty else { return 0 }
+
+        let builtInCounts = Dictionary(
+            uniqueKeysWithValues: BuiltInTemplateLibrary.allTemplates.map { ($0.title, $0.exercises.count) }
+        )
+
+        var changed = 0
+        for t in all where t.exerciseCount <= 0 {
+            if t.isBuiltIn, let count = builtInCounts[t.title] {
+                t.exerciseCount = count
+                changed += 1
+                continue
+            }
+            // For non-built-ins (usually small), fall back to relationship count.
+            if let exercises = t.exercises {
+                t.exerciseCount = exercises.count
+                changed += 1
+            }
+        }
+
+        if changed > 0 { try? context.save() }
+        return changed
     }
 }

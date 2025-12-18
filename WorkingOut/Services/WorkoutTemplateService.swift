@@ -61,6 +61,7 @@ final class WorkoutTemplateService {
             context.insert(template)
             
             // Create template exercises from the day's items
+            var createdExercises = 0
             for (index, item) in day.items.enumerated() {
                 // Only include strength exercises (with sets/reps)
                 guard let sets = item.sets, let reps = item.reps else {
@@ -99,10 +100,12 @@ final class WorkoutTemplateService {
                 
                 templateExercise.template = template
                 context.insert(templateExercise)
+                createdExercises += 1
             }
             
+            template.exerciseCount = createdExercises
             try? context.save()
-            print("✅ Created template '\(template.title)' with \(day.items.count) exercises")
+            print("✅ Created template '\(template.title)' with \(createdExercises) exercises")
             return template
             
         } catch {
@@ -166,6 +169,7 @@ final class WorkoutTemplateService {
             context.insert(templateExercise)
         }
         
+        template.exerciseCount = sortedNames.count
         try? context.save()
         print("✅ Created custom template '\(template.title)'")
         return template
@@ -213,6 +217,7 @@ final class WorkoutTemplateService {
             context.insert(templateExercise)
         }
         
+        template.exerciseCount = sortedNames.count
         try? context.save()
         print("✅ Updated custom template '\(template.title)'")
     }
@@ -384,7 +389,19 @@ final class WorkoutTemplateService {
         #if canImport(Foundation)
         let preferredUnit = UserDefaults.standard.string(forKey: "weightUnit") ?? "lbs"
         let baselines = ExerciseRecommendationService.baselines(context: context, preferredUnit: preferredUnit)
-        let baselineMap: [String: ExerciseBaseline] = Dictionary(uniqueKeysWithValues: baselines.map { ($0.name.lowercased(), $0) })
+        // Avoid crashing on duplicate keys (e.g., "Bench Press" vs "bench press")
+        var baselineMap: [String: ExerciseBaseline] = [:]
+        for baseline in baselines {
+            let key = baseline.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if let existing = baselineMap[key] {
+                // Prefer the baseline with more history; tie-breaker: higher e1RM.
+                if baseline.occurrences > existing.occurrences || (baseline.occurrences == existing.occurrences && baseline.e1rm > existing.e1rm) {
+                    baselineMap[key] = baseline
+                }
+            } else {
+                baselineMap[key] = baseline
+            }
+        }
         #else
         let preferredUnit = "lbs"
         let baselineMap: [String: ExerciseBaseline] = [:]
@@ -437,6 +454,8 @@ final class WorkoutTemplateService {
                 templateExercise.template = template
                 context.insert(templateExercise)
             }
+
+            template.exerciseCount = exercises.count
             
             print("✅ Created template '\(template.title)' from markdown")
         }

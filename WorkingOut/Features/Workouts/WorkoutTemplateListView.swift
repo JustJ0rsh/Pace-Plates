@@ -2,6 +2,11 @@ import SwiftUI
 import SwiftData
 
 struct WorkoutTemplateListView: View {
+    private enum LibraryTab: String {
+        case programs
+        case aiGenerated
+    }
+
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Query(sort: [SortDescriptor<WorkoutTemplate>(\.createdDate, order: .reverse)]) private var templates: [WorkoutTemplate]
@@ -10,6 +15,7 @@ struct WorkoutTemplateListView: View {
     @State private var selectedExperienceLevel: String? = nil
     @State private var selectedGoal: String? = nil
     @State private var searchText: String = ""
+    @State private var selectedLibraryTab: LibraryTab = .programs
     
     // Separate templates
     private var builtInTemplates: [WorkoutTemplate] {
@@ -26,14 +32,18 @@ struct WorkoutTemplateListView: View {
     
     // Filter templates - includes both built-in and imported
     private var filteredTemplates: [WorkoutTemplate] {
-        // Debug logging
-        print("🔍 Filtering templates...")
-        print("   Total templates: \(templates.count)")
-        print("   Built-in: \(builtInTemplates.count)")
-        print("   Imported: \(importedTemplates.count)")
-        print("   AI Generated: \(aiGeneratedTemplates.count)")
-        print("   Selected level: \(selectedExperienceLevel ?? "nil")")
-        
+        if selectedLibraryTab == .aiGenerated {
+            var filtered = aiGeneratedTemplates
+            if !searchText.isEmpty {
+                filtered = filtered.filter { template in
+                    template.title.localizedCaseInsensitiveContains(searchText) ||
+                    (template.templateDescription?.localizedCaseInsensitiveContains(searchText) ?? false) ||
+                    (template.notes?.localizedCaseInsensitiveContains(searchText) ?? false)
+                }
+            }
+            return filtered
+        }
+
         if selectedExperienceLevel == "Imported" {
             // Show only imported templates
             return importedTemplates
@@ -59,7 +69,8 @@ struct WorkoutTemplateListView: View {
         if !searchText.isEmpty {
             filtered = filtered.filter { template in
                 template.title.localizedCaseInsensitiveContains(searchText) ||
-                (template.templateDescription?.localizedCaseInsensitiveContains(searchText) ?? false)
+                (template.templateDescription?.localizedCaseInsensitiveContains(searchText) ?? false) ||
+                (template.notes?.localizedCaseInsensitiveContains(searchText) ?? false)
             }
         }
         
@@ -95,6 +106,7 @@ struct WorkoutTemplateListView: View {
     }
     
     private var availableGoals: [String] {
+        if selectedLibraryTab == .aiGenerated { return [] }
         // Hide categories for Custom templates
         if selectedExperienceLevel == "Custom" { return [] }
         
@@ -117,195 +129,129 @@ struct WorkoutTemplateListView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ZStack(alignment: .bottom) {
-                    ScrollView {
-                        VStack(spacing: 20) {
-                            
-                            let aiFirst = (WorkoutPlanGenerator.shared.availability() == .available)
-    
-                            // MARK: - AI Generated Templates (if available and preferred first)
-                            if aiFirst && !aiGeneratedTemplates.isEmpty {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    HStack {
-                                        Image(systemName: "sparkles")
-                                            .foregroundColor(.purple)
-                                        Text("AI Generated")
-                                            .font(.title2)
-                                            .fontWeight(.bold)
-                                        Spacer()
-                                    }
-                                    .padding(.horizontal, AppTheme.padding)
-    
-                                    List {
-                                        ForEach(aiGeneratedTemplates) { template in
-                                            TemplateCard(template: template) {
-                                                selectedTemplate = template
-                                            }
-                                            .listRowBackground(Color.clear)
-                                            .listRowSeparator(.hidden)
-                                            .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
-                                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                                Button(role: .destructive) {
-                                                    modelContext.delete(template)
-                                                    try? modelContext.save()
-                                                    Haptics.notify(.warning)
-                                                } label: {
-                                                    Label("Delete", systemImage: "trash")
-                                                }
-                                            }
-                                        }
-                                    }
-                                    .listStyle(.plain)
-                                    .scrollDisabled(true)
-                                    .frame(height: CGFloat(aiGeneratedTemplates.count) * 100)
-                                    .padding(.horizontal, AppTheme.padding)
+                    List {
+                        // MARK: - Custom & Imported Templates Combined
+                        if !builtInTemplates.isEmpty || !importedTemplates.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Image(systemName: sectionIcon)
+                                        .foregroundColor(sectionColor)
+                                    Text(sectionTitle)
+                                        .font(.title2)
+                                        .fontWeight(.bold)
+                                    Spacer()
                                 }
-                            }
-    
-                            // MARK: - Custom & Imported Templates Combined
-                            if !builtInTemplates.isEmpty || !importedTemplates.isEmpty {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    HStack {
-                                        Image(systemName: sectionIcon)
-                                            .foregroundColor(sectionColor)
-                                        Text(sectionTitle)
-                                            .font(.title2)
-                                            .fontWeight(.bold)
-                                        Spacer()
-                                    }
-                                    .padding(.horizontal, AppTheme.padding)
-                                    
-                                    // Filters
-                                    VStack(spacing: 8) {
-                                        // Experience Level Filter
-                                        ScrollView(.horizontal, showsIndicators: false) {
-                                            HStack(spacing: 8) {
+                                .padding(.horizontal, AppTheme.padding)
+
+                                // Filters
+                                VStack(spacing: 8) {
+                                    ScrollView(.horizontal, showsIndicators: false) {
+                                        HStack(spacing: 8) {
+                                            FilterChip(
+                                                title: "All Templates",
+                                                isSelected: selectedLibraryTab == .programs && selectedExperienceLevel == nil
+                                            ) {
+                                                selectedLibraryTab = .programs
+                                                selectedExperienceLevel = nil
+                                                selectedGoal = nil
+                                            }
+
+                                            if !aiGeneratedTemplates.isEmpty {
                                                 FilterChip(
-                                                    title: "All Templates",
-                                                    isSelected: selectedExperienceLevel == nil
+                                                    title: "AI Generated",
+                                                    isSelected: selectedLibraryTab == .aiGenerated
                                                 ) {
+                                                    selectedLibraryTab = .aiGenerated
                                                     selectedExperienceLevel = nil
                                                     selectedGoal = nil
                                                 }
-                                                
-                                                ForEach(experienceLevels, id: \.self) { level in
+                                            }
+
+                                            ForEach(experienceLevels, id: \.self) { level in
+                                                FilterChip(
+                                                    title: level.capitalized,
+                                                    isSelected: selectedLibraryTab == .programs && selectedExperienceLevel == level
+                                                ) {
+                                                    selectedLibraryTab = .programs
+                                                    selectedExperienceLevel = level
+                                                    selectedGoal = nil
+                                                }
+                                            }
+                                        }
+                                        .padding(.horizontal, AppTheme.padding)
+                                    }
+
+                                    if selectedLibraryTab == .programs &&
+                                        selectedExperienceLevel != nil &&
+                                        selectedExperienceLevel != "Imported" &&
+                                        !availableGoals.isEmpty
+                                    {
+                                        ScrollView(.horizontal, showsIndicators: false) {
+                                            HStack(spacing: 8) {
+                                                FilterChip(
+                                                    title: "All Categories",
+                                                    isSelected: selectedGoal == nil
+                                                ) {
+                                                    selectedGoal = nil
+                                                }
+
+                                                ForEach(availableGoals, id: \.self) { goal in
                                                     FilterChip(
-                                                        title: level.capitalized,
-                                                        isSelected: selectedExperienceLevel == level
+                                                        title: goal.replacingOccurrences(of: "_", with: " ").capitalized,
+                                                        isSelected: selectedGoal == goal
                                                     ) {
-                                                        selectedExperienceLevel = level
-                                                        selectedGoal = nil
+                                                        selectedGoal = goal
                                                     }
                                                 }
                                             }
                                             .padding(.horizontal, AppTheme.padding)
                                         }
-                                        
-                                        // Goal Filter (if level selected and not Imported/Custom)
-                                        if selectedExperienceLevel != nil && 
-                                           selectedExperienceLevel != "Imported" && 
-                                           !availableGoals.isEmpty {
-                                            ScrollView(.horizontal, showsIndicators: false) {
-                                                HStack(spacing: 8) {
-                                                    FilterChip(
-                                                        title: "All Categories",
-                                                        isSelected: selectedGoal == nil
-                                                    ) {
-                                                        selectedGoal = nil
-                                                    }
-                                                    
-                                                    ForEach(availableGoals, id: \.self) { goal in
-                                                        FilterChip(
-                                                            title: goal.replacingOccurrences(of: "_", with: " ").capitalized,
-                                                            isSelected: selectedGoal == goal
-                                                        ) {
-                                                            selectedGoal = goal
-                                                        }
-                                                    }
-                                                }
-                                                .padding(.horizontal, AppTheme.padding)
-                                            }
-                                        }
                                     }
-                                    
-                                    // Template List
-                                    List {
-                                        ForEach(filteredTemplates) { template in
-                                            // Use TemplateCard for imported/custom, BuiltInTemplateCard for built-ins
-                                            if template.isBuiltIn {
-                                                BuiltInTemplateCard(template: template) {
-                                                    selectedTemplate = template
-                                                }
-                                                .listRowBackground(Color.clear)
-                                                .listRowSeparator(.hidden)
-                                                .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
-                                            } else {
-                                                TemplateCard(template: template) {
-                                                    selectedTemplate = template
-                                                }
-                                                .listRowBackground(Color.clear)
-                                                .listRowSeparator(.hidden)
-                                                .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
-                                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                                    Button(role: .destructive) {
-                                                        modelContext.delete(template)
-                                                        try? modelContext.save()
-                                                        Haptics.notify(.warning)
-                                                    } label: {
-                                                        Label("Delete", systemImage: "trash")
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                    .listStyle(.plain)
-                                    .scrollDisabled(true)
-                                    .frame(height: CGFloat(filteredTemplates.count) * 100)
-                                    .padding(.horizontal, AppTheme.padding)
                                 }
                             }
-                            
-                            // MARK: - AI Generated Templates Section (fallback when not first)
-                            if !aiFirst && !aiGeneratedTemplates.isEmpty {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    HStack {
-                                        Image(systemName: "sparkles")
-                                            .foregroundColor(.purple)
-                                        Text("AI Generated")
-                                            .font(.title2)
-                                            .fontWeight(.bold)
-                                        Spacer()
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 16, leading: 0, bottom: 4, trailing: 0))
+
+                            ForEach(filteredTemplates) { template in
+                                if selectedLibraryTab == .programs, template.isBuiltIn {
+                                    BuiltInTemplateCard(template: template) {
+                                        selectedTemplate = template
                                     }
                                     .padding(.horizontal, AppTheme.padding)
-                                    
-                                    List {
-                                        ForEach(aiGeneratedTemplates) { template in
-                                            TemplateCard(template: template) {
-                                                selectedTemplate = template
-                                            }
-                                            .listRowBackground(Color.clear)
-                                            .listRowSeparator(.hidden)
-                                            .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
-                                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                                Button(role: .destructive) {
-                                                    modelContext.delete(template)
-                                                    try? modelContext.save()
-                                                    Haptics.notify(.warning)
-                                                } label: {
-                                                    Label("Delete", systemImage: "trash")
-                                                }
-                                            }
+                                    .listRowBackground(Color.clear)
+                                    .listRowSeparator(.hidden)
+                                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                                } else {
+                                    TemplateCard(template: template) {
+                                        selectedTemplate = template
+                                    }
+                                    .padding(.horizontal, AppTheme.padding)
+                                    .listRowBackground(Color.clear)
+                                    .listRowSeparator(.hidden)
+                                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                        Button(role: .destructive) {
+                                            modelContext.delete(template)
+                                            try? modelContext.save()
+                                            Haptics.notify(.warning)
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
                                         }
                                     }
-                                    .listStyle(.plain)
-                                    .scrollDisabled(true)
-                                    .frame(height: CGFloat(aiGeneratedTemplates.count) * 100)
-                                    .padding(.horizontal, AppTheme.padding)
                                 }
                             }
                         }
-                        .padding(.vertical, 8)
-                        .padding(.bottom, 80) // Space for floating search bar
+
+                        // Space for floating search bar so the last row isn't obscured
+                        Color.clear
+                            .frame(height: 92)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
                     }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                     
                     // Floating Search Bar
                     VStack {
@@ -367,21 +313,16 @@ struct WorkoutTemplateListView: View {
             }
         }
         .onAppear {
-            // Debug: Log all templates
-            print("📋 WorkoutTemplateListView appeared")
-            print("   Total templates in DB: \(templates.count)")
-            for template in templates {
-                print("   - \(template.title): isBuiltIn=\(template.isBuiltIn), level=\(template.experienceLevel ?? "nil"), goal=\(template.goal ?? "nil")")
-            }
-            
             // Smart default selection
-            if selectedExperienceLevel == nil {
+            if selectedLibraryTab == .programs && selectedExperienceLevel == nil {
                 let hasCustom = builtInTemplates.contains { $0.experienceLevel == "Custom" }
                 let hasImported = !importedTemplates.isEmpty
                 if hasImported {
                     // Default to Imported if we have imported templates
+                    selectedLibraryTab = .programs
                     selectedExperienceLevel = "Imported"
                 } else if hasCustom {
+                    selectedLibraryTab = .programs
                     selectedExperienceLevel = "Custom"
                 }
                 // Otherwise leave as nil ("All Templates")
@@ -512,7 +453,7 @@ struct BuiltInTemplateCard: View {
                                     .clipShape(Capsule())
                             }
                             
-                            Text("\(template.exercises?.count ?? 0) exercises")
+                            Text("\(template.exerciseCount) exercises")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -581,11 +522,11 @@ struct TemplateCard: View {
                             .font(.headline)
                             .foregroundColor(AppTheme.textColor)
                         
-                        Text("\(template.exercises?.count ?? 0) exercises")
+                        Text("\(template.exerciseCount) exercises")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         
-                        Text("Created \(template.createdDate.formatted(date: .abbreviated, time: .omitted))")
+                        Text("Created \(template.createdDate, style: .date)")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -775,4 +716,3 @@ struct ExerciseTemplateRow: View {
     }
     .modelContainer(PersistenceController.preview.container)
 }
-
