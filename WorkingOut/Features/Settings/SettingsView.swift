@@ -230,7 +230,7 @@ struct SettingsView: View {
                     } label: {
                         Label("Delete All Data", systemImage: "trash.slash")
                     }
-                    Link(destination: URL(string: "https://github.com/JustJ0rsh/Pace-Plates/blob/main/Privacy%20Policy")!) {
+                    Link(destination: URL(string: "https://github.com/JustJ0rsh/Pace-Plates/blob/main/Privacy%20Policy.md")!) {
                         Label("Privacy Policy", systemImage: "doc.text")
                     }
                 }
