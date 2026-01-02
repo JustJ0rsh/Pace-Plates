@@ -180,79 +180,60 @@ struct AIChatSheet: View {
                         withAnimation(.linear(duration: 0.12)) { proxy.scrollTo("progress", anchor: .bottom) }
                     }
                 }
+                .onChange(of: isStreaming) { wasStreaming, nowStreaming in
+                    // When streaming ends, do one final scroll without animation to settle
+                    if wasStreaming && !nowStreaming {
+                        autoFollow = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            proxy.scrollTo(messages.last?.id, anchor: .bottom)
+                        }
+                    }
+                }
                 // Web search disabled – no source auto-scroll
             }
         }
         .safeAreaInset(edge: .bottom) {
-            HStack(spacing: 12) {
-                HStack {
-                    TextField("Ask about nutrition, training, recovery…", text: $input, axis: .vertical)
-                        .lineLimit(1...3)
-                        .focused($inputFocused)
-                        .onSubmit(send)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                }
-                .background(
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 20)
-                            .fill(.ultraThinMaterial)
-                        RoundedRectangle(cornerRadius: 20)
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        Color.white.opacity(0.15),
-                                        Color.white.opacity(0.05)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                        RoundedRectangle(cornerRadius: 20)
-                            .strokeBorder(
-                                LinearGradient(
-                                    colors: [
-                                        Color.white.opacity(0.3),
-                                        Color.white.opacity(0.1)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1
+            VStack(spacing: 0) {
+                HStack(spacing: 12) {
+                    HStack(spacing: 0) {
+                        TextField("Ask anything...", text: $input, axis: .vertical)
+                            .lineLimit(1...5)
+                            .focused($inputFocused)
+                            .onSubmit(send)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 14)
+                    }
+                    .background(
+                        RoundedRectangle(cornerRadius: 22)
+                            .fill(Color.white.opacity(0.08))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22)
+                            .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                    )
+
+                    Button(action: send) {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 36, height: 36)
+                            .background(
+                                Circle()
+                                    .fill(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isStreaming
+                                          ? Color.white.opacity(0.15)
+                                          : AppTheme.accentColor)
                             )
                     }
-                )
-                .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
-                
-                Button(action: send) {
-                    Image(systemName: "paperplane.fill")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                        .background(
-                            ZStack {
-                                Circle()
-                                    .fill(AppTheme.accentColor)
-                                Circle()
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [
-                                                Color.white.opacity(0.2),
-                                                Color.clear
-                                            ],
-                                            startPoint: .top,
-                                            endPoint: .bottom
-                                        )
-                                    )
-                            }
-                        )
-                        .shadow(color: AppTheme.accentColor.opacity(0.4), radius: 8, x: 0, y: 4)
+                    .disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isStreaming)
                 }
-                .disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isStreaming)
-                .opacity((input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isStreaming) ? 0.5 : 1.0)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .background(
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .ignoresSafeArea()
+            )
         }
         .navigationTitle("AI Assistant")
         .navigationBarTitleDisplayMode(.inline)

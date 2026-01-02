@@ -115,9 +115,9 @@ struct WorkoutSessionDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                HStack(spacing: 16) {
+                HStack(spacing: 24) {
                     shareMenu
-                    
+
                     Button("Done") {
                         dismissKeyboard()
                         dismiss()

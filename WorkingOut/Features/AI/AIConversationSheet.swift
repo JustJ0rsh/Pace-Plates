@@ -186,33 +186,7 @@ struct AIConversationSheet: View {
                         .disabled(content.isEmpty)
                 }
                 
-                // Add to Calendar and Save as Templates buttons (only for workout plans)
-                if mode == .plan {
-                    ToolbarItem(placement: .principal) {
-                        HStack(spacing: 16) {
-                            Button {
-                                saveAsTemplates()
-                            } label: {
-                                Label("Templates", systemImage: "doc.text.fill")
-                                    .font(.subheadline)
-                            }
-                            .disabled(content.isEmpty || isStreaming)
-                            
-                            Button {
-                                showScheduleOptions = true
-                            } label: {
-                                Label("Schedule", systemImage: "calendar.badge.plus")
-                                    .font(.subheadline)
-                            }
-                            .disabled(content.isEmpty || isStreaming)
-                        }
-                    }
-                }
-                
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showShare = true } label: { Image(systemName: "square.and.arrow.up") }
-                        .disabled(content.isEmpty)
-                }
+                // Actions moved to bottom bar
             }
             // Let content scroll under the nav bar (Safari-style) and rely on overlays for depth
             .toolbarBackground(.hidden, for: .navigationBar)
@@ -1005,23 +979,67 @@ private extension AIConversationSheet {
     }
 
     var bottomSafariOverlay: some View {
-        Rectangle()
-            .fill(.thinMaterial)
-            .mask(
-                LinearGradient(
-                    stops: [
-                        .init(color: .black.opacity(0.01), location: 0.05),
-                        .init(color: .black.opacity(0.25), location: 0.55),
-                        .init(color: .black.opacity(0.55), location: 0.82),
-                        .init(color: .black, location: 1.0)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
+        VStack(spacing: 0) {
+            // Gradient fade above
+            LinearGradient(
+                colors: [.clear, Color.black.opacity(0.7)],
+                startPoint: .top,
+                endPoint: .bottom
             )
-            .frame(height: 120)
-            .offset(y: 1) // tuck below to hide seam line
+            .frame(height: 50)
             .allowsHitTesting(false)
+
+            // Solid action bar with background
+            HStack(spacing: 12) {
+                if mode == .plan && !content.isEmpty && !isStreaming {
+                    Button {
+                        saveAsTemplates()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "doc.text.fill")
+                            Text("Save Templates")
+                        }
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Capsule().fill(AppTheme.accentColor))
+                    }
+
+                    Button {
+                        showScheduleOptions = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "calendar.badge.plus")
+                            Text("Schedule")
+                        }
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Capsule().fill(Color.white.opacity(0.15)))
+                    }
+                }
+
+                Spacer()
+
+                if !content.isEmpty {
+                    Button {
+                        showShare = true
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(.white)
+                            .frame(width: 36, height: 36)
+                            .background(Circle().fill(Color.white.opacity(0.15)))
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity)
+            .background(Color.black.opacity(0.9))
+        }
     }
 }
 

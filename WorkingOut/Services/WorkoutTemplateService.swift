@@ -771,18 +771,34 @@ final class WorkoutTemplateService {
     }
     
     private func extractDayTitleFromLine(line: String) -> String? {
-        // Match patterns like "#### Day 1: Upper Body" or "### Monday: Strength"
+        // More flexible patterns for various AI output formats
         let patterns = [
-            "^#{1,6}\\s*\\*{0,2}\\s*Day\\s+(\\d+)\\s*\\*{0,2}\\s*:?\\s*(.*)$",
-            "^#{1,6}\\s*\\*{0,2}\\s*(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\\s*\\*{0,2}\\s*:(.*)$"
+            // "### Day 1: Title" or "## Day 1" (1-6 hash marks)
+            "^#{1,6}\\s*\\*{0,2}\\s*Day\\s+(\\d+)\\s*\\*{0,2}\\s*[:\\-–]?\\s*(.*)$",
+            // "- Day 1: Title" or "• Day 1" (bullet lists)
+            "^[-•*]\\s*\\*{0,2}\\s*Day\\s+(\\d+)\\s*\\*{0,2}\\s*[:\\-–]?\\s*(.*)$",
+            // "1. Day 1: Title" (numbered lists)
+            "^\\d+\\.\\s*\\*{0,2}\\s*Day\\s+(\\d+)\\s*\\*{0,2}\\s*[:\\-–]?\\s*(.*)$",
+            // "**Day 1: Title**" (bold without prefix)
+            "^\\*{2}\\s*Day\\s+(\\d+)\\s*[:\\-–]?\\s*(.*)\\*{0,2}$",
+            // "Day 1: Title" (no prefix at all)
+            "^Day\\s+(\\d+)\\s*[:\\-–]?\\s*(.*)$",
+            // "### Week 1, Day 1: Title" or "Week 1 - Day 1"
+            "^#{0,6}\\s*\\*{0,2}\\s*Week\\s*\\d+[,:\\-–\\s]+Day\\s+(\\d+)\\s*\\*{0,2}\\s*[:\\-–]?\\s*(.*)$",
+            // Weekday patterns: "### Monday: Title"
+            "^#{1,6}\\s*\\*{0,2}\\s*(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\\s*\\*{0,2}\\s*[:\\-–](.*)$",
+            // Weekday bullet: "- Monday: Title"
+            "^[-•*]\\s*\\*{0,2}\\s*(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\\s*\\*{0,2}\\s*[:\\-–](.*)$",
+            // Weekday no prefix: "Monday: Title" or "**Monday: Title**"
+            "^\\*{0,2}\\s*(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\\s*\\*{0,2}\\s*[:\\-–](.*)$"
         ]
-        
+
         for pattern in patterns {
             if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
                 let range = NSRange(line.startIndex..., in: line)
                 if let match = regex.firstMatch(in: line, range: range), match.numberOfRanges >= 2 {
                     if let dayRange = Range(match.range(at: 1), in: line) {
-                        let day = String(line[dayRange])
+                        let day = String(line[dayRange]).trimmingCharacters(in: .whitespaces)
                         let titleRange = match.numberOfRanges >= 3 ? Range(match.range(at: 2), in: line) : nil
                         let title = titleRange.map { String(line[$0]).trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "**", with: "") } ?? ""
                         return title.isEmpty ? day : "\(day): \(title)"
@@ -828,13 +844,28 @@ final class WorkoutTemplateService {
     }
     
     private func parseExerciseLine(line: String, defaultWeightUnit: String) -> ParsedExercise? {
-        // Pattern 1: "Exercise Name - 4 sets of 6 reps (185 lbs)"
-        let pattern1 = "^([^-:]+)[-:]\\s*(\\d+)\\s*sets\\s*of\\s*(\\d+)\\s*reps?(?:\\s*\\(?([0-9.]+)\\s*(lbs|kg)?\\)?)?(.*)$"
-        
-        // Pattern 2: "Exercise Name: 4x6 @ 185 lbs"
-        let pattern2 = "^([^-:]+)[-:]\\s*(\\d+)\\s*[x×]\\s*(\\d+)(?:\\s*@\\s*([0-9.]+)\\s*(lbs|kg)?)?(.*)$"
-        
-        for pattern in [pattern1, pattern2] {
+        // Multiple flexible patterns for various AI output formats
+        // All patterns capture: (1) name, (2) sets, (3) reps, (4) weight?, (5) unit?, (6) notes?
+        let patterns = [
+            // "Exercise Name - 4 sets of 6 reps (185 lbs)"
+            "^([^-–:]+)[-–:]\\s*(\\d+)\\s*sets?\\s*(?:of\\s*)?(\\d+)\\s*reps?(?:\\s*\\(?([0-9.]+)\\s*(lbs|kg)?\\)?)?(.*)$",
+            // "Exercise Name: 4x6 @ 185 lbs"
+            "^([^-–:]+)[-–:]\\s*(\\d+)\\s*[xX×]\\s*(\\d+)(?:\\s*[@at]\\s*([0-9.]+)\\s*(lbs|kg)?)?(.*)$",
+            // "Exercise Name (3x10)" or "Exercise Name (3 x 10)"
+            "^([^(]+)\\s*\\((\\d+)\\s*[xX×]\\s*(\\d+)(?:\\s*[@at]\\s*([0-9.]+)\\s*(lbs|kg)?)?\\)(.*)$",
+            // "Exercise Name: 3 sets, 10 reps" (comma separated)
+            "^([^-–:]+)[-–:]\\s*(\\d+)\\s*sets?,?\\s*(\\d+)\\s*reps?(?:\\s*[@at]\\s*([0-9.]+)\\s*(lbs|kg)?)?(.*)$",
+            // "Exercise Name - 3 sets x 10 reps"
+            "^([^-–:]+)[-–:]\\s*(\\d+)\\s*sets?\\s*[xX×]\\s*(\\d+)\\s*reps?(?:\\s*\\(?([0-9.]+)\\s*(lbs|kg)?\\)?)?(.*)$",
+            // "Exercise Name – 3x10-12" (rep ranges, take first number)
+            "^([^-–:]+)[-–:]\\s*(\\d+)\\s*[xX×]\\s*(\\d+)(?:\\s*[-–]\\s*\\d+)?(?:\\s*[@at]\\s*([0-9.]+)\\s*(lbs|kg)?)?(.*)$",
+            // "Exercise Name: 3 x 10 reps @ 135 lbs" (spaces around x)
+            "^([^-–:]+)[-–:]\\s*(\\d+)\\s*[xX×]\\s*(\\d+)\\s*(?:reps?)?(?:\\s*[@at]\\s*([0-9.]+)\\s*(lbs|kg)?)?(.*)$",
+            // "Exercise Name 3x10" (no separator, space before sets)
+            "^([A-Za-z][A-Za-z\\s]+?)\\s+(\\d+)\\s*[xX×]\\s*(\\d+)(?:\\s*[@at]\\s*([0-9.]+)\\s*(lbs|kg)?)?$"
+        ]
+
+        for pattern in patterns {
             if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
                 let range = NSRange(line.startIndex..., in: line)
                 if let match = regex.firstMatch(in: line, range: range) {

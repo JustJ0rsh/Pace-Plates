@@ -1202,6 +1202,18 @@ struct RunSessionDetailView: View {
                                     }
                                 }
                                 .frame(height: 260)
+                                .overlay(alignment: .bottomLeading) {
+                                    // Pace color legend
+                                    HStack(spacing: 8) {
+                                        paceLegendItem(color: .blue, label: "Walk")
+                                        paceLegendItem(color: .orange, label: "Jog")
+                                        paceLegendItem(color: .red, label: "Run")
+                                    }
+                                    .font(.caption2)
+                                    .padding(8)
+                                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                                    .padding(8)
+                                }
                                 .onAppear { zoomToRoute() }
                             } else {
                                 ProgressView().frame(height: 260)
@@ -1297,6 +1309,17 @@ struct RunSessionDetailView: View {
         let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2.0,
                                             longitude: (minLon + maxLon) / 2.0)
         camera = .region(MKCoordinateRegion(center: center, span: span))
+    }
+
+    @ViewBuilder
+    private func paceLegendItem(color: Color, label: String) -> some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(color)
+                .frame(width: 8, height: 8)
+            Text(label)
+                .foregroundStyle(.secondary)
+        }
     }
 
     private func formatDuration(_ duration: TimeInterval) -> String {

@@ -29,7 +29,7 @@ struct SettingsView: View {
     @State private var confirmExport: Bool = false
     @State private var confirmImport: Bool = false
     @State private var confirmDedup: Bool = false
-    
+
     var body: some View {
         NavigationStack {
             List {

@@ -286,65 +286,63 @@ final class WorkoutCalendarService {
         return workoutDays
     }
     
-    /// Extract day title from a line
+    /// Extract day title from a line - flexible patterns for various AI output formats
     private func extractDayTitle(from line: String) -> String? {
-        // Pattern 1: "### Day 1: Upper Body" or "## Day 1" (supports 1-6 hash marks)
-        if let regex = try? NSRegularExpression(pattern: "^#{1,6}\\s*\\*{0,2}\\s*Day\\s+(\\d+)\\s*\\*{0,2}\\s*(?::|\\s+|$)(.*)$", options: .caseInsensitive) {
-            let range = NSRange(line.startIndex..., in: line)
-            if let match = regex.firstMatch(in: line, range: range) {
-                if match.numberOfRanges >= 2,
-                   let dayNumRange = Range(match.range(at: 1), in: line) {
-                    let dayNum = String(line[dayNumRange])
-                    let titleRange = match.numberOfRanges >= 3 ? Range(match.range(at: 2), in: line) : nil
-                    let title = titleRange.map { String(line[$0]).trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "**", with: "") } ?? ""
-                    return "Day \(dayNum)\(title.isEmpty ? "" : ": \(title)")"
+        // More flexible patterns for various AI output formats
+        let dayPatterns = [
+            // "### Day 1: Title" or "## Day 1" (1-6 hash marks)
+            "^#{1,6}\\s*\\*{0,2}\\s*Day\\s+(\\d+)\\s*\\*{0,2}\\s*[:\\-–]?\\s*(.*)$",
+            // "- Day 1: Title" or "• Day 1" (bullet lists)
+            "^[-•*]\\s*\\*{0,2}\\s*Day\\s+(\\d+)\\s*\\*{0,2}\\s*[:\\-–]?\\s*(.*)$",
+            // "1. Day 1: Title" (numbered lists)
+            "^\\d+\\.\\s*\\*{0,2}\\s*Day\\s+(\\d+)\\s*\\*{0,2}\\s*[:\\-–]?\\s*(.*)$",
+            // "**Day 1: Title**" (bold without prefix)
+            "^\\*{2}\\s*Day\\s+(\\d+)\\s*[:\\-–]?\\s*(.*)\\*{0,2}$",
+            // "Day 1: Title" (no prefix at all)
+            "^Day\\s+(\\d+)\\s*[:\\-–]?\\s*(.*)$",
+            // "### Week 1, Day 1: Title" or "Week 1 - Day 1"
+            "^#{0,6}\\s*\\*{0,2}\\s*Week\\s*\\d+[,:\\-–\\s]+Day\\s+(\\d+)\\s*\\*{0,2}\\s*[:\\-–]?\\s*(.*)$"
+        ]
+
+        for pattern in dayPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                let range = NSRange(line.startIndex..., in: line)
+                if let match = regex.firstMatch(in: line, range: range), match.numberOfRanges >= 2 {
+                    if let dayNumRange = Range(match.range(at: 1), in: line) {
+                        let dayNum = String(line[dayNumRange]).trimmingCharacters(in: .whitespaces)
+                        let titleRange = match.numberOfRanges >= 3 ? Range(match.range(at: 2), in: line) : nil
+                        let title = titleRange.map { String(line[$0]).trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "**", with: "") } ?? ""
+                        return "Day \(dayNum)\(title.isEmpty ? "" : ": \(title)")"
+                    }
                 }
             }
         }
-        
-        // Pattern 2: "### Monday: Strength Training" - Day of week names
+
+        // Weekday patterns
         let dayNames = "(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)"
-        if let regex = try? NSRegularExpression(pattern: "^#{1,6}\\s*\\*{0,2}\\s*\(dayNames)\\s*\\*{0,2}\\s*:(.*)$", options: .caseInsensitive) {
-            let range = NSRange(line.startIndex..., in: line)
-            if let match = regex.firstMatch(in: line, range: range) {
-                if match.numberOfRanges >= 2,
-                   let dayNameRange = Range(match.range(at: 1), in: line) {
-                    let dayName = String(line[dayNameRange])
-                    let titleRange = match.numberOfRanges >= 3 ? Range(match.range(at: 2), in: line) : nil
-                    let title = titleRange.map { String(line[$0]).trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "**", with: "") } ?? ""
-                    return "\(dayName.capitalized)\(title.isEmpty ? "" : ": \(title)")"
+        let weekdayPatterns = [
+            // "### Monday: Title"
+            "^#{1,6}\\s*\\*{0,2}\\s*\(dayNames)\\s*\\*{0,2}\\s*[:\\-–](.*)$",
+            // "- Monday: Title" (bullet lists)
+            "^[-•*]\\s*\\*{0,2}\\s*\(dayNames)\\s*\\*{0,2}\\s*[:\\-–](.*)$",
+            // "Monday: Title" or "**Monday: Title**" (no prefix)
+            "^\\*{0,2}\\s*\(dayNames)\\s*\\*{0,2}\\s*[:\\-–](.*)$"
+        ]
+
+        for pattern in weekdayPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                let range = NSRange(line.startIndex..., in: line)
+                if let match = regex.firstMatch(in: line, range: range), match.numberOfRanges >= 2 {
+                    if let dayNameRange = Range(match.range(at: 1), in: line) {
+                        let dayName = String(line[dayNameRange]).trimmingCharacters(in: .whitespaces)
+                        let titleRange = match.numberOfRanges >= 3 ? Range(match.range(at: 2), in: line) : nil
+                        let title = titleRange.map { String(line[$0]).trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "**", with: "") } ?? ""
+                        return "\(dayName.capitalized)\(title.isEmpty ? "" : ": \(title)")"
+                    }
                 }
             }
         }
-        
-        // Pattern 3: "- Day 1: Upper Body" or "• Day 1" (bullet lists)
-        if let regex = try? NSRegularExpression(pattern: "^[-•]\\s*\\*{0,2}\\s*Day\\s+(\\d+)\\s*\\*{0,2}\\s*(?::|\\s+|$)(.*)$", options: .caseInsensitive) {
-            let range = NSRange(line.startIndex..., in: line)
-            if let match = regex.firstMatch(in: line, range: range) {
-                if match.numberOfRanges >= 2,
-                   let dayNumRange = Range(match.range(at: 1), in: line) {
-                    let dayNum = String(line[dayNumRange])
-                    let titleRange = match.numberOfRanges >= 3 ? Range(match.range(at: 2), in: line) : nil
-                    let title = titleRange.map { String(line[$0]).trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "**", with: "") } ?? ""
-                    return "Day \(dayNum)\(title.isEmpty ? "" : ": \(title)")"
-                }
-            }
-        }
-        
-        // Pattern 4: "Day 1: Upper Body" or "Day 1" (no prefix)
-        if let regex = try? NSRegularExpression(pattern: "^\\*{0,2}\\s*Day\\s+(\\d+)\\s*\\*{0,2}\\s*(?::|\\s+|$)(.*)$", options: .caseInsensitive) {
-            let range = NSRange(line.startIndex..., in: line)
-            if let match = regex.firstMatch(in: line, range: range) {
-                if match.numberOfRanges >= 2,
-                   let dayNumRange = Range(match.range(at: 1), in: line) {
-                    let dayNum = String(line[dayNumRange])
-                    let titleRange = match.numberOfRanges >= 3 ? Range(match.range(at: 2), in: line) : nil
-                    let title = titleRange.map { String(line[$0]).trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "**", with: "") } ?? ""
-                    return "Day \(dayNum)\(title.isEmpty ? "" : ": \(title)")"
-                }
-            }
-        }
-        
+
         return nil
     }
 
