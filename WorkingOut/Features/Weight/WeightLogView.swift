@@ -13,7 +13,7 @@ struct WeightLogView: View {
     @State private var lockedChartDate: Date? = nil // Keeps summary open until X is clicked
     @State private var pendingDeleteEntry: WeightEntry? = nil
     @State private var showDeleteConfirm: Bool = false
-    
+
     // Time filter
     private enum TimeRange: String, CaseIterable, Identifiable {
         case days7 = "7 Days"
@@ -179,9 +179,58 @@ struct WeightLogView: View {
                     Text("Delete the weight entry from \(entry.date.formatted(date: .abbreviated, time: .omitted))?")
                 }
             }
+            .onAppear {
+                importHealthWeightsSilently()
+            }
         }
     }
-    
+
+    /// Silent auto-import on view appear (like runs/hikes/walks)
+    private func importHealthWeightsSilently() {
+        Task {
+            do {
+                // Request authorization if needed
+                try await HealthKitManager.shared.requestAuthorization()
+
+                // Fetch weight history from HealthKit
+                let healthWeights = try await HealthKitManager.shared.getWeightHistory()
+
+                // Get existing entry dates (start of day) to avoid duplicates
+                let existingDates = Set(weightEntries.map { Calendar.current.startOfDay(for: $0.date) })
+
+                // Filter out entries that already exist (same day)
+                let newWeights = healthWeights.filter { entry in
+                    !existingDates.contains(Calendar.current.startOfDay(for: entry.date))
+                }
+
+                guard !newWeights.isEmpty else { return }
+
+                // Import new entries silently
+                await MainActor.run {
+                    for entry in newWeights {
+                        // Convert from pounds to preferred unit if needed
+                        let weight: Double
+                        let unit: String
+                        if preferredWeightUnit == "kg" {
+                            weight = entry.weightInPounds / 2.20462
+                            unit = "kg"
+                        } else {
+                            weight = entry.weightInPounds
+                            unit = "lbs"
+                        }
+
+                        let newEntry = WeightEntry(date: entry.date, weight: weight, weightUnit: unit)
+                        modelContext.insert(newEntry)
+                    }
+
+                    try? modelContext.save()
+                }
+            } catch {
+                // Silently ignore errors (like runs/hikes/walks)
+            }
+        }
+    }
+
     private func chartPrep(entries: [WeightEntry], preferredWeightUnit: String, xDomain: ClosedRange<Date>) -> (
         sorted: [WeightEntry],
         convertedWeights: [Double],

@@ -32,6 +32,7 @@ final class HealthKitManager: ObservableObject {
         
         // Profile characteristics
         set.insert(HKObjectType.quantityType(forIdentifier: .height)!)
+        set.insert(HKObjectType.quantityType(forIdentifier: .bodyMass)!)
         set.insert(HKObjectType.characteristicType(forIdentifier: .biologicalSex)!)
         set.insert(HKObjectType.characteristicType(forIdentifier: .dateOfBirth)!)
 
@@ -173,7 +174,11 @@ final class HealthKitManager: ObservableObject {
             let query = HKSampleQuery(sampleType: .workoutType(), predicate: nil, limit: limit, sortDescriptors: [sort]) { _, samples, error in
                 if let error = error { continuation.resume(throwing: error); return }
                 let workouts = (samples as? [HKWorkout]) ?? []
-                let filtered = workouts.filter { $0.workoutActivityType == .running }
+                // Include all cardio types that importHealthRuns can handle
+                let cardioTypes: Set<HKWorkoutActivityType> = [
+                    .running, .walking, .hiking, .cycling, .rowing, .elliptical, .stairClimbing
+                ]
+                let filtered = workouts.filter { cardioTypes.contains($0.workoutActivityType) }
                 continuation.resume(returning: filtered)
             }
             self.healthStore.execute(query)
@@ -538,7 +543,7 @@ final class HealthKitManager: ObservableObject {
         guard let heightType = HKQuantityType.quantityType(forIdentifier: .height) else { return nil }
         let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
         let pred = HKQuery.predicateForSamples(withStart: .distantPast, end: Date(), options: [])
-        
+
         return try await withCheckedThrowingContinuation { cont in
             let query = HKSampleQuery(sampleType: heightType, predicate: pred, limit: 1, sortDescriptors: [sort]) { _, samples, err in
                 if let err = err { cont.resume(throwing: err); return }
@@ -549,6 +554,45 @@ final class HealthKitManager: ObservableObject {
                 } else {
                     cont.resume(returning: nil)
                 }
+            }
+            healthStore.execute(query)
+        }
+    }
+
+    /// Get user's latest body weight from HealthKit (returns value in pounds)
+    func getBodyWeight() async throws -> Double? {
+        guard let bodyMassType = HKQuantityType.quantityType(forIdentifier: .bodyMass) else { return nil }
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+        let pred = HKQuery.predicateForSamples(withStart: .distantPast, end: Date(), options: [])
+
+        return try await withCheckedThrowingContinuation { cont in
+            let query = HKSampleQuery(sampleType: bodyMassType, predicate: pred, limit: 1, sortDescriptors: [sort]) { _, samples, err in
+                if let err = err { cont.resume(throwing: err); return }
+                if let sample = samples?.first as? HKQuantitySample {
+                    let weightInPounds = sample.quantity.doubleValue(for: HKUnit.pound())
+                    cont.resume(returning: weightInPounds)
+                } else {
+                    cont.resume(returning: nil)
+                }
+            }
+            healthStore.execute(query)
+        }
+    }
+
+    /// Fetch weight entries from HealthKit within a date range
+    /// Returns tuples of (date, weightInPounds)
+    func getWeightHistory(from startDate: Date = .distantPast, to endDate: Date = Date()) async throws -> [(date: Date, weightInPounds: Double)] {
+        guard let bodyMassType = HKQuantityType.quantityType(forIdentifier: .bodyMass) else { return [] }
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: true)
+        let pred = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: [])
+
+        return try await withCheckedThrowingContinuation { cont in
+            let query = HKSampleQuery(sampleType: bodyMassType, predicate: pred, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, err in
+                if let err = err { cont.resume(throwing: err); return }
+                let results = (samples as? [HKQuantitySample])?.map { sample in
+                    (date: sample.endDate, weightInPounds: sample.quantity.doubleValue(for: HKUnit.pound()))
+                } ?? []
+                cont.resume(returning: results)
             }
             healthStore.execute(query)
         }

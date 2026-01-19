@@ -115,7 +115,7 @@ struct WorkoutSessionDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                HStack(spacing: 24) {
+                HStack(spacing: 8) {
                     shareMenu
 
                     Button("Done") {
@@ -124,6 +124,7 @@ struct WorkoutSessionDetailView: View {
                     }
                     .fontWeight(.semibold)
                 }
+                .padding(.leading, 12)
             }
         }
         .sheet(isPresented: $showingAddExercise) {
