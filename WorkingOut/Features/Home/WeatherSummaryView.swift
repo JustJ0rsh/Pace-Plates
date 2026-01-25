@@ -14,6 +14,7 @@ struct WeatherSummaryView: View {
                     vm.fetch()
                 } label: {
                     Image(systemName: "arrow.clockwise")
+                        .foregroundColor(AppTheme.accentColor)
                 }
                 .buttonStyle(.plain)
             }
@@ -34,22 +35,19 @@ struct WeatherSummaryView: View {
                         Text(tempDisplay)
                             .font(.system(size: 28, weight: .semibold))
                         Text(s.condition)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppTheme.secondaryTextColor)
                     }
                     Spacer()
                 }
             } else if let err = vm.errorText {
                 Text(err)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppTheme.secondaryTextColor)
             } else {
                 Text("—")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppTheme.secondaryTextColor)
             }
         }
-        .padding(.horizontal, AppTheme.padding)
-        .padding(.vertical, 12)
-        .background(AppTheme.secondaryBackgroundColor)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .floatingTile()
         .onAppear {
             // Throttle initial fetch slightly to avoid contention with other stores at app startup
             Task { try? await Task.sleep(nanoseconds: 300_000_000); vm.fetch() }

@@ -95,6 +95,7 @@ struct AIPlannerView: View {
         } message: {
             Text("Model context has been successfully reset and offloaded.")
         }
+        .id(appTheme) // Force rebuild when theme changes
     }
 
     private func generateTapped() {

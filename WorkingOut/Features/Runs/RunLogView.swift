@@ -531,6 +531,7 @@ struct RunLogView: View {
                 .foregroundColor(AppTheme.textColor)
                 .tint(AppTheme.accentColor)
             }
+            .id(appTheme) // Force rebuild when theme changes
     }
     
     private func activityTitle(for type: String) -> String {

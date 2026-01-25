@@ -12,7 +12,7 @@ struct FloatingTile: ViewModifier {
     func body(content: Content) -> some View {
         content
             .padding()
-            .background(.ultraThinMaterial)
+            .background(AppTheme.secondaryBackgroundColor)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)

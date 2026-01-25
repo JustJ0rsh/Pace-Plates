@@ -498,6 +498,7 @@ struct HomeView: View {
         .appBackground(AppTheme.gradientHome)
         .foregroundColor(AppTheme.textColor)
         .tint(AppTheme.accentColor)
+        .id(appTheme) // Force rebuild when theme changes
     }
 }
 

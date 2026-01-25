@@ -184,6 +184,7 @@ struct WeightLogView: View {
         .onAppear {
             importHealthWeightsSilently()
         }
+        .id(appTheme) // Force rebuild when theme changes
     }
 
     /// Silent auto-import on view appear (like runs/hikes/walks)

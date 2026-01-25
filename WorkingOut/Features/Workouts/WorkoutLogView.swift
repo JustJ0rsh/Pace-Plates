@@ -234,6 +234,7 @@ struct WorkoutLogView: View {
                     Text("Delete \"\(title)\" and all its exercise logs?")
                 }
             }
+            .id(appTheme) // Force rebuild when theme changes
     }
 
     // MARK: Actions
