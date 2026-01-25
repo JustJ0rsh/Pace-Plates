@@ -20,6 +20,7 @@ struct ContentView: View {
     @AppStorage("weightUnit") private var weightUnit: String = "lbs"
     @AppStorage("distanceUnit") private var distanceUnit: String = "mi"
     @AppStorage("heightUnit") private var heightUnit: String = "in"
+    @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
     @State private var aiAvailability: WorkoutPlanGenerator.Availability = .unknown
     @Binding var importedWorkout: SharedWorkoutSession?
     
@@ -56,9 +57,13 @@ struct ContentView: View {
         }
         .background(AppTheme.backgroundColor.ignoresSafeArea())
         .tint(AppTheme.accentColor)
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(appTheme.preferredColorScheme)
+        .toolbarBackground(AppTheme.backgroundColor, for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
+        .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .tabBar)
         .modelContainer(persistenceController.container)
         .onAppear {
+            AppTheme.applyGlobalTheme()
             // Check Apple Intelligence availability
             aiAvailability = WorkoutPlanGenerator.shared.availability()
             // Seed + cleanup the exercise library safely (idempotent)
@@ -121,6 +126,9 @@ struct ContentView: View {
             }
             // Ensure the Game Center access point dot is hidden by default
             GKAccessPoint.shared.isActive = false
+        }
+        .onChange(of: appTheme) { _, _ in
+            AppTheme.applyGlobalTheme()
         }
         .alert("Health Access Issue", isPresented: Binding(get: { healthAuthError != nil }, set: { if !$0 { healthAuthError = nil } })) {
             Button("OK", role: .cancel) { healthAuthError = nil }

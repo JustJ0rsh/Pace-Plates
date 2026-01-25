@@ -107,7 +107,7 @@ struct WorkoutSessionDetailView: View {
         .toolbar(.hidden, for: .tabBar)
         .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
         .scrollContentBackground(.hidden)
         .foregroundColor(AppTheme.textColor)
         .navigationTitle(titleText.isEmpty ? "Workout Details" : titleText)
@@ -416,7 +416,7 @@ struct ExerciseLogRow: View {
                     onEdit(log)
                 } label: {
                     Image(systemName: "pencil.circle.fill")
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(AppTheme.accentColor)
                 }
             }
             

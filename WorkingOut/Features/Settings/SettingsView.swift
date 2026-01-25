@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage("measurementSystem") private var measurementSystem: String = "imperial" // "metric" or "imperial"
+    @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
     @AppStorage("weightUnit") private var weightUnit = "lbs"
     @AppStorage("distanceUnit") private var distanceUnit = "mi"
     @AppStorage("weightGoal") private var weightGoal: String = "lose" // lose | maintain | gain
@@ -31,9 +32,8 @@ struct SettingsView: View {
     @State private var confirmDedup: Bool = false
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section("Units") {
+        List {
+            Section("Units") {
                     Picker("Measurement System", selection: $measurementSystem) {
                         Text("Metric").tag("metric")
                         Text("Imperial").tag("imperial")
@@ -50,6 +50,19 @@ struct SettingsView: View {
                             heightUnit = "cm"
                         }
                         applyMeasurementSystemChange(newValue)
+                    }
+                }
+
+                Section("Appearance") {
+                    NavigationLink {
+                        ThemePickerView(appTheme: $appTheme)
+                    } label: {
+                        HStack {
+                            Text("Theme")
+                            Spacer()
+                            Text(appTheme.displayName)
+                                .foregroundStyle(AppTheme.secondaryTextColor)
+                        }
                     }
                 }
 
@@ -219,7 +232,7 @@ struct SettingsView: View {
                         confirmDedup = true
                     } label: {
                         Label("Remove All Duplicates", systemImage: "sparkles")
-                            .foregroundColor(.blue)
+                            .foregroundStyle(AppTheme.accentColor)
                     }
                 }
 
@@ -235,56 +248,63 @@ struct SettingsView: View {
                     }
                 }
                 
-                Section("About") {
-                    HStack {
-                        Text("Version")
-                            .foregroundColor(AppTheme.textColor)
-                        Spacer()
-                        Text("1.4.5")
-                            .foregroundStyle(.secondary)
-                    }
+            Section("About") {
+                HStack {
+                    Text("Version")
+                        .foregroundColor(AppTheme.textColor)
+                    Spacer()
+                    Text("1.4.5")
+                        .foregroundStyle(.secondary)
                 }
             }
-            .listStyle(.insetGrouped)
-            .appBackground(AppTheme.gradientSettings)
-            .scrollContentBackground(.hidden)
-            .scrollDismissesKeyboard(.immediately)
-            .navigationTitle("Settings")
-            .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .sheet(item: $exportURL, onDismiss: { exportURL = nil }) { item in
-                ShareSheet(items: [item.url])
-            }
-            .alert("Backup", isPresented: $showAlert) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(alertMessage)
-            }
-            .alert("Export Data?", isPresented: $confirmExport) {
-                Button("Cancel", role: .cancel) {}
-                Button("Export") { exportTapped() }
-            } message: {
-                Text("Create a backup file to share or save?")
-            }
-            .alert("Import Data?", isPresented: $confirmImport) {
-                Button("Cancel", role: .cancel) {}
-                Button("Import") { showImporter = true }
-            } message: {
-                Text("Importing will replace existing items when conflicts occur.")
-            }
-            .alert("Remove Duplicates?", isPresented: $confirmDedup) {
-                Button("Cancel", role: .cancel) {}
-                Button("Remove", role: .destructive) { deduplicateAllData() }
-            } message: {
-                Text("We will scan workouts, runs, and templates to drop duplicates.")
-            }
-            .alert("Delete All Data?", isPresented: $confirmDeleteAll) {
-                Button("Cancel", role: .cancel) {}
-                Button("Delete", role: .destructive) { deleteAllEverywhere() }
-            } message: {
-                let cloud = PersistenceController.shared.isCloudBacked
-                Text(cloud ? "This will remove all data from this device and iCloud for your account. This action cannot be undone." : "This will remove all data on this device. This action cannot be undone.")
-            }
+        }
+        // Force the insetGrouped table to rebuild when the theme changes.
+        // This prevents the "Theme" row from briefly showing stale system row colors during transitions.
+        .id(appTheme)
+        .transaction { tx in
+            tx.animation = nil
+        }
+        .listStyle(.insetGrouped)
+        .appBackground(AppTheme.gradientSettings)
+        .scrollContentBackground(.hidden)
+        .scrollDismissesKeyboard(.immediately)
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
+        .sheet(item: $exportURL, onDismiss: { exportURL = nil }) { item in
+            ShareSheet(items: [item.url])
+        }
+        .alert("Backup", isPresented: $showAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(alertMessage)
+        }
+        .alert("Export Data?", isPresented: $confirmExport) {
+            Button("Cancel", role: .cancel) {}
+            Button("Export") { exportTapped() }
+        } message: {
+            Text("Create a backup file to share or save?")
+        }
+        .alert("Import Data?", isPresented: $confirmImport) {
+            Button("Cancel", role: .cancel) {}
+            Button("Import") { showImporter = true }
+        } message: {
+            Text("Importing will replace existing items when conflicts occur.")
+        }
+        .alert("Remove Duplicates?", isPresented: $confirmDedup) {
+            Button("Cancel", role: .cancel) {}
+            Button("Remove", role: .destructive) { deduplicateAllData() }
+        } message: {
+            Text("We will scan workouts, runs, and templates to drop duplicates.")
+        }
+        .alert("Delete All Data?", isPresented: $confirmDeleteAll) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive) { deleteAllEverywhere() }
+        } message: {
+            let cloud = PersistenceController.shared.isCloudBacked
+            Text(cloud ? "This will remove all data from this device and iCloud for your account. This action cannot be undone." : "This will remove all data on this device. This action cannot be undone.")
         }
         .ignoresSafeArea(.keyboard)
         // Provide a keyboard toolbar for numeric fields with back/next navigation

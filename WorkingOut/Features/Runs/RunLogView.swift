@@ -6,6 +6,7 @@ import CoreLocation
 import Charts
 
 struct RunLogView: View {
+    @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
     @AppStorage("distanceUnit") private var preferredDistanceUnit: String = "mi"
     // Helper type for chart points
     private struct DailyPoint: Identifiable {
@@ -68,56 +69,55 @@ struct RunLogView: View {
     }
     
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    
-                    // Active Run banner
-                    if RunTracker.shared.isRunning || (RunTracker.shared.duration > 0 && RunTracker.shared.startDate != nil) {
-                        Button {
-                            selectedActivityType = RunTracker.shared.activityType
-                            showRunTracking = true
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: activityIcon(for: RunTracker.shared.activityType))
-                                    .foregroundStyle(.white)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Active \(activityName(for: RunTracker.shared.activityType)) In Progress")
-                                        .font(.headline)
-                                    let dur = RunTracker.shared.duration
-                                    let distMeters = RunTracker.shared.distance
-                                    let unit = RunTracker.shared.distanceUnit
-                                    let dist = distMeters / (unit == "km" ? 1000 : 1609.34)
-                                    Text(String(format: "%@  •  %.2f %@", formatDuration(dur), dist, unit))
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .foregroundStyle(.secondary)
+        ScrollView {
+            VStack(spacing: 16) {
+                
+                // Active Run banner
+                if RunTracker.shared.isRunning || (RunTracker.shared.duration > 0 && RunTracker.shared.startDate != nil) {
+                    Button {
+                        selectedActivityType = RunTracker.shared.activityType
+                        showRunTracking = true
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: activityIcon(for: RunTracker.shared.activityType))
+                                .foregroundStyle(AppTheme.accentColor)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Active \(activityName(for: RunTracker.shared.activityType)) In Progress")
+                                    .font(.headline)
+                                let dur = RunTracker.shared.duration
+                                let distMeters = RunTracker.shared.distance
+                                let unit = RunTracker.shared.distanceUnit
+                                let dist = distMeters / (unit == "km" ? 1000 : 1609.34)
+                                Text(String(format: "%@  •  %.2f %@", formatDuration(dur), dist, unit))
+                                    .font(.subheadline)
+                                    .foregroundStyle(AppTheme.secondaryTextColor)
                             }
-                            .padding(12)
-                            .background(AppTheme.secondaryBackgroundColor)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .foregroundStyle(AppTheme.secondaryTextColor)
                         }
-                        .buttonStyle(.plain)
+                        .padding(12)
+                        .background(AppTheme.secondaryBackgroundColor)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
-                                        
-                    // Unified Runs tile (header + chart or placeholder)
-                    let calendar = Calendar.current
-                    // Apply activity filter first if set
-                    let filteredSessions: [RunningSession] = runningSessions.filter { s in
-                        if runActivityFilter == "All" { return true }
-                        return s.activityType == keyForActivity(runActivityFilter)
-                    }
-                    let grouped: [Date: Double] = Dictionary(grouping: filteredSessions, by: { session in
-                        calendar.startOfDay(for: session.date)
-                    }).mapValues { sessions in
-                        sessions.reduce(0) { $0 + $1.distance }
-                    }
-                    let dailyAll: [DailyPoint] = grouped.keys.sorted().map { day in
-                        DailyPoint(date: day, value: grouped[day] ?? 0)
-                    }
+                    .buttonStyle(.plain)
+                }
+                                    
+                // Unified Runs tile (header + chart or placeholder)
+                let calendar = Calendar.current
+                // Apply activity filter first if set
+                let filteredSessions: [RunningSession] = runningSessions.filter { s in
+                    if runActivityFilter == "All" { return true }
+                    return s.activityType == keyForActivity(runActivityFilter)
+                }
+                let grouped: [Date: Double] = Dictionary(grouping: filteredSessions, by: { session in
+                    calendar.startOfDay(for: session.date)
+                }).mapValues { sessions in
+                    sessions.reduce(0) { $0 + $1.distance }
+                }
+                let dailyAll: [DailyPoint] = grouped.keys.sorted().map { day in
+                    DailyPoint(date: day, value: grouped[day] ?? 0)
+                }
                     let daily = dailyAll.filter { $0.date >= last7DaysDomain.lowerBound && $0.date < last7DaysDomain.upperBound }
 
                     let minV: Double = daily.map { $0.value }.min() ?? 0
@@ -254,7 +254,7 @@ struct RunLogView: View {
                                             }
                                         } label: {
                                             Image(systemName: "xmark.circle.fill")
-                                                .foregroundStyle(.secondary)
+                                                .foregroundStyle(AppTheme.secondaryTextColor)
                                         }
                                     }
                                     
@@ -264,7 +264,7 @@ struct RunLogView: View {
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text("Total Distance")
                                                 .font(.caption)
-                                                .foregroundStyle(.secondary)
+                                                .foregroundStyle(AppTheme.secondaryTextColor)
                                             Text(String(format: "%.2f %@", selectedPoint.value, unitLabel))
                                                 .font(.title3.bold())
                                         }
@@ -272,7 +272,7 @@ struct RunLogView: View {
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text("Activities")
                                                 .font(.caption)
-                                                .foregroundStyle(.secondary)
+                                                .foregroundStyle(AppTheme.secondaryTextColor)
                                             Text("\(sessionsOnDay.count)")
                                                 .font(.title3.bold())
                                         }
@@ -289,17 +289,17 @@ struct RunLogView: View {
                                                 Text("\(String(format: "%.2f", session.distance)) \(session.distanceUnit)")
                                                     .font(.subheadline)
                                                 Text("•")
-                                                    .foregroundStyle(.secondary)
+                                                    .foregroundStyle(AppTheme.secondaryTextColor)
                                                 Text(formatDuration(session.duration))
                                                     .font(.subheadline)
-                                                    .foregroundStyle(.secondary)
+                                                    .foregroundStyle(AppTheme.secondaryTextColor)
                                             }
                                         }
                                         
                                         if sessionsOnDay.count > 3 {
                                             Text("+ \(sessionsOnDay.count - 3) more")
                                                 .font(.caption)
-                                                .foregroundStyle(.secondary)
+                                                .foregroundStyle(AppTheme.secondaryTextColor)
                                         }
                                     }
                                 }
@@ -447,9 +447,10 @@ struct RunLogView: View {
             .appBackground(AppTheme.gradientRuns)
             .foregroundColor(AppTheme.textColor)
             .navigationTitle("Runs")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
             .tint(AppTheme.accentColor)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -522,14 +523,14 @@ struct RunLogView: View {
                         .navigationTitle(activityTitle(for: selectedActivityType))
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
-                        .toolbarColorScheme(.dark, for: .navigationBar)
+                        .toolbarBackground(.visible, for: .navigationBar)
+                        .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
                 }
                 .id(selectedActivityType) // Force refresh when activity type changes
                 .appBackground(AppTheme.gradientRuns)
                 .foregroundColor(AppTheme.textColor)
                 .tint(AppTheme.accentColor)
             }
-        }
     }
     
     private func activityTitle(for type: String) -> String {
@@ -906,11 +907,11 @@ private struct RunSessionRowContent: View {
                     Text(formattedPace)
                 }
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppTheme.secondaryTextColor)
                 if let place = locationName, !place.isEmpty {
                     Text(place)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppTheme.secondaryTextColor)
                 }
             }
             .foregroundColor(AppTheme.textColor)
@@ -1147,19 +1148,19 @@ struct RunSessionDetailView: View {
                             VStack(spacing: 4) {
                                 Text(formatDuration(session.duration))
                                     .font(.system(size: 36, weight: .bold, design: .rounded))
-                                    .foregroundColor(.white)
+                                    .foregroundColor(AppTheme.textColor)
                                 Text("Time")
                                     .font(.subheadline)
-                                    .foregroundColor(.white.opacity(0.7))
+                                    .foregroundColor(AppTheme.textColor.opacity(0.7))
                             }
                             
                             VStack(spacing: 4) {
                                 Text(String(format: "%.2f", session.distance))
                                     .font(.system(size: 36, weight: .bold, design: .rounded))
-                                    .foregroundColor(.white)
+                                    .foregroundColor(AppTheme.textColor)
                                 Text(session.distanceUnit.uppercased())
                                     .font(.subheadline)
-                                    .foregroundColor(.white.opacity(0.7))
+                                    .foregroundColor(AppTheme.textColor.opacity(0.7))
                             }
                         }
                         .frame(maxWidth: .infinity)
@@ -1177,7 +1178,7 @@ struct RunSessionDetailView: View {
                             Text("Calories (est.): \(String(format: "%.0f", estimatedCalories()) ) kcal")
                             Text("Estimated calories are based on speed and your latest weight. Actual burn varies.")
                                 .font(.footnote)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(AppTheme.secondaryTextColor)
                         }
                         if let notes = session.notes { Text("Notes: \(notes)") }
                     }
@@ -1318,7 +1319,7 @@ struct RunSessionDetailView: View {
                 .fill(color)
                 .frame(width: 8, height: 8)
             Text(label)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppTheme.secondaryTextColor)
         }
     }
 
@@ -1727,7 +1728,7 @@ struct RunStatsView: View {
                         
                         Text("Power data from compatible meters (Stryd, Garmin, etc.)")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppTheme.secondaryTextColor)
                             .padding(.top, 4)
                     }
                     .floatingTile()
@@ -1764,7 +1765,7 @@ struct RunStatsView: View {
                         
                         Text("Heart rate from Apple Watch or compatible chest strap")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppTheme.secondaryTextColor)
                             .padding(.top, 4)
                     }
                     .floatingTile()
@@ -1801,7 +1802,7 @@ struct RunStatsView: View {
                         
                         Text("Elevation calculated from GPS altitude data (requires physical device with GPS)")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppTheme.secondaryTextColor)
                             .padding(.top, 4)
                     }
                     .floatingTile()
@@ -1841,7 +1842,7 @@ struct RunStatsView: View {
                         
                         Text("Running dynamics from Apple Watch Series 6+ or compatible devices")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppTheme.secondaryTextColor)
                             .padding(.top, 4)
                     }
                     .floatingTile()
@@ -2033,7 +2034,7 @@ private struct StatCard: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppTheme.secondaryTextColor)
             
             Text(value)
                 .font(.title3)
@@ -2046,7 +2047,7 @@ private struct StatCard: View {
                 if !subtitle.isEmpty {
                     Text(subtitle)
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppTheme.secondaryTextColor)
                 } else {
                     Text(" ")
                         .font(.caption2)
@@ -2072,7 +2073,7 @@ private struct SummaryRow: View {
             Spacer()
             Text(value)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppTheme.secondaryTextColor)
         }
     }
 }
@@ -2093,7 +2094,7 @@ private struct DynamicRow: View {
                     .fontWeight(.medium)
                 Text(unit)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppTheme.secondaryTextColor)
             }
         }
     }
@@ -2174,7 +2175,7 @@ private struct SplitRow: View {
                         Text(String(format: "%.0f m", elevation))
                             .font(.caption)
                     }
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppTheme.secondaryTextColor)
                 }
             }
             
@@ -2191,7 +2192,7 @@ private struct SplitRow: View {
                             .foregroundStyle(.primary)
                         Text("time")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppTheme.secondaryTextColor)
                     }
                 } else {
                     // Show pace for full segments

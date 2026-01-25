@@ -106,12 +106,12 @@ struct MarkdownView: View {
                     .background(
                         Capsule()
                             .fill(LinearGradient(
-                                colors: [Color.blue, Color.blue.opacity(0.8)],
+                                colors: [AppTheme.accentColor, AppTheme.accentColor.opacity(0.8)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ))
                     )
-                    .shadow(color: .blue.opacity(0.3), radius: 2, x: 0, y: 1)
+                    .shadow(color: AppTheme.accentColor.opacity(0.3), radius: 2, x: 0, y: 1)
             }
         }
     }

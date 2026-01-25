@@ -66,7 +66,7 @@ struct AddExerciseView: View {
                                     }
                                     Spacer()
                                     Image(systemName: "plus.circle.fill")
-                                        .foregroundStyle(.blue)
+                                        .foregroundStyle(AppTheme.accentColor)
                                 }
                                 .contentShape(Rectangle())
                             }
@@ -76,14 +76,14 @@ struct AddExerciseView: View {
                                 Button {
                                     historyExerciseName = exercise.name
                                 } label: { Label("History", systemImage: "clock.arrow.circlepath") }
-                                .tint(.teal)
+                                .tint(AppTheme.accentColor)
                                 // Allow editing category for all exercises to prevent data loss
                                 Button {
                                     editingExercise = exercise
                                     editingExerciseName = exercise.name
                                     editingExerciseMuscleGroup = exercise.muscleGroup
                                 } label: { Label("Edit Category", systemImage: "pencil") }
-                                .tint(.blue)
+                                .tint(AppTheme.accentColor)
                                 if exercise.isUserDefined {
                                     Button(role: .destructive) {
                                         deleteExerciseDefinition(exercise)
@@ -101,7 +101,7 @@ struct AddExerciseView: View {
             .navigationTitle("Add Exercise")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {

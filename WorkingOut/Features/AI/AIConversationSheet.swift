@@ -190,7 +190,7 @@ struct AIConversationSheet: View {
             }
             // Let content scroll under the nav bar (Safari-style) and rely on overlays for depth
             .toolbarBackground(.hidden, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
             .appBackground(AppTheme.gradientAI)
             .foregroundColor(AppTheme.textColor)
             // Do not block scrolling: observe drag simultaneously

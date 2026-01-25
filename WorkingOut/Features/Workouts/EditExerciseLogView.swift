@@ -282,7 +282,7 @@ struct EditExerciseLogView: View {
                 }
             }
             .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
             .background {
                 AppTheme.gradientWorkouts
                     .ignoresSafeArea()

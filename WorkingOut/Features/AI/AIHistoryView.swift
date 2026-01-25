@@ -5,6 +5,7 @@ import EventKit
 struct AIHistoryView: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: [SortDescriptor<AIConversation>(\.date, order: .reverse)]) var conversations: [AIConversation]
+    @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
 
     var body: some View {
         List {
@@ -14,13 +15,13 @@ struct AIHistoryView: View {
                         HStack {
                             Image(systemName: convo.mode == "plan" ? "calendar" : "bubble.left.fill")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(AppTheme.secondaryTextColor)
                             Text(convo.mode == "plan" ? "Workout Plan" : "Question")
                                 .font(.subheadline).bold()
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(AppTheme.secondaryTextColor)
                             Spacer()
                             Text(convo.date, style: .date)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(AppTheme.secondaryTextColor)
                                 .font(.caption)
                         }
                         Text(displayTitle(for: convo))
@@ -35,7 +36,8 @@ struct AIHistoryView: View {
         .navigationTitle("AI History")
         .toolbar { EditButton() }
         .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
         .appBackground(AppTheme.gradientAI)
         .foregroundColor(AppTheme.textColor)
     }
@@ -95,7 +97,7 @@ struct AIHistoryDetailView: View {
                     Spacer()
                     Text(convo.date, style: .date)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppTheme.secondaryTextColor)
                 }
                 
                 // Show the prompt/title if available
@@ -103,13 +105,13 @@ struct AIHistoryDetailView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Prompt")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppTheme.secondaryTextColor)
                         Text(convo.prompt)
                             .font(.subheadline)
                             .fontWeight(.medium)
                             .padding(12)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color.blue.opacity(0.1))
+                            .background(AppTheme.accentColor.opacity(0.12))
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                 }
@@ -118,7 +120,7 @@ struct AIHistoryDetailView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Response")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppTheme.secondaryTextColor)
                     
                     #if canImport(FoundationModels)
                     if useStructuredPlanView, let json = convo.structuredPlanJSON, let view = try? StructuredPlanCards(json: json) {
@@ -132,7 +134,7 @@ struct AIHistoryDetailView: View {
                                     RoundedRectangle(cornerRadius: 12)
                                         .fill(
                                             LinearGradient(
-                                                colors: [Color.white.opacity(0.08), Color.white.opacity(0.02)],
+                                                colors: [AppTheme.textColor.opacity(0.08), AppTheme.textColor.opacity(0.02)],
                                                 startPoint: .topLeading,
                                                 endPoint: .bottomTrailing
                                             )
@@ -141,15 +143,15 @@ struct AIHistoryDetailView: View {
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                                    .stroke(AppTheme.textColor.opacity(0.15), lineWidth: 1)
                             )
                     } else if convo.response.isEmpty {
                         Text("(empty)")
                             .font(.body)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppTheme.secondaryTextColor)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding()
-                            .background(Color.black.opacity(0.12))
+                            .background(AppTheme.textColor.opacity(0.08))
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                     } else {
                         MarkdownView(text: convo.response)
@@ -162,7 +164,7 @@ struct AIHistoryDetailView: View {
                                     RoundedRectangle(cornerRadius: 12)
                                         .fill(
                                             LinearGradient(
-                                                colors: [Color.white.opacity(0.08), Color.white.opacity(0.02)],
+                                                colors: [AppTheme.textColor.opacity(0.08), AppTheme.textColor.opacity(0.02)],
                                                 startPoint: .topLeading,
                                                 endPoint: .bottomTrailing
                                             )
@@ -171,17 +173,17 @@ struct AIHistoryDetailView: View {
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                                    .stroke(AppTheme.textColor.opacity(0.15), lineWidth: 1)
                             )
                     }
                     #else
                     if convo.response.isEmpty {
                         Text("(empty)")
                             .font(.body)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppTheme.secondaryTextColor)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding()
-                            .background(Color.black.opacity(0.12))
+                            .background(AppTheme.textColor.opacity(0.08))
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                     } else {
                         MarkdownView(text: convo.response)
@@ -194,7 +196,7 @@ struct AIHistoryDetailView: View {
                                     RoundedRectangle(cornerRadius: 12)
                                         .fill(
                                             LinearGradient(
-                                                colors: [Color.white.opacity(0.08), Color.white.opacity(0.02)],
+                                                colors: [AppTheme.textColor.opacity(0.08), AppTheme.textColor.opacity(0.02)],
                                                 startPoint: .topLeading,
                                                 endPoint: .bottomTrailing
                                             )
@@ -203,7 +205,7 @@ struct AIHistoryDetailView: View {
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                                    .stroke(AppTheme.textColor.opacity(0.15), lineWidth: 1)
                             )
                     }
                     #endif
@@ -259,7 +261,7 @@ struct AIHistoryDetailView: View {
         .navigationTitle("Saved Conversation")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
         .appBackground(AppTheme.gradientAI)
         .foregroundColor(AppTheme.textColor)
         .sheet(isPresented: $showShare) { ShareSheet(items: [convo.response]) }
@@ -284,7 +286,7 @@ struct AIHistoryDetailView: View {
                     Section {
                         if availableCalendars.isEmpty {
                             Text("Loading calendars...")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(AppTheme.secondaryTextColor)
                         } else {
                             Picker("Calendar", selection: $selectedCalendar) {
                                 ForEach(availableCalendars, id: \.calendarIdentifier) { calendar in
@@ -383,7 +385,7 @@ struct AIHistoryDetailView: View {
                                     .foregroundColor(AppTheme.textColor)
                                 Text(day.type)
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(AppTheme.secondaryTextColor)
                             }
                             .padding(.vertical, 4)
                         }

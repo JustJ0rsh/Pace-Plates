@@ -16,7 +16,7 @@ struct FloatingTile: ViewModifier {
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(AppTheme.secondaryBackgroundColor.opacity(strokeOpacity))
+                    .strokeBorder((AppTheme.option == .light ? AppTheme.textColor : AppTheme.secondaryBackgroundColor).opacity(strokeOpacity))
             )
             .shadow(color: .black.opacity(shadowOpacity), radius: shadowRadius, x: 0, y: shadowY)
     }

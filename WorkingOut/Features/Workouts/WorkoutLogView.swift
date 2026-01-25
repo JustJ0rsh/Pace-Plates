@@ -10,6 +10,7 @@ struct WorkoutLogView: View {
     // MARK: Properties
 
     @Environment(\.modelContext) private var modelContext
+    @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
     @Query(sort: [SortDescriptor<WorkoutSession>(\.date, order: .reverse)]) private var workoutSessions: [WorkoutSession]
     @Query(sort: [SortDescriptor<ExerciseDefinition>(\.name)]) private var exerciseDefinitions: [ExerciseDefinition]
     @State private var newSessionToOpen: WorkoutSession? = nil
@@ -55,9 +56,8 @@ struct WorkoutLogView: View {
     // MARK: Body
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
+        ScrollView {
+            VStack(spacing: 16) {
                     // Empty-state tile similar to Weight tab
                     if workoutSessions.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
@@ -167,20 +167,14 @@ struct WorkoutLogView: View {
                     }
                 }
                 .padding(.horizontal, AppTheme.padding)
-            }
-            .appBackground(AppTheme.gradientWorkouts)
+        }
+        .appBackground(AppTheme.gradientWorkouts)
             .foregroundColor(AppTheme.textColor)
             .navigationTitle("Workouts")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbarBackground(
-                LinearGradient(
-                    gradient: Gradient(colors: [AppTheme.backgroundColor.opacity(0.98), AppTheme.backgroundColor.opacity(0.9)]),
-                    startPoint: .top,
-                    endPoint: .bottom
-                ),
-                for: .navigationBar
-            )
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: 12) {
@@ -240,7 +234,6 @@ struct WorkoutLogView: View {
                     Text("Delete \"\(title)\" and all its exercise logs?")
                 }
             }
-        }
     }
 
     // MARK: Actions
@@ -334,12 +327,12 @@ private struct WorkoutSessionRowContent: View {
                 if let notes = session.notes, !notes.isEmpty {
                     Text(notes)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppTheme.secondaryTextColor)
                         .lineLimit(1)
                 }
                 Text("\(session.exerciseLogs?.count ?? 0) exercises")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppTheme.secondaryTextColor)
             }
             .foregroundColor(AppTheme.textColor)
             Spacer(minLength: 8)
@@ -402,7 +395,7 @@ private struct WorkoutVolumeChartSection: View {
                         .monospacedDigit()
                     Text(preferredWeightUnit)
                         .font(.headline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppTheme.secondaryTextColor)
                     Spacer()
                 }
                 .padding(.top, 4)
@@ -516,7 +509,7 @@ private struct SelectionSummary: View {
                 Spacer()
                 Button(action: onClose) {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppTheme.secondaryTextColor)
                 }
             }
 
@@ -526,7 +519,7 @@ private struct SelectionSummary: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Total Volume")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppTheme.secondaryTextColor)
                     Text(valueText)
                         .font(.title3.bold())
                 }
@@ -534,7 +527,7 @@ private struct SelectionSummary: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Workouts")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppTheme.secondaryTextColor)
                     Text("\(sessionsOnDay.count)")
                         .font(.title3.bold())
                 }
@@ -547,7 +540,7 @@ private struct SelectionSummary: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Exercises")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppTheme.secondaryTextColor)
                         Text("\(exerciseCount)")
                             .font(.subheadline.bold())
                     }
@@ -555,7 +548,7 @@ private struct SelectionSummary: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Total Sets")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppTheme.secondaryTextColor)
                         Text("\(setCount)")
                             .font(.subheadline.bold())
                     }
@@ -575,7 +568,7 @@ private struct SelectionSummary: View {
                 if sessionsOnDay.count > 2 {
                     Text("+ \(sessionsOnDay.count - 2) more")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppTheme.secondaryTextColor)
                 }
             }
         }

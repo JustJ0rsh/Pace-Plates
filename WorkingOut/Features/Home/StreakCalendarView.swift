@@ -160,7 +160,7 @@ struct StreakCalendarView: View {
         .navigationTitle("Streak Calendar")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
         .appBackground(AppTheme.gradientHome)
         .foregroundColor(AppTheme.textColor)
     }

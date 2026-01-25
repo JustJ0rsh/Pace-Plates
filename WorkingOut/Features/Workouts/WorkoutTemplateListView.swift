@@ -367,7 +367,7 @@ struct WorkoutTemplateListView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                         .overlay(
                             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                .stroke(AppTheme.textColor.opacity(0.2), lineWidth: 1)
                         )
                         .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
                         .padding(.horizontal, AppTheme.padding)
@@ -381,7 +381,7 @@ struct WorkoutTemplateListView: View {
         .background(AppTheme.gradientWorkouts.ignoresSafeArea())
         .foregroundColor(AppTheme.textColor)
         .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
         .sheet(item: $selectedTemplate) { template in
             NavigationStack {
                 TemplateDetailView(template: template) { session in
@@ -570,7 +570,7 @@ struct BuiltInTemplateCard: View {
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    .stroke(AppTheme.textColor.opacity(0.12), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -635,7 +635,7 @@ struct TemplateCard: View {
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    .stroke(AppTheme.textColor.opacity(0.12), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -729,7 +729,7 @@ struct TemplateDetailView: View {
         .appBackground(AppTheme.gradientWorkouts)
         .foregroundColor(AppTheme.textColor)
         .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Close") { dismiss() }

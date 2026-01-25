@@ -59,12 +59,12 @@ private struct VitalCard: View {
                 .font(.title3)
                 .foregroundColor(AppTheme.accentColor)
                 .frame(width: 32, height: 32)
-                .background(AppTheme.secondaryBackgroundColor.opacity(0.2), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .background(AppTheme.secondaryBackgroundColor.opacity(0.7), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppTheme.secondaryTextColor)
                 Text(value)
                     .font(.headline)
                     .foregroundColor(AppTheme.textColor)
@@ -73,6 +73,10 @@ private struct VitalCard: View {
             Spacer(minLength: 0)
         }
         .padding(12)
-        .background(AppTheme.secondaryBackgroundColor.opacity(0.3), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(AppTheme.secondaryBackgroundColor, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(AppTheme.textColor.opacity(0.12), lineWidth: 1)
+        )
     }
 }

@@ -49,7 +49,7 @@ private struct DayCard: View {
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 12).fill(.ultraThinMaterial))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.1)))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.textColor.opacity(0.12)))
     }
     
     private var iconName: String {
@@ -98,4 +98,3 @@ private struct DayCard: View {
     }
 }
 #endif
-

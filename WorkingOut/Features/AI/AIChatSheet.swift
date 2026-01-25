@@ -205,23 +205,22 @@ struct AIChatSheet: View {
                     }
                     .background(
                         RoundedRectangle(cornerRadius: 22)
-                            .fill(Color.white.opacity(0.08))
+                            .fill(AppTheme.textColor.opacity(0.08))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 22)
-                            .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                            .strokeBorder(AppTheme.textColor.opacity(0.12), lineWidth: 1)
                     )
 
                     Button(action: send) {
+                        let canSend = !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isStreaming
                         Image(systemName: "arrow.up")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(canSend ? .white : AppTheme.textColor.opacity(0.7))
                             .frame(width: 36, height: 36)
                             .background(
                                 Circle()
-                                    .fill(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isStreaming
-                                          ? Color.white.opacity(0.15)
-                                          : AppTheme.accentColor)
+                                    .fill(canSend ? AppTheme.accentColor : AppTheme.secondaryBackgroundColor)
                             )
                     }
                     .disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isStreaming)
@@ -238,7 +237,7 @@ struct AIChatSheet: View {
         .navigationTitle("AI Assistant")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
         .toolbar {
             // Left side - Clear button
             ToolbarItem(placement: .topBarLeading) {
@@ -570,8 +569,8 @@ struct AIChatSheet: View {
                                 Color.green.opacity(0.3),
                                 Color.green.opacity(0.1)
                             ] : [
-                                Color.white.opacity(0.25),
-                                Color.white.opacity(0.05)
+                                AppTheme.textColor.opacity(0.25),
+                                AppTheme.textColor.opacity(0.05)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing

@@ -7,6 +7,7 @@ import FoundationModels
 
 struct AIPlannerView: View {
     @Environment(\.modelContext) private var modelContext
+    @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
     @AppStorage("weightGoal") private var weightGoal: String = "lose" // lose | maintain | gain
     @AppStorage("weightUnit") private var weightUnit: String = "lbs"
     @AppStorage("distanceUnit") private var distanceUnit: String = "mi"
@@ -45,7 +46,7 @@ struct AIPlannerView: View {
         .contentShape(Rectangle())
         .onTapGesture { dismissKeyboard() }
         .gesture(DragGesture().onChanged { _ in dismissKeyboard() })
-        .navigationTitle("AI Planner")
+        .navigationTitle("AI")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -72,8 +73,10 @@ struct AIPlannerView: View {
         }
         .appBackground(AppTheme.gradientAI)
         .foregroundColor(AppTheme.textColor)
-        .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
+        .tint(AppTheme.accentColor)
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .alert("Reset Model Context?", isPresented: $showResetConfirmation) {
             Button("Cancel", role: .cancel) {}
@@ -147,7 +150,7 @@ struct AIPlannerView: View {
                     
                     Text("Using goal: **\(goalDisplayName)** (change in Settings)")
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppTheme.secondaryTextColor)
                 }
             }
 
@@ -156,7 +159,7 @@ struct AIPlannerView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Available equipment (optional)")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppTheme.secondaryTextColor)
                     TextField("e.g., dumbbells, barbell, bench, bike", text: $userEquipment)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
@@ -173,7 +176,7 @@ struct AIPlannerView: View {
                             .fill(Color.green)
                             .frame(width: 10, height: 10)
                         Text("On‑device model ready")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppTheme.secondaryTextColor)
                         Spacer()
                     }
                     
@@ -191,7 +194,7 @@ struct AIPlannerView: View {
 
             Text("Output will open in a new window and stream live.")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppTheme.secondaryTextColor)
 
             Button(action: generateTapped) {
                 HStack(spacing: 8) {
@@ -231,7 +234,7 @@ struct AIPlannerView: View {
             // Description
             Text(getUnavailableDescription())
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppTheme.secondaryTextColor)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
             

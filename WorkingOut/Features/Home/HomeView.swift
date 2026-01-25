@@ -10,6 +10,7 @@ struct HomeView: View {
     // MARK: Properties
 
     @Environment(\.modelContext) private var modelContext
+    @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
     @Query(sort: [SortDescriptor<WeightEntry>(\.date, order: .reverse)]) private var weightEntries: [WeightEntry]
     @Query(sort: [SortDescriptor<RunningSession>(\.date, order: .reverse)]) private var runningSessions: [RunningSession]
     @Query(sort: [SortDescriptor<WorkoutSession>(\.date, order: .reverse)]) private var workoutSessions: [WorkoutSession]
@@ -332,7 +333,7 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Current Streak")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppTheme.secondaryTextColor)
                 Text(streakDisplayText)
                     .font(.headline)
                     .foregroundColor(AppTheme.textColor)
@@ -384,7 +385,7 @@ struct HomeView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Last Workout")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppTheme.secondaryTextColor)
                         Text(lastWorkout.date.formatted(date: .abbreviated, time: .shortened))
                             .font(.subheadline)
                     }
@@ -392,7 +393,7 @@ struct HomeView: View {
             } else {
                 Text("No workouts logged yet")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppTheme.secondaryTextColor)
             }
 
             if let lastRun = runningSessions.first {
@@ -403,7 +404,7 @@ struct HomeView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Last Run")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppTheme.secondaryTextColor)
                         Text(lastRun.date.formatted(date: .abbreviated, time: .shortened))
                             .font(.subheadline)
                     }
@@ -431,73 +432,72 @@ struct HomeView: View {
     // MARK: Body
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    
-                    // Weather summary tile
-                    WeatherSummaryView()
+        ScrollView {
+            VStack(spacing: 16) {
+                
+                // Weather summary tile
+                WeatherSummaryView()
 
-                    streakCard
+                streakCard
 
-                    recentActivityCard
+                recentActivityCard
 
-                    if showVitalsOnHome {
-                        VitalsSnapshotView()
+                if showVitalsOnHome {
+                    VitalsSnapshotView()
+                }
+
+                // Floating Charts Card with Tabs
+                VStack(spacing: 12) {
+                    // Segmented control to switch charts
+                    Picker("Chart", selection: $selectedChartTab) {
+                        Text("Volume").tag(ChartTab.volume)
+                        Text("Runs").tag(ChartTab.runs)
+                        Text("Weight").tag(ChartTab.weight)
                     }
+                    .pickerStyle(.segmented)
 
-                    // Floating Charts Card with Tabs
-                    VStack(spacing: 12) {
-                        // Segmented control to switch charts
-                        Picker("Chart", selection: $selectedChartTab) {
-                            Text("Volume").tag(ChartTab.volume)
-                            Text("Runs").tag(ChartTab.runs)
-                            Text("Weight").tag(ChartTab.weight)
-                        }
-                        .pickerStyle(.segmented)
-
-                        // Chart content swaps based on selected tab
-                        Group {
-                            switch selectedChartTab {
-                            case .volume:
-                                let data = workoutVolumePerDayLast7
-                                volumeChartView(data: data)
-                            case .runs:
-                                let data = dailyRunTotalsLast7
-                                runsChartView(data: data)
-                            case .weight:
-                                let data = weightDailySeriesLast7
-                                weightChartView(data: data)
-                            }
+                    // Chart content swaps based on selected tab
+                    Group {
+                        switch selectedChartTab {
+                        case .volume:
+                            let data = workoutVolumePerDayLast7
+                            volumeChartView(data: data)
+                        case .runs:
+                            let data = dailyRunTotalsLast7
+                            runsChartView(data: data)
+                        case .weight:
+                            let data = weightDailySeriesLast7
+                            weightChartView(data: data)
                         }
                     }
-                    .floatingTile()
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, AppTheme.padding)
+                .floatingTile()
             }
-            .navigationTitle("Home")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    NavigationLink(destination: CommunityView()) {
-                        Image(systemName: "person.3.fill")
-                    }
-                    .accessibilityLabel("Community")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink(destination: SettingsView()) {
-                        Image(systemName: "gear")
-                    }
-                    .accessibilityLabel("Settings")
-                }
-            }
-            .appBackground(AppTheme.gradientHome)
-            .foregroundColor(AppTheme.textColor)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, AppTheme.padding)
         }
-        .accentColor(AppTheme.accentColor)
+        .navigationTitle("Home")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                NavigationLink(destination: CommunityView()) {
+                    Image(systemName: "person.3.fill")
+                }
+                .accessibilityLabel("Community")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink(destination: SettingsView()) {
+                    Image(systemName: "gear")
+                }
+                .accessibilityLabel("Settings")
+            }
+        }
+        .appBackground(AppTheme.gradientHome)
+        .foregroundColor(AppTheme.textColor)
+        .tint(AppTheme.accentColor)
     }
 }
 
@@ -523,6 +523,6 @@ extension Calendar {
 // MARK: - Preview
 
 #Preview {
-    HomeView()
+    NavigationStack { HomeView() }
         .modelContainer(PersistenceController.preview.container)
 }

@@ -4,6 +4,7 @@ import Charts
 
 struct WeightLogView: View {
     @Environment(\.modelContext) private var modelContext
+    @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
     @Query(sort: [SortDescriptor<WeightEntry>(\.date, order: .reverse)]) private var weightEntries: [WeightEntry] // Added sort
     @State private var showingLogWeightSheet = false // State to control sheet presentation
     @State private var isEditing: Bool = false
@@ -50,9 +51,8 @@ struct WeightLogView: View {
     }
     
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
+        ScrollView {
+            VStack(spacing: 16) {
                     // Chart Tile (unified header style)
                     VStack(alignment: .leading, spacing: 8) {
                         if !weightEntries.isEmpty {
@@ -136,52 +136,53 @@ struct WeightLogView: View {
                     }
                 }
                 .padding(.horizontal, AppTheme.padding)
-            }
-            .appBackground(AppTheme.gradientWeight)
-            .foregroundColor(AppTheme.textColor)
-            .navigationTitle("Weight")
-            .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .tint(AppTheme.accentColor)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: { isEditing.toggle() }) {
-                        Text(isEditing ? "Done" : "Edit")
-                            .font(.headline)
-                    }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showingLogWeightSheet = true
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 18, weight: .semibold))
-                            .accessibilityLabel("Log Weight")
-                    }
+        }
+        .appBackground(AppTheme.gradientWeight)
+        .foregroundColor(AppTheme.textColor)
+        .navigationTitle("Weight")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
+        .tint(AppTheme.accentColor)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: { isEditing.toggle() }) {
+                    Text(isEditing ? "Done" : "Edit")
+                        .font(.headline)
                 }
             }
-            .sheet(isPresented: $showingLogWeightSheet) {
-                LogWeightView()
-            }
-            .alert("Delete Weight Entry?", isPresented: $showDeleteConfirm) {
-                Button("Cancel", role: .cancel) { pendingDeleteEntry = nil }
-                Button("Delete", role: .destructive) {
-                    if let entry = pendingDeleteEntry {
-                        withAnimation {
-                            modelContext.delete(entry)
-                            try? modelContext.save()
-                        }
-                    }
-                    pendingDeleteEntry = nil
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    showingLogWeightSheet = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 18, weight: .semibold))
+                        .accessibilityLabel("Log Weight")
                 }
-            } message: {
+            }
+        }
+        .sheet(isPresented: $showingLogWeightSheet) {
+            LogWeightView()
+        }
+        .alert("Delete Weight Entry?", isPresented: $showDeleteConfirm) {
+            Button("Cancel", role: .cancel) { pendingDeleteEntry = nil }
+            Button("Delete", role: .destructive) {
                 if let entry = pendingDeleteEntry {
-                    Text("Delete the weight entry from \(entry.date.formatted(date: .abbreviated, time: .omitted))?")
+                    withAnimation {
+                        modelContext.delete(entry)
+                        try? modelContext.save()
+                    }
                 }
+                pendingDeleteEntry = nil
             }
-            .onAppear {
-                importHealthWeightsSilently()
+        } message: {
+            if let entry = pendingDeleteEntry {
+                Text("Delete the weight entry from \(entry.date.formatted(date: .abbreviated, time: .omitted))?")
             }
+        }
+        .onAppear {
+            importHealthWeightsSilently()
         }
     }
 
@@ -267,7 +268,7 @@ private struct WeightEntryRowContent: View {
             Text(entry.date.formatted(date: .abbreviated, time: .omitted))
             Spacer()
             Text("\(String(format: "%.1f", entry.weight)) \(entry.weightUnit)")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppTheme.secondaryTextColor)
             if isEditing {
                 Button(role: .destructive, action: onDelete) {
                     Image(systemName: "trash")
@@ -377,7 +378,7 @@ private struct WeightChartSection: View {
                             }
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(AppTheme.secondaryTextColor)
                         }
                     }
 
@@ -387,7 +388,7 @@ private struct WeightChartSection: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Weight")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(AppTheme.secondaryTextColor)
                             Text(String(format: "%.1f %@", convertWeight(selectedEntry.weight, from: selectedEntry.weightUnit, to: preferredWeightUnit), preferredWeightUnit))
                                 .font(.title3.bold())
                         }
@@ -402,7 +403,7 @@ private struct WeightChartSection: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Change")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(AppTheme.secondaryTextColor)
                                 HStack(spacing: 4) {
                                     Image(systemName: isUp ? "arrow.up" : "arrow.down")
                                         .font(.caption)
@@ -418,7 +419,7 @@ private struct WeightChartSection: View {
                         Divider().opacity(0.3)
                         Text("\(entriesOnDay.count) entries this day")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppTheme.secondaryTextColor)
                     }
 
                     // WeightEntry has no notes field
@@ -437,7 +438,7 @@ private struct WeightChartSection: View {
                         .monospacedDigit()
                     Text(preferredWeightUnit)
                         .font(.headline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppTheme.secondaryTextColor)
                     Spacer()
                     if entries.count >= 2 {
                         let latestConv = convertWeight(latest.weight, from: latest.weightUnit, to: preferredWeightUnit)

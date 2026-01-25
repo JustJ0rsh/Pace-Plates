@@ -105,7 +105,7 @@ struct WorkoutExercisesTile: View {
                     showingAddExercise = true
                 } label: {
                     Label("Add Exercise", systemImage: "plus.circle.fill")
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(AppTheme.accentColor)
                 }
             }
 
@@ -160,7 +160,7 @@ struct WorkoutExercisesTile: View {
                                     Label("Add Set", systemImage: "plus")
                                 }
                                 .buttonStyle(.plain)
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(AppTheme.accentColor)
                             }
 
                             // Set rows
@@ -267,7 +267,7 @@ struct WorkoutSessionExerciseRow: View {
                 Button {
                     onDuplicate()
                 } label: { Label("Add Set", systemImage: "plus.square.on.square") }
-                .tint(.blue)
+                .tint(AppTheme.accentColor)
             }
             
             Divider().opacity(0.12)

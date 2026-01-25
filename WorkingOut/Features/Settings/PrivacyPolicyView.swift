@@ -11,7 +11,7 @@ struct PrivacyPolicyView: View {
                     .lineSpacing(6)
                     .multilineTextAlignment(.leading)
                     .foregroundStyle(AppTheme.textColor)
-                    .tint(.blue)
+                    .tint(AppTheme.accentColor)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
