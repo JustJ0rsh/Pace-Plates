@@ -236,20 +236,27 @@ struct AIChatSheet: View {
         }
         .navigationTitle("AI Assistant")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
+        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
         .toolbar {
-            // Left side - Clear button
             ToolbarItem(placement: .topBarLeading) {
-                Button(role: .destructive) { clearHistory() } label: { Label("Clear", systemImage: "trash") }
-                    .disabled(messages.isEmpty)
+                HStack(spacing: 14) {
+                    Button { dismiss() } label: { Image(systemName: "xmark") }
+                        .accessibilityLabel("Close")
+
+                    Button(role: .destructive) { clearHistory() } label: { Image(systemName: "trash") }
+                        .accessibilityLabel("Clear")
+                        .disabled(messages.isEmpty)
+                }
             }
             
             // Center placeholder removed (web search disabled)
             
             // Right side - Save button
             ToolbarItem(placement: .topBarTrailing) {
-                Button { save() } label: { Label("Save", systemImage: "tray.and.arrow.down") }
+                Button { save() } label: { Image(systemName: "tray.and.arrow.down") }
+                    .accessibilityLabel("Save")
                     .disabled(messages.isEmpty)
             }
         }

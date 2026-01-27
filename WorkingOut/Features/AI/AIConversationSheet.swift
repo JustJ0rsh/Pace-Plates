@@ -138,6 +138,9 @@ struct AIConversationSheet: View {
                             citationsSection
                         }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 10)
+                    .padding(.bottom, 16)
                     .background(
                         GeometryReader { geo in
                             Color.clear.preference(
@@ -177,19 +180,27 @@ struct AIConversationSheet: View {
                     }
                 }
             }
-            .padding()
             .navigationTitle(mode == .plan ? "Weekly Training Plan" : "AI Assistant")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { save() } label: { Label("Save", systemImage: "tray.and.arrow.down") }
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Close")
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { save() } label: { Image(systemName: "tray.and.arrow.down") }
+                        .accessibilityLabel("Save")
                         .disabled(content.isEmpty)
                 }
                 
                 // Actions moved to bottom bar
             }
-            // Let content scroll under the nav bar (Safari-style) and rely on overlays for depth
-            .toolbarBackground(.hidden, for: .navigationBar)
+            .safeAreaInset(edge: .bottom, spacing: 0) { bottomActionBar }
+            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
             .appBackground(AppTheme.gradientAI)
             .foregroundColor(AppTheme.textColor)
@@ -208,7 +219,7 @@ struct AIConversationSheet: View {
                             userIsDragging = false
                             if isStreaming { autoFollow = isPinnedToBottom }
                         }
-                    }
+                }
             )
         }
         .sheet(isPresented: $showShare) {
@@ -299,10 +310,6 @@ struct AIConversationSheet: View {
                 }
             }
         }
-        // Safari-like glass overlays anchored to the safe areas
-        .overlay(alignment: .top) { topSafariOverlay }
-        .overlay(alignment: .bottom) { bottomSafariOverlay }
-        .ignoresSafeArea(edges: [.top, .bottom])
         .alert("Added to Calendar", isPresented: $showCalendarSuccess) {
             Button("OK") { }
         } message: {
@@ -921,31 +928,6 @@ struct AIConversationSheet: View {
         }
     }
     
-    // Computed properties for fade visibility based on scroll position
-    private var shouldShowTopFade: Bool {
-        // Only show if we have content and are scrolled away from the top
-        // scrollOffset is positive when at top, negative when scrolled down
-        let hasContent = !content.isEmpty && displayedText != "Generating…"
-        guard hasContent else { return false }
-        return scrollOffset < -10
-    }
-    
-    private var shouldShowBottomFade: Bool {
-        // Only show if we have content and are not at the bottom
-        let hasContent = !content.isEmpty && displayedText != "Generating…"
-        guard hasContent else { return false }
-        
-        let isContentScrollable = contentHeight > scrollViewHeight
-        if !isContentScrollable { return false }
-        
-        // Calculate approximate distance from bottom
-        let scrolledDistance = abs(scrollOffset)
-        let maxScrollDistance = max(0, contentHeight - scrollViewHeight)
-        let distanceFromBottom = maxScrollDistance - scrolledDistance
-        
-        return distanceFromBottom > 10
-    }
-
     private var isPinnedToBottom: Bool {
         // Consider pinned if content fits or within ~12pt of bottom
         if contentHeight <= scrollViewHeight + 1 { return true }
@@ -956,89 +938,59 @@ struct AIConversationSheet: View {
     }
 }
 
-// MARK: - Safari-like overlays (top/bottom) that blur content under bars
+// MARK: - Bottom Action Bar
 private extension AIConversationSheet {
-    var topSafariOverlay: some View {
-        Rectangle()
-            .fill(.thinMaterial)
-            .mask(
-                LinearGradient(
-                    stops: [
-                        .init(color: .black, location: 0.0),
-                        .init(color: .black.opacity(0.55), location: 0.18),
-                        .init(color: .black.opacity(0.25), location: 0.45),
-                        .init(color: .black.opacity(0.01), location: 0.95)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .frame(height: 140)
-            .offset(y: -1) // tuck under status/nav bar to avoid a bright seam line
-            .allowsHitTesting(false)
-    }
+    @ViewBuilder var bottomActionBar: some View {
+        if !content.isEmpty {
+            VStack(spacing: 0) {
+                Divider()
+                    .opacity(0.15)
 
-    var bottomSafariOverlay: some View {
-        VStack(spacing: 0) {
-            // Gradient fade above
-            LinearGradient(
-                colors: [.clear, Color.black.opacity(0.7)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 50)
-            .allowsHitTesting(false)
-
-            // Solid action bar with background
-            HStack(spacing: 12) {
-                if mode == .plan && !content.isEmpty && !isStreaming {
-                    Button {
-                        saveAsTemplates()
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "doc.text.fill")
-                            Text("Save Templates")
+                HStack(spacing: 12) {
+                    if mode == .plan && !isStreaming {
+                        Button { saveAsTemplates() } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "doc.text.fill")
+                                Text("Save Templates")
+                            }
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 9)
+                            .background(Capsule().fill(AppTheme.accentColor))
                         }
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Capsule().fill(AppTheme.accentColor))
+
+                        Button { showScheduleOptions = true } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "calendar.badge.plus")
+                                Text("Schedule")
+                            }
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(AppTheme.textColor)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 9)
+                            .background(Capsule().fill(AppTheme.textColor.opacity(0.10)))
+                        }
                     }
 
-                    Button {
-                        showScheduleOptions = true
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "calendar.badge.plus")
-                            Text("Schedule")
-                        }
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Capsule().fill(Color.white.opacity(0.15)))
-                    }
-                }
+                    Spacer()
 
-                Spacer()
-
-                if !content.isEmpty {
-                    Button {
-                        showShare = true
-                    } label: {
+                    Button { showShare = true } label: {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(AppTheme.textColor)
                             .frame(width: 36, height: 36)
-                            .background(Circle().fill(Color.white.opacity(0.15)))
+                            .background(Circle().fill(AppTheme.textColor.opacity(0.10)))
                     }
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity)
-            .background(Color.black.opacity(0.9))
+            .background(
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .ignoresSafeArea()
+            )
         }
     }
 }

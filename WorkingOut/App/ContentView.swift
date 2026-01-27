@@ -74,6 +74,10 @@ struct ContentView: View {
             persistenceController.unifySynonymousExerciseDefinitions()
             // Ensure legacy arm exercises are reclassified to Biceps/Triceps
             // (idempotent)
+
+            #if DEBUG
+            DebugDataGenerator.hideLegacySampleMarkers(context: persistenceController.container.mainContext)
+            #endif
             
             
             // Seed built-in workout templates (idempotent)

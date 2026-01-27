@@ -30,6 +30,10 @@ struct SettingsView: View {
     @State private var confirmExport: Bool = false
     @State private var confirmImport: Bool = false
     @State private var confirmDedup: Bool = false
+    #if DEBUG
+    @State private var confirmAddSampleData: Bool = false
+    @State private var confirmRemoveSampleData: Bool = false
+    #endif
 
     var body: some View {
         List {
@@ -247,13 +251,29 @@ struct SettingsView: View {
                         Label("Privacy Policy", systemImage: "doc.text")
                     }
                 }
-                
+
+                #if DEBUG
+                Section("Debug") {
+                    Button {
+                        confirmAddSampleData = true
+                    } label: {
+                        Label("Add Sample Data (1 Month)", systemImage: "plus.rectangle.on.folder")
+                    }
+
+                    Button(role: .destructive) {
+                        confirmRemoveSampleData = true
+                    } label: {
+                        Label("Remove Sample Data", systemImage: "trash")
+                    }
+                }
+                #endif
+
             Section("About") {
                 HStack {
                     Text("Version")
                         .foregroundColor(AppTheme.textColor)
                     Spacer()
-                    Text("1.4.5")
+                    Text("1.0")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -306,6 +326,24 @@ struct SettingsView: View {
             let cloud = PersistenceController.shared.isCloudBacked
             Text(cloud ? "This will remove all data from this device and iCloud for your account. This action cannot be undone." : "This will remove all data on this device. This action cannot be undone.")
         }
+        #if DEBUG
+        .alert("Add Sample Data?", isPresented: $confirmAddSampleData) {
+            Button("Cancel", role: .cancel) {}
+            Button("Add Data") {
+                DebugDataGenerator.generateSampleData(context: modelContext)
+            }
+        } message: {
+            Text("This will add 1 month of realistic sample data including workouts and cardio sessions (no weight entries).")
+        }
+        .alert("Remove Sample Data?", isPresented: $confirmRemoveSampleData) {
+            Button("Cancel", role: .cancel) {}
+            Button("Remove", role: .destructive) {
+                DebugDataGenerator.removeSampleData(context: modelContext)
+            }
+        } message: {
+            Text("This will remove only the sample data that was added via 'Add Sample Data'. Your real data will not be affected.")
+        }
+        #endif
         .ignoresSafeArea(.keyboard)
         // Provide a keyboard toolbar for numeric fields with back/next navigation
         .toolbar { 

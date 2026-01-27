@@ -12,6 +12,7 @@ final class WorkoutSession {
     
     var shouldSaveAsTemplate: Bool = false
     var sourceTemplateID: UUID? // ID of the template this session was created from
+    var isSampleData: Bool = false
     
     init(id: UUID = UUID(), date: Date = Date(), notes: String? = nil, title: String? = nil, shouldSaveAsTemplate: Bool = false, sourceTemplateID: UUID? = nil) {
         self.id = id

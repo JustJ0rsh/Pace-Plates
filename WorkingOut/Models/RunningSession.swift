@@ -17,6 +17,9 @@ final class RunningSession {
     
     // If imported from Health, store the HKWorkout UUID to prevent duplicates and allow deletions
     var healthWorkoutUUID: String? = nil
+
+    // DEBUG-only sample marker (not shown in UI)
+    var isSampleData: Bool = false
     
     // Activity type: "running", "walking", or "hiking"
     var activityType: String = "running"
