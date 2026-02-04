@@ -46,6 +46,17 @@ struct WeatherSummaryView: View {
                 Text("—")
                     .foregroundStyle(AppTheme.secondaryTextColor)
             }
+
+            if vm.summary != nil {
+                Link(destination: URL(string: "https://weatherkit.apple.com/legal-attribution.html")!) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "apple.logo")
+                        Text("Weather")
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                }
+            }
         }
         .floatingTile()
         .onAppear {
