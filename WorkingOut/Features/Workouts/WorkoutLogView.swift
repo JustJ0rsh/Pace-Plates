@@ -167,6 +167,7 @@ struct WorkoutLogView: View {
                     }
                 }
                 .padding(.horizontal, AppTheme.padding)
+                .padding(.top)
         }
         .appBackground(AppTheme.gradientWorkouts)
             .foregroundColor(AppTheme.textColor)

@@ -348,7 +348,7 @@
 				CODE_SIGN_ENTITLEMENTS = RunningWidget/RunningWidgetExtension.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = JK2CCHMR6P;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RunningWidget/Info.plist;
@@ -380,7 +380,7 @@
 				CODE_SIGN_ENTITLEMENTS = RunningWidget/RunningWidgetExtension.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = JK2CCHMR6P;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RunningWidget/Info.plist;
@@ -536,7 +536,7 @@
 				CODE_SIGN_ENTITLEMENTS = WorkingOut/WorkingOut.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_ASSET_PATHS = "\"WorkingOut/Preview Content\"";
 				DEVELOPMENT_TEAM = JK2CCHMR6P;
 				ENABLE_PREVIEWS = YES;
@@ -583,7 +583,7 @@
 				CODE_SIGN_ENTITLEMENTS = WorkingOut/WorkingOut.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_ASSET_PATHS = "\"WorkingOut/Preview Content\"";
 				DEVELOPMENT_TEAM = JK2CCHMR6P;
 				ENABLE_PREVIEWS = YES;
@@ -627,7 +627,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = JK2CCHMR6P;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(SRCROOT)/WorkoutThumbnailExtension/Info.plist";
@@ -652,7 +652,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = JK2CCHMR6P;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(SRCROOT)/WorkoutThumbnailExtension/Info.plist";

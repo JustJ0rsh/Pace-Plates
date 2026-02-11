@@ -365,6 +365,7 @@ struct RunLogView: View {
                     
                 }
                 .padding(.horizontal, AppTheme.padding)
+                .padding(.top)
             }
             .alert("Delete Run?", isPresented: $showDeleteConfirm) {
                 Button("Cancel", role: .cancel) { pendingDeleteIndex = nil }

@@ -136,6 +136,7 @@ struct WeightLogView: View {
                     }
                 }
                 .padding(.horizontal, AppTheme.padding)
+                .padding(.top)
         }
         .appBackground(AppTheme.gradientWeight)
         .foregroundColor(AppTheme.textColor)

@@ -475,6 +475,7 @@ struct HomeView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, AppTheme.padding)
+            .padding(.top)
         }
         .navigationTitle("Home")
         .navigationBarTitleDisplayMode(.inline)

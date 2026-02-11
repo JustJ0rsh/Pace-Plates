@@ -48,13 +48,16 @@ struct WeatherSummaryView: View {
             }
 
             if vm.summary != nil {
-                Link(destination: URL(string: "https://weatherkit.apple.com/legal-attribution.html")!) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "apple.logo")
-                        Text("Weather")
+                HStack {
+                    Spacer()
+                    Link(destination: URL(string: "https://weatherkit.apple.com/legal-attribution.html")!) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "apple.logo")
+                            Text("Weather")
+                        }
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                     }
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
                 }
             }
         }
