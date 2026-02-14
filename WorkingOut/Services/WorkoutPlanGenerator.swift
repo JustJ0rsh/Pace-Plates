@@ -203,47 +203,47 @@ final class WorkoutPlanGenerator {
                         #if canImport(FoundationModels)
                         if #available(iOS 26, *) {
                             do {
-                                print("🎯 Conversation: Attempting Foundation Models respond() API for prompt: \(prompt.prefix(100))...")
+                                print("🎯 Conversation: Using Foundation Models streamResponse() API for prompt: \(safePrompt.prefix(100))...")
 
-                                // Use respond() instead of streamResponse() - this handles tool calling automatically
-                                let response = try await session.respond(to: safePrompt)
-                                print("✅ Conversation Foundation Models respond() completed")
+                                let stream = session.streamResponse(
+                                    to: safePrompt,
+                                    options: GenerationOptions(sampling: .greedy)
+                                )
 
-                                // Convert response to string for processing
-                                let responseText: String
-                                let mirror = Mirror(reflecting: response)
-
-                                // Try to find text content in the response
-                                if let textValue = mirror.children.first(where: { $0.label?.contains("text") == true })?.value as? String {
-                                    responseText = textValue
-                                } else if let contentValue = mirror.children.first(where: { $0.label?.contains("content") == true })?.value as? String {
-                                    responseText = contentValue
-                                } else if let valueValue = mirror.children.first(where: { $0.label?.contains("value") == true })?.value as? String {
-                                    responseText = valueValue
-                                } else {
-                                    responseText = String(describing: response)
+                                var lastSnapshot = ""
+                                var hasStreamedContent = false
+                                for try await partial in stream {
+                                    if Task.isCancelled { break }
+                                    let snapshot = partial.content
+                                    guard !snapshot.isEmpty else { continue }
+                                    let delta: String
+                                    if snapshot.hasPrefix(lastSnapshot) {
+                                        delta = String(snapshot.dropFirst(lastSnapshot.count))
+                                    } else {
+                                        delta = snapshot
+                                    }
+                                    guard !delta.isEmpty else { continue }
+                                    hasStreamedContent = true
+                                    continuation.yield(delta)
+                                    lastSnapshot = snapshot
                                 }
 
-                                // Check if response contains tool call indicators
-                                if responseText.contains("webSearch") || responseText.contains("tool") {
-                                    print("🔍 Conversation tool usage detected in response!")
-                                }
-
-                                // Stream the response as chunks for UI compatibility
-                                var currentIndex = responseText.startIndex
-                                while currentIndex < responseText.endIndex {
-                                    let chunkSize = min(160, responseText.distance(from: currentIndex, to: responseText.endIndex))
-                                    let endIndex = responseText.index(currentIndex, offsetBy: chunkSize)
-                                    let chunk = String(responseText[currentIndex..<endIndex])
-                                    continuation.yield(chunk)
-                                    currentIndex = endIndex
-                                    try? await Task.sleep(nanoseconds: 2_000_000)
+                                if !hasStreamedContent {
+                                    // Fallback if no partial snapshots arrived.
+                                    let response = try await session.respond(
+                                        to: safePrompt,
+                                        options: GenerationOptions(sampling: .greedy)
+                                    )
+                                    let fallbackText = response.content
+                                    if !fallbackText.isEmpty {
+                                        continuation.yield(fallbackText)
+                                    }
                                 }
 
                                 continuation.finish()
                                 return
                             } catch {
-                                print("❌ Conversation respond() failed: \(error.localizedDescription)")
+                                print("❌ Conversation streaming failed: \(error.localizedDescription)")
                                 continuation.finish(throwing: error)
                                 return
                             }
@@ -349,88 +349,57 @@ final class WorkoutPlanGenerator {
                         #if canImport(FoundationModels)
                         if #available(iOS 26, *) {
                             do {
-                                print("🎯 Using Foundation Models respond() API for prompt: \(prompt.prefix(100))...")
+                                let safePrompt = Self.clampPrompt(prompt)
+                                print("🎯 Using Foundation Models streamResponse() API for prompt: \(safePrompt.prefix(100))...")
 
-                                // Use respond() instead of generate() - the generate() API is not available
-                                let response = try await session.respond(to: Self.clampPrompt(prompt))
-                                print("✅ Foundation Models respond() completed")
-                                print("📊 Response type: \(type(of: response))")
+                                let stream = session.streamResponse(
+                                    to: safePrompt,
+                                    options: GenerationOptions(sampling: .greedy)
+                                )
 
-                                // Extract text from Foundation Models response
-                                let responseText: String
-                                let mirror = Mirror(reflecting: response)
-                                
-                                // Log all available properties for debugging
-                                print("🔍 Response properties: \(mirror.children.map { "\($0.label ?? "unknown"): \(type(of: $0.value))" }.joined(separator: ", "))")
-
-                                // Try to find text content in the response
-                                if let textValue = mirror.children.first(where: { $0.label?.contains("text") == true })?.value as? String {
-                                    responseText = textValue
-                                    print("✅ Extracted text from 'text' property: \(responseText.prefix(100))...")
-                                } else if let contentValue = mirror.children.first(where: { $0.label?.contains("content") == true })?.value as? String {
-                                    responseText = contentValue
-                                    print("✅ Extracted text from 'content' property: \(responseText.prefix(100))...")
-                                } else if let valueValue = mirror.children.first(where: { $0.label?.contains("value") == true })?.value as? String {
-                                    responseText = valueValue
-                                    print("✅ Extracted text from 'value' property: \(responseText.prefix(100))...")
-                                } else {
-                                    // Fallback: use string description
-                                    let description = String(describing: response)
-                                    print("⚠️ Could not extract text property, using description: \(description.prefix(100))...")
-                                    
-                                    // Check if description is just the type name (indicates extraction failure)
-                                    if description.hasPrefix("LanguageModelResponse") || description.count < 50 {
-                                        print("❌ Extraction failed - description too short or just type name")
-                                        throw NSError(domain: "WorkoutPlanGenerator", code: -1, 
-                                                    userInfo: [NSLocalizedDescriptionKey: "Failed to extract text from AI response"])
+                                var lastSnapshot = ""
+                                var hasStreamedContent = false
+                                for try await partial in stream {
+                                    if Task.isCancelled { break }
+                                    let snapshot = partial.content
+                                    guard !snapshot.isEmpty else { continue }
+                                    let delta: String
+                                    if snapshot.hasPrefix(lastSnapshot) {
+                                        delta = String(snapshot.dropFirst(lastSnapshot.count))
+                                    } else {
+                                        delta = snapshot
                                     }
-                                    responseText = description
-                                }
-                                
-                                // Validate we have actual content
-                                let trimmedResponse = responseText.trimmingCharacters(in: .whitespacesAndNewlines)
-                                if trimmedResponse.isEmpty {
-                                    print("❌ Response text is empty after extraction")
-                                    throw NSError(domain: "WorkoutPlanGenerator", code: -2,
-                                                userInfo: [NSLocalizedDescriptionKey: "AI generated empty response"])
-                                }
-                                
-                                print("✅ Streaming \(responseText.count) characters to UI...")
-
-                                // Stream the response as chunks for UI compatibility
-                                var currentIndex = responseText.startIndex
-                                while currentIndex < responseText.endIndex {
-                                    let chunkSize = min(160, responseText.distance(from: currentIndex, to: responseText.endIndex))
-                                    let endIndex = responseText.index(currentIndex, offsetBy: chunkSize)
-                                    let chunk = String(responseText[currentIndex..<endIndex])
-                                    continuation.yield(chunk)
-                                    currentIndex = endIndex
-
-                                    // Smaller delay for better perceived latency
-                                    try? await Task.sleep(nanoseconds: 2_000_000) // 2ms
+                                    guard !delta.isEmpty else { continue }
+                                    hasStreamedContent = true
+                                    continuation.yield(delta)
+                                    lastSnapshot = snapshot
                                 }
 
-                                print("✅ Streaming complete, finishing continuation")
+                                if !hasStreamedContent {
+                                    let response = try await session.respond(
+                                        to: safePrompt,
+                                        options: GenerationOptions(sampling: .greedy)
+                                    )
+                                    let fallbackText = response.content
+                                    if fallbackText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                        throw NSError(
+                                            domain: "WorkoutPlanGenerator",
+                                            code: -2,
+                                            userInfo: [NSLocalizedDescriptionKey: "AI generated empty response"]
+                                        )
+                                    }
+                                    continuation.yield(fallbackText)
+                                }
+
                                 continuation.finish()
                                 return
                             } catch {
-                                print("❌ Foundation Models respond() failed: \(error.localizedDescription)")
+                                print("❌ Foundation Models streaming failed: \(error.localizedDescription)")
                                 print("📋 Error details: \(error)")
 
                                 // Show user-friendly error message
                                 let errorMessage = error.localizedDescription
-                                if errorMessage.contains("Failed to extract text") {
-                                    continuation.yield("⚠️ **AI Response Processing Error**\n\n")
-                                    continuation.yield("The AI model completed generation, but the response couldn't be properly extracted. ")
-                                    continuation.yield("This might be due to an API format change.\n\n")
-                                    continuation.yield("**What you can do:**\n")
-                                    continuation.yield("1. Try regenerating the plan\n")
-                                    continuation.yield("2. Use the 'Reset Model Context' button and try again\n")
-                                    continuation.yield("3. Check the console logs for more details\n\n")
-                                    continuation.yield("**Technical details:** \(errorMessage)")
-                                    continuation.finish()
-                                    return
-                                } else if errorMessage.contains("empty response") {
+                                if errorMessage.contains("empty response") {
                                     continuation.yield("⚠️ **No Content Generated**\n\n")
                                     continuation.yield("The AI model completed but didn't generate any content. ")
                                     continuation.yield("This can happen if the request was unclear or too complex.\n\n")

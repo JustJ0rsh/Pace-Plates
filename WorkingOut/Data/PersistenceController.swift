@@ -50,6 +50,8 @@ class PersistenceController {
             WorkoutSession.self,
             ExerciseLog.self,
             RunningSession.self,
+            RunningPlan.self,
+            RunningPlanSession.self,
             WeightEntry.self,
             AIConversation.self,
             WorkoutTemplate.self,

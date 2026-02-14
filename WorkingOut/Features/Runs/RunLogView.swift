@@ -39,6 +39,7 @@ struct RunLogView: View {
     @State private var pendingSwipeDeleteSession: RunningSession? = nil
     @State private var showSwipeDeleteConfirm: Bool = false
     @State private var lockedChartDate: Date? = nil // Keeps summary open until X is clicked
+    @State private var showRunAssistant: Bool = false
     
     // Filters
     private enum TimeRange: String, CaseIterable, Identifiable {
@@ -465,6 +466,15 @@ struct RunLogView: View {
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        showRunAssistant = true
+                    } label: {
+                        Image(systemName: "figure.run.circle")
+                            .font(.system(size: 19, weight: .semibold))
+                            .accessibilityLabel("Running Assistant")
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
                         Button {
                             selectedActivityType = "running"
@@ -521,6 +531,10 @@ struct RunLogView: View {
                 // Load data (HealthKit should already be authorized from tutorial)
                 fetchTodaySteps()
                 scheduleInitialHealthImportIfNeeded()
+                reconcileAssistantPlanCompletions()
+            }
+            .onChange(of: runningSessions.count) { _, _ in
+                reconcileAssistantPlanCompletions()
             }
             .sheet(isPresented: $showRunTracking) {
                 NavigationStack {
@@ -535,6 +549,14 @@ struct RunLogView: View {
                 .appBackground(AppTheme.gradientRuns)
                 .foregroundColor(AppTheme.textColor)
                 .tint(AppTheme.accentColor)
+            }
+            .sheet(isPresented: $showRunAssistant) {
+                RunAssistantContainerView(
+                    onStartRun: {
+                        selectedActivityType = "running"
+                        showRunTracking = true
+                    }
+                )
             }
             .id(appTheme) // Force rebuild when theme changes
     }
@@ -632,6 +654,11 @@ struct RunLogView: View {
         let mins = Int(minutesPerUnit)
         let secs = Int((minutesPerUnit - Double(mins)) * 60)
         return String(format: "%d:%02d/%@", mins, secs, unit)
+    }
+
+    private func reconcileAssistantPlanCompletions() {
+        guard let activePlan = RunAssistantService.shared.activePlan(context: modelContext) else { return }
+        RunAssistantService.shared.reconcileCompletions(activePlan: activePlan, runs: runningSessions, context: modelContext)
     }
 
     // MARK: - Steps and Calories helpers

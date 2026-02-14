@@ -6,6 +6,7 @@ enum ReminderService {
     private static let weekdayKey = "reminderWeekday"
     private static let hourKey = "reminderHour"
     private static let minuteKey = "reminderMinute"
+    private static let runningPlanPrefix = "running_plan_"
 
     static func requestAuthorization(completion: @escaping (Bool) -> Void) {
         let center = UNUserNotificationCenter.current()
@@ -51,6 +52,49 @@ enum ReminderService {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [weightReminderID])
     }
 
+    static func scheduleRunningPlanReminders(planID: UUID, weekdays: [Int], hour: Int, minute: Int, title: String) {
+        let cleanedWeekdays = Array(Set(weekdays.filter { (1...7).contains($0) })).sorted()
+        guard !cleanedWeekdays.isEmpty else {
+            cancelRunningPlanReminders(planID: planID)
+            return
+        }
+
+        requestAuthorization { ok in
+            guard ok else { return }
+
+            cancelRunningPlanReminders(planID: planID)
+
+            let center = UNUserNotificationCenter.current()
+            for weekday in cleanedWeekdays {
+                let content = UNMutableNotificationContent()
+                content.title = "Running Assistant"
+                content.body = "\(title): planned run today."
+                content.sound = .default
+
+                var comps = DateComponents()
+                comps.weekday = weekday
+                comps.hour = hour
+                comps.minute = minute
+
+                let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: true)
+                let identifier = runningPlanIdentifier(planID: planID, weekday: weekday)
+                let req = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+                center.add(req) { error in
+                    if let error {
+                        print("Running plan reminder error: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+    }
+
+    static func cancelRunningPlanReminders(planID: UUID) {
+        let identifiers = (1...7).map { runningPlanIdentifier(planID: planID, weekday: $0) }
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: identifiers)
+        center.removeDeliveredNotifications(withIdentifiers: identifiers)
+    }
+
     static func scheduleIfEnabled() {
         let enabled = UserDefaults.standard.bool(forKey: "enableWeeklyWeightReminder")
         if enabled {
@@ -68,5 +112,9 @@ enum ReminderService {
         } else {
             cancelWeeklyWeightReminder()
         }
+    }
+
+    private static func runningPlanIdentifier(planID: UUID, weekday: Int) -> String {
+        "\(runningPlanPrefix)\(planID.uuidString)_\(weekday)"
     }
 }
