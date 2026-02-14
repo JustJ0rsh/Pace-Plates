@@ -5,6 +5,7 @@ import Charts
 struct WeightLogView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
+    @AppStorage("weightLastHealthImportAt") private var weightLastHealthImportAt: Double = 0
     @Query(sort: [SortDescriptor<WeightEntry>(\.date, order: .reverse)]) private var weightEntries: [WeightEntry] // Added sort
     @State private var showingLogWeightSheet = false // State to control sheet presentation
     @State private var isEditing: Bool = false
@@ -14,6 +15,7 @@ struct WeightLogView: View {
     @State private var lockedChartDate: Date? = nil // Keeps summary open until X is clicked
     @State private var pendingDeleteEntry: WeightEntry? = nil
     @State private var showDeleteConfirm: Bool = false
+    @State private var hasScheduledInitialImport = false
 
     // Time filter
     private enum TimeRange: String, CaseIterable, Identifiable {
@@ -183,14 +185,16 @@ struct WeightLogView: View {
             }
         }
         .onAppear {
-            importHealthWeightsSilently()
+            scheduleInitialHealthImportIfNeeded()
         }
         .id(appTheme) // Force rebuild when theme changes
     }
 
     /// Silent auto-import on view appear (like runs/hikes/walks)
-    private func importHealthWeightsSilently() {
-        Task {
+    private func importHealthWeightsSilently(force: Bool = false) {
+        guard shouldImportHealthWeights(force: force) else { return }
+
+        Task(priority: .utility) {
             do {
                 // Request authorization if needed
                 try await HealthKitManager.shared.requestAuthorization()
@@ -199,14 +203,21 @@ struct WeightLogView: View {
                 let healthWeights = try await HealthKitManager.shared.getWeightHistory()
 
                 // Get existing entry dates (start of day) to avoid duplicates
-                let existingDates = Set(weightEntries.map { Calendar.current.startOfDay(for: $0.date) })
+                let existingDates = await MainActor.run {
+                    Set(weightEntries.map { Calendar.current.startOfDay(for: $0.date) })
+                }
 
                 // Filter out entries that already exist (same day)
                 let newWeights = healthWeights.filter { entry in
                     !existingDates.contains(Calendar.current.startOfDay(for: entry.date))
                 }
 
-                guard !newWeights.isEmpty else { return }
+                guard !newWeights.isEmpty else {
+                    await MainActor.run {
+                        weightLastHealthImportAt = Date().timeIntervalSince1970
+                    }
+                    return
+                }
 
                 // Import new entries silently
                 await MainActor.run {
@@ -227,11 +238,30 @@ struct WeightLogView: View {
                     }
 
                     try? modelContext.save()
+                    weightLastHealthImportAt = Date().timeIntervalSince1970
                 }
             } catch {
                 // Silently ignore errors (like runs/hikes/walks)
             }
         }
+    }
+
+    private func scheduleInitialHealthImportIfNeeded() {
+        guard !hasScheduledInitialImport else { return }
+        hasScheduledInitialImport = true
+
+        Task {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            importHealthWeightsSilently()
+        }
+    }
+
+    private func shouldImportHealthWeights(force: Bool) -> Bool {
+        if force { return true }
+
+        let now = Date().timeIntervalSince1970
+        let minInterval: TimeInterval = 60 * 60 // 1 hour
+        return now - weightLastHealthImportAt >= minInterval
     }
 
     private func chartPrep(entries: [WeightEntry], preferredWeightUnit: String, xDomain: ClosedRange<Date>) -> (

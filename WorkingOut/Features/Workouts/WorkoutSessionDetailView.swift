@@ -71,7 +71,7 @@ struct WorkoutSessionDetailView: View {
                 )
             }
             .padding(.horizontal, AppTheme.padding)
-            .padding(.horizontal, AppTheme.padding)
+            .padding(.top)
         }
         .onChange(of: titleText) { _, _ in
             didEditTitle = true
@@ -127,12 +127,12 @@ struct WorkoutSessionDetailView: View {
                 .padding(.leading, 12)
             }
         }
-        .sheet(isPresented: $showingAddExercise) {
+        .fullScreenCover(isPresented: $showingAddExercise) {
             AddExerciseView(workoutSession: session, onAdd: { log in
                 editingLog = log
             })
         }
-        .sheet(item: $editingLog) { log in
+        .fullScreenCover(item: $editingLog) { log in
             EditExerciseLogView(log: log, isNew: editingLogIsNew)
         }
         .onAppear {

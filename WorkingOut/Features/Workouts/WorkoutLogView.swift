@@ -134,17 +134,30 @@ struct WorkoutLogView: View {
                             }
                             List {
                                 ForEach(workoutSessions) { session in
-                                    NavigationLink {
-                                        WorkoutSessionDetailView(session: session)
-                                    } label: {
-                                        WorkoutSessionRowContent(
-                                            session: session,
-                                            isEditing: isEditing,
-                                            onDelete: {
-                                                pendingDeleteSession = session
-                                                showDeleteConfirm = true
+                                    Group {
+                                        if isEditing {
+                                            WorkoutSessionRowContent(
+                                                session: session,
+                                                isEditing: true,
+                                                onDelete: {
+                                                    pendingDeleteSession = session
+                                                    showDeleteConfirm = true
+                                                }
+                                            )
+                                        } else {
+                                            NavigationLink {
+                                                WorkoutSessionDetailView(session: session)
+                                            } label: {
+                                                WorkoutSessionRowContent(
+                                                    session: session,
+                                                    isEditing: false,
+                                                    onDelete: {
+                                                        pendingDeleteSession = session
+                                                        showDeleteConfirm = true
+                                                    }
+                                                )
                                             }
-                                        )
+                                        }
                                     }
                                     .listRowBackground(Color.clear)
                                     .listRowSeparator(.hidden)

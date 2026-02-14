@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+import HealthKit
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
@@ -18,6 +19,8 @@ struct SettingsView: View {
     @AppStorage("useStructuredPlanView") private var useStructuredPlanView: Bool = false
     @AppStorage("enableWeeklyWeightReminder") private var enableWeeklyWeightReminder: Bool = false
     @AppStorage("showVitalsOnHome") private var showVitalsOnHome: Bool = true
+    @AppStorage("runsLastHealthImportAt") private var runsLastHealthImportAt: Double = 0
+    @AppStorage("weightLastHealthImportAt") private var weightLastHealthImportAt: Double = 0
     @FocusState private var ageFocused: Bool
     @FocusState private var heightFocused: Bool
     @FocusState private var goalWeightFocused: Bool
@@ -30,6 +33,9 @@ struct SettingsView: View {
     @State private var confirmExport: Bool = false
     @State private var confirmImport: Bool = false
     @State private var confirmDedup: Bool = false
+    @State private var isRefreshingHealthData: Bool = false
+    @State private var showHealthSyncResult: Bool = false
+    @State private var healthSyncResultMessage: String = ""
     #if DEBUG
     @State private var confirmAddSampleData: Bool = false
     @State private var confirmRemoveSampleData: Bool = false
@@ -211,6 +217,26 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("Health & Sync") {
+                    Button {
+                        refreshHealthDataNow()
+                    } label: {
+                        HStack(spacing: 10) {
+                            if isRefreshingHealthData {
+                                ProgressView()
+                            } else {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                            }
+                            Text(isRefreshingHealthData ? "Refreshing Health Data..." : "Refresh Health Data Now")
+                        }
+                    }
+                    .disabled(isRefreshingHealthData)
+
+                    Text("Imports recent runs and weight entries from Apple Health.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("Backup") {
                     Button {
                         confirmExport = true
@@ -300,6 +326,11 @@ struct SettingsView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(alertMessage)
+        }
+        .alert("Health Sync", isPresented: $showHealthSyncResult) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(healthSyncResultMessage)
         }
         .alert("Export Data?", isPresented: $confirmExport) {
             Button("Cancel", role: .cancel) {}
@@ -422,6 +453,165 @@ struct SettingsView: View {
                     }
                 }
             }
+        }
+    }
+
+    private func refreshHealthDataNow() {
+        guard !isRefreshingHealthData else { return }
+        isRefreshingHealthData = true
+
+        Task { @MainActor in
+            do {
+                try await HealthKitManager.shared.requestAuthorization()
+
+                let runSummary = try await importRunsFromHealth()
+                let weightsInserted = try await importWeightsFromHealth()
+
+                let now = Date().timeIntervalSince1970
+                runsLastHealthImportAt = now
+                weightLastHealthImportAt = now
+
+                healthSyncResultMessage = "Runs: +\(runSummary.inserted) imported, \(runSummary.linked) linked, \(runSummary.skipped) skipped. Weights: +\(weightsInserted) imported."
+            } catch {
+                healthSyncResultMessage = "Health refresh failed: \(error.localizedDescription)"
+            }
+
+            isRefreshingHealthData = false
+            showHealthSyncResult = true
+        }
+    }
+
+    @MainActor
+    private func importRunsFromHealth(limit: Int = 100) async throws -> (inserted: Int, linked: Int, skipped: Int) {
+        let workouts = try await HealthKitManager.shared.fetchRecentRuns(limit: limit)
+        var allRuns = try modelContext.fetch(FetchDescriptor<RunningSession>())
+        var existingUUIDs = Set(allRuns.compactMap(\.healthWorkoutUUID).filter { !$0.isEmpty })
+
+        let unit = distanceUnit
+        var inserted = 0
+        var linked = 0
+        var skipped = 0
+
+        for workout in workouts {
+            let uuidStr = workout.uuid.uuidString
+            if existingUUIDs.contains(uuidStr) {
+                skipped += 1
+                continue
+            }
+
+            guard let activityType = activityKey(for: workout.workoutActivityType) else {
+                skipped += 1
+                continue
+            }
+
+            let meters = workout.totalDistance?.doubleValue(for: .meter()) ?? 0
+            let distanceValue: Double = (unit == "mi") ? (meters / 1609.34) : (meters / 1000.0)
+            let endDate = workout.endDate
+            let duration = workout.duration
+            let calories = try? await HealthKitManager.shared.activeEnergyKilocalories(for: workout)
+
+            if let similar = findSimilarRun(
+                in: allRuns,
+                endDate: endDate,
+                duration: duration,
+                distance: distanceValue,
+                unit: unit
+            ) {
+                similar.healthWorkoutUUID = uuidStr
+                similar.activityType = activityType
+                if let calories, calories > 0 {
+                    similar.calories = calories
+                }
+                linked += 1
+            } else {
+                let run = RunningSession(
+                    date: endDate,
+                    distance: distanceValue,
+                    distanceUnit: unit,
+                    duration: duration,
+                    calories: (calories ?? 0) > 0 ? calories : nil,
+                    notes: nil,
+                    locations: nil,
+                    healthWorkoutUUID: uuidStr,
+                    activityType: activityType
+                )
+                modelContext.insert(run)
+                allRuns.append(run)
+                inserted += 1
+            }
+
+            existingUUIDs.insert(uuidStr)
+        }
+
+        if inserted > 0 || linked > 0 {
+            try modelContext.save()
+        }
+
+        return (inserted, linked, skipped)
+    }
+
+    @MainActor
+    private func importWeightsFromHealth() async throws -> Int {
+        let history = try await HealthKitManager.shared.getWeightHistory()
+        let existing = try modelContext.fetch(FetchDescriptor<WeightEntry>())
+        var existingDays = Set(existing.map { Calendar.current.startOfDay(for: $0.date) })
+
+        var inserted = 0
+        for item in history {
+            let day = Calendar.current.startOfDay(for: item.date)
+            if existingDays.contains(day) { continue }
+
+            let value: Double
+            let unit: String
+            if weightUnit == "kg" {
+                value = item.weightInPounds / 2.20462
+                unit = "kg"
+            } else {
+                value = item.weightInPounds
+                unit = "lbs"
+            }
+
+            modelContext.insert(WeightEntry(date: item.date, weight: value, weightUnit: unit))
+            existingDays.insert(day)
+            inserted += 1
+        }
+
+        if inserted > 0 {
+            try modelContext.save()
+        }
+
+        return inserted
+    }
+
+    private func findSimilarRun(
+        in runs: [RunningSession],
+        endDate: Date,
+        duration: TimeInterval,
+        distance: Double,
+        unit: String
+    ) -> RunningSession? {
+        let window: TimeInterval = 120
+        let distanceTolerance: Double = 0.07
+        let durationTolerance: TimeInterval = 180
+
+        return runs.first {
+            abs($0.date.timeIntervalSince(endDate)) <= window &&
+            abs($0.duration - duration) <= durationTolerance &&
+            $0.distanceUnit == unit &&
+            abs($0.distance - distance) <= distanceTolerance
+        }
+    }
+
+    private func activityKey(for type: HKWorkoutActivityType) -> String? {
+        switch type {
+        case .running: return "running"
+        case .walking: return "walking"
+        case .hiking: return "hiking"
+        case .cycling: return "cycling"
+        case .rowing: return "rowing"
+        case .elliptical: return "elliptical"
+        case .stairClimbing: return "stairClimbing"
+        default: return nil
         }
     }
     

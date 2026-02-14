@@ -8,6 +8,7 @@ import Charts
 struct RunLogView: View {
     @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
     @AppStorage("distanceUnit") private var preferredDistanceUnit: String = "mi"
+    @AppStorage("runsLastHealthImportAt") private var runsLastHealthImportAt: Double = 0
     // Helper type for chart points
     private struct DailyPoint: Identifiable {
         let date: Date
@@ -26,6 +27,9 @@ struct RunLogView: View {
     @State private var selectedActivityType: String = "running"
     @State private var stepsToday: Int? = nil
     @State private var requestedLocationAuthOnce = false
+    @State private var hasScheduledInitialImport = false
+    @State private var pendingEnrichmentUUIDs: Set<String> = []
+    @State private var enrichmentTask: Task<Void, Never>? = nil
     private let healthStore = HKHealthStore()
     @State private var pendingDeleteIndex: Int? = nil
     @State private var showDeleteConfirm: Bool = false
@@ -516,7 +520,7 @@ struct RunLogView: View {
                 }
                 // Load data (HealthKit should already be authorized from tutorial)
                 fetchTodaySteps()
-                importHealthRuns()
+                scheduleInitialHealthImportIfNeeded()
             }
             .sheet(isPresented: $showRunTracking) {
                 NavigationStack {
@@ -707,11 +711,31 @@ struct RunLogView: View {
     }
 
     // MARK: - HealthKit import
-    private func importHealthRuns(limit: Int = 30) {
-        Task { @MainActor in
+    private func importHealthRuns(limit: Int = 30, force: Bool = false) {
+        guard shouldImportHealthRuns(force: force) else { return }
+
+        Task(priority: .utility) {
             do {
                 // Try to fetch recent workouts (will no-op if not authorized)
                 let workouts = try await HealthKitManager.shared.fetchRecentRuns(limit: limit)
+                let existingRuns = await MainActor.run {
+                    runningSessions.map {
+                        ExistingRunSnapshot(
+                            id: $0.id,
+                            date: $0.date,
+                            distance: $0.distance,
+                            distanceUnit: $0.distanceUnit,
+                            duration: $0.duration,
+                            healthWorkoutUUID: $0.healthWorkoutUUID
+                        )
+                    }
+                }
+
+                var existingUUIDs = Set(existingRuns.compactMap(\.healthWorkoutUUID))
+                let runLookup = existingRuns
+                var actions: [RunImportAction] = []
+                var uuidsToEnrich = Set<String>()
+
                 for w in workouts {
                     // Map HK activity to our string type
                     let activityType: String
@@ -731,95 +755,65 @@ struct RunLogView: View {
                     let unit = preferredDistanceUnit // from @AppStorage
                     let value: Double = (unit == "mi") ? (meters / 1609.34) : (meters / 1000.0)
                     let uuidStr = w.uuid.uuidString
-                    // If we already have this workout, skip import
-                    var fd = FetchDescriptor<RunningSession>(predicate: #Predicate { $0.healthWorkoutUUID == uuidStr })
-                    fd.fetchLimit = 1
-                    if let existing = try? modelContext.fetch(fd), existing.isEmpty == false {
-                        continue
-                    }
+                    if existingUUIDs.contains(uuidStr) { continue }
+
+                    existingUUIDs.insert(uuidStr)
+
                     // Attempt to match a similar local run (e.g., tracked via phone) and attach the UUID
-                    if let similar = findSimilarRun(endDate: end, duration: duration, distance: value, unit: unit) {
-                        similar.healthWorkoutUUID = uuidStr
-                        similar.activityType = activityType
-                        if let kcal = try? await HealthKitManager.shared.activeEnergyKilocalories(for: w), kcal > 0 {
-                            similar.calories = kcal
-                        }
-                        // Optionally attach route to similar item
-                        if similar.locations.isEmpty, let locs = try? await HealthKitManager.shared.routeLocations(for: w), !locs.isEmpty {
-                            let reduced = downsampleLocations(locs)
-                            let coords = reduced.map { RunCoordinate(latitude: $0.coordinate.latitude, longitude: $0.coordinate.longitude) }
-                            similar.locations = (try? JSONEncoder().encode(coords)) ?? Data()
-                        }
-                    } else {
-                        // Create new item
-                        var routeData: Data? = nil
-                        var elevationMetrics: (ascent: Double, descent: Double, min: Double, max: Double)? = nil
-                        
-                        let kcal = try? await HealthKitManager.shared.activeEnergyKilocalories(for: w)
-                        
-                        if let locs = try? await HealthKitManager.shared.routeLocations(for: w), !locs.isEmpty {
-                            let reduced = downsampleLocations(locs)
-                            let coords = reduced.map { 
-                                RunCoordinate(latitude: $0.coordinate.latitude, 
-                                            longitude: $0.coordinate.longitude,
-                                            altitude: $0.altitude,
-                                            timestamp: $0.timestamp) 
-                            }
-                            routeData = try? JSONEncoder().encode(coords)
-                            
-                            // Calculate elevation from the route
-                            elevationMetrics = ElevationCalculator.calculateElevationMetrics(from: coords)
-                        }
-                        
-                        // Fetch heart rate metrics
-                        let avgHR = try? await HealthKitManager.shared.averageHeartRate(for: w)
-                        let maxHR = try? await HealthKitManager.shared.maxHeartRate(for: w)
-                        let minHR = try? await HealthKitManager.shared.minHeartRate(for: w)
-                        
-                        // Fetch running dynamics
-                        let avgCadence = try? await HealthKitManager.shared.averageCadence(for: w)
-                        let maxCadence = try? await HealthKitManager.shared.maxCadence(for: w)
-                        let avgPower = try? await HealthKitManager.shared.averagePower(for: w)
-                        let maxPower = try? await HealthKitManager.shared.maxPower(for: w)
-                        
-                        let model = RunningSession(
-                            date: end, 
-                            distance: value, 
-                            distanceUnit: unit, 
-                            duration: duration, 
-                            calories: (kcal ?? 0) > 0 ? kcal : nil, 
-                            notes: nil, 
-                            locations: routeData, 
-                            healthWorkoutUUID: uuidStr, 
+                    if let similarId = findSimilarRunID(
+                        in: runLookup,
+                        endDate: end,
+                        duration: duration,
+                        distance: value,
+                        unit: unit
+                    ) {
+                        let kcal: Double? = nil
+                        actions.append(.update(
+                            sessionID: similarId,
+                            healthWorkoutUUID: uuidStr,
                             activityType: activityType,
-                            avgHeartRate: avgHR,
-                            maxHeartRate: maxHR,
-                            minHeartRate: minHR,
-                            avgCadence: avgCadence,
-                            maxCadence: maxCadence,
-                            totalAscent: elevationMetrics?.ascent,
-                            totalDescent: elevationMetrics?.descent,
-                            minElevation: elevationMetrics?.min,
-                            maxElevation: elevationMetrics?.max,
-                            avgPower: avgPower,
-                            maxPower: maxPower
-                        )
-                        modelContext.insert(model)
+                            calories: kcal,
+                            locations: nil
+                        ))
+                        uuidsToEnrich.insert(uuidStr)
+                    } else {
+                        let kcal: Double? = nil
+                        actions.append(.insert(
+                            NewRunPayload(
+                                date: end,
+                                distance: value,
+                                distanceUnit: unit,
+                                duration: duration,
+                                calories: (kcal ?? 0) > 0 ? kcal : nil,
+                                locations: nil,
+                                healthWorkoutUUID: uuidStr,
+                                activityType: activityType,
+                                avgHeartRate: nil,
+                                maxHeartRate: nil,
+                                minHeartRate: nil,
+                                avgCadence: nil,
+                                maxCadence: nil,
+                                totalAscent: nil,
+                                totalDescent: nil,
+                                minElevation: nil,
+                                maxElevation: nil,
+                                avgPower: nil,
+                                maxPower: nil
+                            )
+                        ))
+                        uuidsToEnrich.insert(uuidStr)
                     }
                 }
-                try? modelContext.save()
+
+                await MainActor.run {
+                    applyImportActions(actions)
+                    runsLastHealthImportAt = Date().timeIntervalSince1970
+                    scheduleDeferredEnrichment(for: Array(uuidsToEnrich))
+                }
             } catch {
                 // Ignore errors silently; user may not have granted permission yet
             }
         }
-    }
-
-    private func findSimilarRun(endDate: Date, duration: TimeInterval, distance: Double, unit: String) -> RunningSession? {
-        // Consider a run similar if end dates within 2 minutes and distance within ~0.07 units
-        let window: TimeInterval = 120
-        let tol: Double = 0.07
-        let all: [RunningSession] = (try? modelContext.fetch(FetchDescriptor<RunningSession>())) ?? []
-        return all.first { abs($0.date.timeIntervalSince(endDate)) < window && $0.distanceUnit == unit && abs($0.distance - distance) < tol }
     }
     
     // Reduce number of points to speed map rendering/storage. Keep up to ~1200 points and at least 5 m apart
@@ -834,6 +828,218 @@ struct RunLogView: View {
             if reduced.count >= maxPoints { break }
         }
         return reduced
+    }
+
+    private func scheduleInitialHealthImportIfNeeded() {
+        guard !hasScheduledInitialImport else { return }
+        hasScheduledInitialImport = true
+
+        Task {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            importHealthRuns()
+        }
+    }
+
+    private func shouldImportHealthRuns(force: Bool) -> Bool {
+        if force { return true }
+
+        let now = Date().timeIntervalSince1970
+        let minInterval: TimeInterval = 60 * 60 // 1 hour
+        return now - runsLastHealthImportAt >= minInterval
+    }
+
+    @MainActor
+    private func applyImportActions(_ actions: [RunImportAction]) {
+        guard !actions.isEmpty else { return }
+
+        let sessionsById = Dictionary(uniqueKeysWithValues: runningSessions.map { ($0.id, $0) })
+
+        for action in actions {
+            switch action {
+            case let .update(sessionID, uuid, activityType, calories, locations):
+                guard let similar = sessionsById[sessionID] else { continue }
+                similar.healthWorkoutUUID = uuid
+                similar.activityType = activityType
+                if let calories, calories > 0 { similar.calories = calories }
+                if similar.locations.isEmpty, let locations, !locations.isEmpty {
+                    similar.locations = locations
+                }
+
+            case let .insert(payload):
+                let model = RunningSession(
+                    date: payload.date,
+                    distance: payload.distance,
+                    distanceUnit: payload.distanceUnit,
+                    duration: payload.duration,
+                    calories: payload.calories,
+                    notes: nil,
+                    locations: payload.locations,
+                    healthWorkoutUUID: payload.healthWorkoutUUID,
+                    activityType: payload.activityType,
+                    avgHeartRate: payload.avgHeartRate,
+                    maxHeartRate: payload.maxHeartRate,
+                    minHeartRate: payload.minHeartRate,
+                    avgCadence: payload.avgCadence,
+                    maxCadence: payload.maxCadence,
+                    totalAscent: payload.totalAscent,
+                    totalDescent: payload.totalDescent,
+                    minElevation: payload.minElevation,
+                    maxElevation: payload.maxElevation,
+                    avgPower: payload.avgPower,
+                    maxPower: payload.maxPower
+                )
+                modelContext.insert(model)
+            }
+        }
+
+        try? modelContext.save()
+    }
+
+    private func findSimilarRunID(
+        in runs: [ExistingRunSnapshot],
+        endDate: Date,
+        duration: TimeInterval,
+        distance: Double,
+        unit: String
+    ) -> UUID? {
+        let window: TimeInterval = 120
+        let distanceTolerance: Double = 0.07
+        let durationTolerance: TimeInterval = 180
+
+        return runs.first {
+            abs($0.date.timeIntervalSince(endDate)) <= window &&
+            abs($0.duration - duration) <= durationTolerance &&
+            $0.distanceUnit == unit &&
+            abs($0.distance - distance) <= distanceTolerance
+        }?.id
+    }
+
+    @MainActor
+    private func scheduleDeferredEnrichment(for uuids: [String]) {
+        for uuid in uuids where !uuid.isEmpty {
+            pendingEnrichmentUUIDs.insert(uuid)
+        }
+
+        guard enrichmentTask == nil else { return }
+
+        enrichmentTask = Task(priority: .utility) {
+            // Let first render/nav settle before detail fetch work starts.
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+
+            let maxPerPass = 4
+            var processed = 0
+
+            while processed < maxPerPass {
+                if Task.isCancelled { break }
+
+                let nextUUID = await MainActor.run { pendingEnrichmentUUIDs.first }
+                guard let nextUUID else { break }
+
+                await MainActor.run { _ = pendingEnrichmentUUIDs.remove(nextUUID) }
+                await enrichRunDetails(forWorkoutUUID: nextUUID)
+                processed += 1
+            }
+
+            await MainActor.run {
+                enrichmentTask = nil
+                if !pendingEnrichmentUUIDs.isEmpty {
+                    scheduleDeferredEnrichment(for: [])
+                }
+            }
+        }
+    }
+
+    private func enrichRunDetails(forWorkoutUUID uuid: String) async {
+        let needs = await MainActor.run { enrichmentNeeds(forWorkoutUUID: uuid) }
+        guard let needs, needs.requiresAnyFetch else { return }
+
+        do {
+            guard let workout = try await HealthKitManager.shared.workoutForUUID(uuid) else { return }
+
+            var routeData: Data? = nil
+            var elevationMetrics: (ascent: Double, descent: Double, min: Double, max: Double)? = nil
+
+            if needs.needsRoute || needs.needsElevation {
+                if let locs = try? await HealthKitManager.shared.routeLocations(for: workout), !locs.isEmpty {
+                    let reduced = downsampleLocations(locs)
+                    let coords = reduced.map {
+                        RunCoordinate(
+                            latitude: $0.coordinate.latitude,
+                            longitude: $0.coordinate.longitude,
+                            altitude: $0.altitude,
+                            timestamp: $0.timestamp
+                        )
+                    }
+                    routeData = try? JSONEncoder().encode(coords)
+                    elevationMetrics = ElevationCalculator.calculateElevationMetrics(from: coords)
+                }
+            }
+
+            var calories: Double? = nil
+            if needs.needsCalories {
+                calories = try? await HealthKitManager.shared.activeEnergyKilocalories(for: workout)
+            }
+
+            let avgHeartRate = needs.needsHeartRate ? (try? await HealthKitManager.shared.averageHeartRate(for: workout)) : nil
+            let maxHeartRate = needs.needsHeartRate ? (try? await HealthKitManager.shared.maxHeartRate(for: workout)) : nil
+            let minHeartRate = needs.needsHeartRate ? (try? await HealthKitManager.shared.minHeartRate(for: workout)) : nil
+
+            let avgCadence = needs.needsCadence ? (try? await HealthKitManager.shared.averageCadence(for: workout)) : nil
+            let maxCadence = needs.needsCadence ? (try? await HealthKitManager.shared.maxCadence(for: workout)) : nil
+
+            let avgPower = needs.needsPower ? (try? await HealthKitManager.shared.averagePower(for: workout)) : nil
+            let maxPower = needs.needsPower ? (try? await HealthKitManager.shared.maxPower(for: workout)) : nil
+
+            await MainActor.run {
+                guard let session = runningSessions.first(where: { $0.healthWorkoutUUID == uuid }) else { return }
+
+                if let calories, calories > 0 { session.calories = calories }
+
+                if needs.needsRoute, session.locations.isEmpty, let routeData, !routeData.isEmpty {
+                    session.locations = routeData
+                }
+
+                if needs.needsHeartRate {
+                    if session.avgHeartRate == nil, let avgHeartRate { session.avgHeartRate = avgHeartRate }
+                    if session.maxHeartRate == nil, let maxHeartRate { session.maxHeartRate = maxHeartRate }
+                    if session.minHeartRate == nil, let minHeartRate { session.minHeartRate = minHeartRate }
+                }
+
+                if needs.needsCadence {
+                    if session.avgCadence == nil, let avgCadence { session.avgCadence = avgCadence }
+                    if session.maxCadence == nil, let maxCadence { session.maxCadence = maxCadence }
+                }
+
+                if needs.needsPower {
+                    if session.avgPower == nil, let avgPower { session.avgPower = avgPower }
+                    if session.maxPower == nil, let maxPower { session.maxPower = maxPower }
+                }
+
+                if needs.needsElevation, let elevationMetrics {
+                    if session.totalAscent == nil { session.totalAscent = elevationMetrics.ascent }
+                    if session.totalDescent == nil { session.totalDescent = elevationMetrics.descent }
+                    if session.minElevation == nil { session.minElevation = elevationMetrics.min }
+                    if session.maxElevation == nil { session.maxElevation = elevationMetrics.max }
+                }
+
+                try? modelContext.save()
+            }
+        } catch {
+            // Best-effort enrichment only.
+        }
+    }
+
+    @MainActor
+    private func enrichmentNeeds(forWorkoutUUID uuid: String) -> RunEnrichmentNeeds? {
+        guard let session = runningSessions.first(where: { $0.healthWorkoutUUID == uuid }) else { return nil }
+        return RunEnrichmentNeeds(
+            needsCalories: (session.calories ?? 0) <= 0,
+            needsRoute: session.locations.isEmpty,
+            needsHeartRate: session.avgHeartRate == nil || session.maxHeartRate == nil || session.minHeartRate == nil,
+            needsCadence: session.avgCadence == nil || session.maxCadence == nil,
+            needsPower: session.avgPower == nil || session.maxPower == nil,
+            needsElevation: session.totalAscent == nil || session.totalDescent == nil || session.minElevation == nil || session.maxElevation == nil
+        )
     }
     
     private func prefetchLocationNames() {
@@ -882,6 +1088,61 @@ struct RunLogView: View {
             hasPrefetchedLocations = true
         }
     }
+}
+
+private struct ExistingRunSnapshot {
+    let id: UUID
+    let date: Date
+    let distance: Double
+    let distanceUnit: String
+    let duration: TimeInterval
+    let healthWorkoutUUID: String?
+}
+
+private struct RunEnrichmentNeeds {
+    let needsCalories: Bool
+    let needsRoute: Bool
+    let needsHeartRate: Bool
+    let needsCadence: Bool
+    let needsPower: Bool
+    let needsElevation: Bool
+
+    var requiresAnyFetch: Bool {
+        needsCalories || needsRoute || needsHeartRate || needsCadence || needsPower || needsElevation
+    }
+}
+
+private struct NewRunPayload {
+    let date: Date
+    let distance: Double
+    let distanceUnit: String
+    let duration: TimeInterval
+    let calories: Double?
+    let locations: Data?
+    let healthWorkoutUUID: String
+    let activityType: String
+    let avgHeartRate: Double?
+    let maxHeartRate: Double?
+    let minHeartRate: Double?
+    let avgCadence: Double?
+    let maxCadence: Double?
+    let totalAscent: Double?
+    let totalDescent: Double?
+    let minElevation: Double?
+    let maxElevation: Double?
+    let avgPower: Double?
+    let maxPower: Double?
+}
+
+private enum RunImportAction {
+    case update(
+        sessionID: UUID,
+        healthWorkoutUUID: String,
+        activityType: String,
+        calories: Double?,
+        locations: Data?
+    )
+    case insert(NewRunPayload)
 }
 
 // MARK: - Optimized Run Session Row Content

@@ -281,7 +281,8 @@ struct EditExerciseLogView: View {
                     Button("Done") { saveAndDismiss() }
                 }
             }
-            .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
+            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
             .background {
                 AppTheme.gradientWorkouts
