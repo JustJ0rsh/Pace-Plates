@@ -26,7 +26,7 @@ struct WorkoutDetailsTile: View {
                         get: { session.shouldSaveAsTemplate },
                         set: { newValue in
                             session.shouldSaveAsTemplate = newValue
-                            try? modelContext.save()
+                            _ = PersistenceSave.commit(modelContext, action: "save changes")
                         }
                     ))
                     .toggleStyle(SwitchToggleStyle(tint: .green))
@@ -152,7 +152,7 @@ struct WorkoutExercisesTile: View {
                                         next.workoutSession = session
                                         next.isIsolated = base.isIsolated
                                         if var arr = session.exerciseLogs { arr.append(next); session.exerciseLogs = arr } else { session.exerciseLogs = [next] }
-                                        try? modelContext.save()
+                                        _ = PersistenceSave.commit(modelContext, action: "save changes")
                                         editingLog = next
                                         editingLogIsNew = true
                                     }
@@ -204,7 +204,7 @@ struct WorkoutSessionExerciseRow: View {
                 if session.sourceTemplateID != nil {
                     Button {
                         log.isCompleted.toggle()
-                        try? modelContext.save()
+                        _ = PersistenceSave.commit(modelContext, action: "save changes")
                     } label: {
                         Image(systemName: log.isCompleted ? "checkmark.circle.fill" : "circle")
                             .font(.title2)

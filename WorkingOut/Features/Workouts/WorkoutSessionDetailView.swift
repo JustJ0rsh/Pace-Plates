@@ -82,7 +82,7 @@ struct WorkoutSessionDetailView: View {
                 Text("Select Workout Date").font(.headline)
                 DatePicker("Date", selection: Binding(get: { session.date }, set: { newValue in
                     session.date = newValue
-                    try? modelContext.save()
+                    _ = PersistenceSave.commit(modelContext, action: "save changes")
                 }), displayedComponents: [.date])
                 .datePickerStyle(.graphical)
                 .tint(AppTheme.accentColor)
@@ -147,7 +147,7 @@ struct WorkoutSessionDetailView: View {
             let work = DispatchWorkItem { [session, modelContext] in
                 if session.notes != notesBuffer {
                     session.notes = notesBuffer
-                    try? modelContext.save()
+                    _ = PersistenceSave.commit(modelContext, action: "save changes")
                 }
             }
             saveWorkItem = work
@@ -163,7 +163,7 @@ struct WorkoutSessionDetailView: View {
             if didEditTitle, session.title != titleText {
                 session.title = titleText
             }
-            try? modelContext.save()
+            _ = PersistenceSave.commit(modelContext, action: "save changes")
 
             // Report Game Center leaderboards for strength PRs and session volume
             GameCenterService.shared.reportStrengthForSession(
@@ -183,7 +183,7 @@ struct WorkoutSessionDetailView: View {
                 let hasTitle = didEditTitle && !titleTrim.isEmpty
                 if !(hasExercises || hasNotes || hasTitle) {
                     modelContext.delete(session)
-                    try? modelContext.save()
+                    _ = PersistenceSave.commit(modelContext, action: "save changes")
                 }
             }
             
@@ -198,7 +198,7 @@ struct WorkoutSessionDetailView: View {
                         // Create new template and link it
                         let newTemplate = WorkoutTemplateService.shared.createTemplateFromWorkout(session: session, context: modelContext)
                         session.generatedTemplate = newTemplate
-                        try? modelContext.save()
+                        _ = PersistenceSave.commit(modelContext, action: "save changes")
                     }
                 }
             }
@@ -212,14 +212,14 @@ struct WorkoutSessionDetailView: View {
         for index in offsets { modelContext.delete(logs[index]) }
         logs.remove(atOffsets: offsets)
         session.exerciseLogs = logs
-        try? modelContext.save()
+        _ = PersistenceSave.commit(modelContext, action: "save changes")
     }
     
     private func deleteExerciseLog(_ log: ExerciseLog) {
         let name = log.exerciseName
         modelContext.delete(log)
         renumberSets(for: name)
-        try? modelContext.save()
+        _ = PersistenceSave.commit(modelContext, action: "save changes")
     }
     
     private func duplicateExerciseLog(_ log: ExerciseLog) {
@@ -235,7 +235,7 @@ struct WorkoutSessionDetailView: View {
         copy.workoutSession = session
         copy.isIsolated = log.isIsolated
         if var arr = session.exerciseLogs { arr.append(copy); session.exerciseLogs = arr } else { session.exerciseLogs = [copy] }
-        try? modelContext.save()
+        _ = PersistenceSave.commit(modelContext, action: "save changes")
     }
 
     // Renumber setNumber for an exercise so they stay 1..N in order
@@ -249,7 +249,7 @@ struct WorkoutSessionDetailView: View {
     private func saveNotes(_ newValue: String) {
         if session.notes != newValue {
             session.notes = newValue
-            try? modelContext.save()
+            _ = PersistenceSave.commit(modelContext, action: "save changes")
         }
     }
     
@@ -257,7 +257,7 @@ struct WorkoutSessionDetailView: View {
         let toDelete = (session.exerciseLogs ?? []).filter { ($0.exerciseName ?? "") == name }
         for item in toDelete { modelContext.delete(item) }
         if var arr = session.exerciseLogs { arr.removeAll { ($0.exerciseName ?? "") == name }; session.exerciseLogs = arr }
-        try? modelContext.save()
+        _ = PersistenceSave.commit(modelContext, action: "save changes")
     }
     
     /// Removes any empty sets (0 reps for strength, 0 duration for cardio)
@@ -300,7 +300,7 @@ struct WorkoutSessionDetailView: View {
                 }
                 session.exerciseLogs = arr
             }
-            try? modelContext.save()
+            _ = PersistenceSave.commit(modelContext, action: "save changes")
         }
     }
 

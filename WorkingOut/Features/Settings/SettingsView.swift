@@ -831,7 +831,7 @@ extension SettingsView {
             // Convert goal weight lbs -> kg (1 dec)
             targetWeight = ((targetWeight / 2.20462) * 10).rounded() / 10.0
         }
-        try? modelContext.save()
+        _ = PersistenceSave.commit(modelContext, action: "save changes")
     }
 
     // MARK: - Height Picker

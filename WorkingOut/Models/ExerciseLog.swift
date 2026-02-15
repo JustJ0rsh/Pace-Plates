@@ -84,20 +84,6 @@ final class ExerciseLog {
         isIsolated ? "\(reps) x 2" : "\(reps) reps"
     }
 
-    // Offer the isolation toggle for common unilateral keywords or any user-created exercise
-    var shouldOfferIsolationToggle: Bool {
-        let lowerName = exerciseName?.lowercased() ?? ""
-        let isolationTokens = [
-            " iso", "iso ", "iso-", "isolated", "isolation",
-            " uni", "uni ", "uni-", "unilateral",
-            " single", "single-", "single ", "single-arm", "single arm", "single-leg", "single leg",
-            " one-arm", " one arm", "1-arm", "1 arm"
-        ]
-        let keywordMatch = isolationTokens.contains { lowerName.contains($0) }
-        let isUserDefined = exerciseDefinition?.isUserDefined ?? false
-        return keywordMatch || isUserDefined
-    }
-    
     var formattedDuration: String? {
         guard let seconds = durationSeconds else { return nil }
         let minutes = seconds / 60

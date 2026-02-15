@@ -42,6 +42,7 @@ struct WorkoutLogView: View {
     @State private var lockedChartDate: Date? = nil // Keeps summary open until X is clicked
     @State private var pendingDeleteSession: WorkoutSession? = nil
     @State private var showDeleteConfirm: Bool = false
+    @State private var saveErrorMessage: String? = nil
     
     // Dynamic chart domain
     private var last7DaysDomain: ClosedRange<Date> {
@@ -132,7 +133,7 @@ struct WorkoutLogView: View {
                                 Text("Workouts")
                                     .font(.headline)
                             }
-                            List {
+                            LazyVStack(spacing: 0) {
                                 ForEach(workoutSessions) { session in
                                     Group {
                                         if isEditing {
@@ -159,9 +160,7 @@ struct WorkoutLogView: View {
                                             }
                                         }
                                     }
-                                    .listRowBackground(Color.clear)
-                                    .listRowSeparator(.hidden)
-                                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                                    .padding(.vertical, 8)
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                         Button(role: .destructive) {
                                             pendingDeleteSession = session
@@ -172,9 +171,6 @@ struct WorkoutLogView: View {
                                     }
                                 }
                             }
-                            .listStyle(.plain)
-                            .scrollDisabled(true)
-                            .frame(height: CGFloat(workoutSessions.count) * 55)
                         }
                         .floatingTile()
                     }
@@ -237,7 +233,11 @@ struct WorkoutLogView: View {
                     if let session = pendingDeleteSession {
                         withAnimation {
                             modelContext.delete(session)
-                            try? modelContext.save()
+                            _ = PersistenceSave.commit(
+                                modelContext,
+                                action: "delete workout session",
+                                onFailure: { message in saveErrorMessage = message }
+                            )
                         }
                     }
                     pendingDeleteSession = nil
@@ -248,6 +248,16 @@ struct WorkoutLogView: View {
                     Text("Delete \"\(title)\" and all its exercise logs?")
                 }
             }
+            .background {
+                Color.clear.alert("Save Failed", isPresented: Binding(
+                    get: { saveErrorMessage != nil },
+                    set: { if !$0 { saveErrorMessage = nil } }
+                )) {
+                    Button("OK", role: .cancel) { saveErrorMessage = nil }
+                } message: {
+                    Text(saveErrorMessage ?? "Couldn’t save your changes. Please try again.")
+                }
+            }
             .id(appTheme) // Force rebuild when theme changes
     }
 
@@ -256,7 +266,14 @@ struct WorkoutLogView: View {
     private func addWorkoutSession() {
         let newSession = WorkoutSession()
         modelContext.insert(newSession)
-        try? modelContext.save()
+        guard PersistenceSave.commit(
+            modelContext,
+            action: "create workout session",
+            onFailure: { message in saveErrorMessage = message }
+        ) else {
+            modelContext.delete(newSession)
+            return
+        }
         // Trigger navigation to the new session's detail view
         newlyCreatedSessionID = newSession.id
         pastSessionID = nil
@@ -266,7 +283,14 @@ struct WorkoutLogView: View {
     private func addPastWorkoutSession() {
         let newSession = WorkoutSession()
         modelContext.insert(newSession)
-        try? modelContext.save()
+        guard PersistenceSave.commit(
+            modelContext,
+            action: "create past workout session",
+            onFailure: { message in saveErrorMessage = message }
+        ) else {
+            modelContext.delete(newSession)
+            return
+        }
         newlyCreatedSessionID = newSession.id
         pastSessionID = newSession.id
         newSessionToOpen = newSession
@@ -275,18 +299,15 @@ struct WorkoutLogView: View {
     private func deleteWorkoutSessions(offsets: IndexSet) {
         withAnimation {
             offsets.map { workoutSessions[$0] }.forEach(modelContext.delete)
-            try? modelContext.save()
+            _ = PersistenceSave.commit(
+                modelContext,
+                action: "delete workout sessions",
+                onFailure: { message in saveErrorMessage = message }
+            )
         }
     }
 
     // MARK: Helpers
-
-    private func convertWeight(_ value: Double, from unit: String, to target: String) -> Double {
-        if unit == target { return value }
-        if unit == "kg" && target == "lbs" { return value * 2.20462 }
-        if unit == "lbs" && target == "kg" { return value / 2.20462 }
-        return value
-    }
 
     private var chartData: (dailyVolume: [(date: Date, value: Double)], groupedVolume: [Date: Double]) {
         let calendar = Calendar.current
@@ -303,7 +324,7 @@ struct WorkoutLogView: View {
                     let group = (log.exerciseDefinition?.muscleGroup ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                     if group != selectedCategory { return acc }
                 }
-                let weightInPreferred = convertWeight(log.weight, from: log.weightUnit, to: preferredWeightUnit)
+                let weightInPreferred = UnitConverter.weight(log.weight, from: log.weightUnit, to: preferredWeightUnit)
                 return acc + (Double(log.effectiveReps) * weightInPreferred)
             }
             return (date: session.date, volume: total)
@@ -345,7 +366,7 @@ private struct WorkoutSessionRowContent: View {
                         .foregroundStyle(AppTheme.secondaryTextColor)
                         .lineLimit(1)
                 }
-                Text("\(session.exerciseLogs?.count ?? 0) exercises")
+                Text("\(session.exerciseLogs?.count ?? 0) sets")
                     .font(.caption)
                     .foregroundStyle(AppTheme.secondaryTextColor)
             }

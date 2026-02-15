@@ -20,6 +20,10 @@ struct HomeView: View {
     @AppStorage("showVitalsOnHome") private var showVitalsOnHome: Bool = true
     
     @State private var selectedChartTab: ChartTab = .volume
+    @State private var quickWorkoutSession: WorkoutSession? = nil
+    @State private var showQuickRunTracking: Bool = false
+    @State private var showQuickWeightLog: Bool = false
+    @State private var saveErrorMessage: String? = nil
 
     private enum ChartTab: Hashable { case volume, runs, weight }
     
@@ -48,21 +52,13 @@ struct HomeView: View {
         }
         
         let summed: [(date: Date, distance: Double)] = grouped.map { (key: Date, value: [RunningSession]) in
-            let totalKm = value.reduce(0.0) { partial, session in
-                partial + session.distance(in: .kilometers)
+            let totalDistance = value.reduce(0.0) { partial, session in
+                partial + UnitConverter.distance(session.distance, from: session.distanceUnit, to: distanceUnit)
             }
-            return (date: key, distance: totalKm)
+            return (date: key, distance: totalDistance)
         }
         
         return summed.sorted { $0.date < $1.date }
-    }
-    
-    // Convert weights to a unified display unit
-    private func convertWeight(_ value: Double, from unit: String, to target: String) -> Double {
-        if unit == target { return value }
-        if unit == "kg" && target == "lbs" { return value * 2.20462 }
-        if unit == "lbs" && target == "kg" { return value / 2.20462 }
-        return value
     }
 
     // Build a sorted series for the chart in the preferred unit
@@ -81,7 +77,7 @@ struct HomeView: View {
         let perDayLatest: [(date: Date, weight: Double)] = grouped.compactMap { day, items in
             // Items are already sorted descending, so the first one is the latest for that day
             guard let latest = items.first else { return nil }
-            let converted = convertWeight(latest.weight, from: latest.weightUnit, to: preferredWeightUnit)
+            let converted = UnitConverter.weight(latest.weight, from: latest.weightUnit, to: preferredWeightUnit)
             return (date: day, weight: converted)
         }.sorted { $0.date < $1.date }
         
@@ -112,8 +108,7 @@ struct HomeView: View {
         
         let perSession: [(date: Date, volume: Double)] = relevantSessions.map { session in
             let total = (session.exerciseLogs ?? []).reduce(0.0) { acc, log in
-                let unit = log.weightUnit
-                let weightInPreferred = convertWeight(log.weight, from: unit, to: preferredWeightUnit)
+                let weightInPreferred = UnitConverter.weight(log.weight, from: log.weightUnit, to: preferredWeightUnit)
                 return acc + (Double(log.effectiveReps) * weightInPreferred)
             }
             return (date: session.date, volume: total)
@@ -428,6 +423,57 @@ struct HomeView: View {
         }
         .floatingTile()
     }
+
+    @ViewBuilder
+    private var quickActionsCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Quick Log")
+                .font(.headline)
+                .foregroundStyle(AppTheme.textColor)
+
+            Button {
+                Haptics.playImpact(.light)
+                startQuickWorkout()
+            } label: {
+                Label("Start Workout", systemImage: "figure.strengthtraining.traditional")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.borderedProminent)
+
+            Button {
+                Haptics.playImpact(.light)
+                showQuickRunTracking = true
+            } label: {
+                Label("Start Run", systemImage: "figure.run")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.borderedProminent)
+
+            Button {
+                Haptics.playImpact(.light)
+                showQuickWeightLog = true
+            } label: {
+                Label("Log Weight", systemImage: "scalemass")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .floatingTile()
+    }
+
+    private func startQuickWorkout() {
+        let session = WorkoutSession()
+        modelContext.insert(session)
+        guard PersistenceSave.commit(
+            modelContext,
+            action: "quick log workout",
+            onFailure: { message in saveErrorMessage = message }
+        ) else {
+            modelContext.delete(session)
+            return
+        }
+        quickWorkoutSession = session
+    }
     
     // MARK: Body
 
@@ -439,6 +485,8 @@ struct HomeView: View {
                 WeatherSummaryView()
 
                 streakCard
+
+                quickActionsCard
 
                 recentActivityCard
 
@@ -499,20 +547,38 @@ struct HomeView: View {
         .appBackground(AppTheme.gradientHome)
         .foregroundColor(AppTheme.textColor)
         .tint(AppTheme.accentColor)
+        .navigationDestination(item: $quickWorkoutSession) { session in
+            WorkoutSessionDetailView(session: session, isNewSession: true)
+        }
+        .sheet(isPresented: $showQuickRunTracking) {
+            NavigationStack {
+                RunTrackingProView(activityType: "running")
+                    .navigationTitle("Tracking Run")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
+                    .toolbarBackground(.visible, for: .navigationBar)
+                    .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
+            }
+            .appBackground(AppTheme.gradientRuns)
+            .foregroundColor(AppTheme.textColor)
+            .tint(AppTheme.accentColor)
+        }
+        .sheet(isPresented: $showQuickWeightLog) {
+            LogWeightView()
+        }
+        .alert("Save Failed", isPresented: Binding(
+            get: { saveErrorMessage != nil },
+            set: { if !$0 { saveErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { saveErrorMessage = nil }
+        } message: {
+            Text(saveErrorMessage ?? "Couldn’t save your changes. Please try again.")
+        }
         .id(appTheme) // Force rebuild when theme changes
     }
 }
 
 // MARK: - Extensions
-
-// Helper extension for RunningSession distance conversion
-extension RunningSession {
-    func distance(in unit: UnitLength) -> Double {
-        let base: UnitLength = (self.distanceUnit.lowercased().contains("mi")) ? .miles : .kilometers
-        let measurement = Measurement(value: self.distance, unit: base)
-        return measurement.converted(to: unit).value
-    }
-}
 
 // Helper extension for Calendar start of week
 extension Calendar {

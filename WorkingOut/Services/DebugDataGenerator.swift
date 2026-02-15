@@ -18,7 +18,7 @@ enum DebugDataGenerator {
     static func generateSampleData(context: ModelContext) {
         migrateLegacySampleMarkers(context: context)
         if hasAnySampleData(context: context) {
-            try? context.save()
+            _ = PersistenceSave.commit(context, action: "save changes")
             return
         }
 
@@ -40,12 +40,12 @@ enum DebugDataGenerator {
             }
         }
 
-        try? context.save()
+        _ = PersistenceSave.commit(context, action: "save changes")
     }
 
     static func hideLegacySampleMarkers(context: ModelContext) {
         migrateLegacySampleMarkers(context: context)
-        try? context.save()
+        _ = PersistenceSave.commit(context, action: "save changes")
     }
 
     private static func hasAnySampleData(context: ModelContext) -> Bool {
@@ -141,7 +141,7 @@ enum DebugDataGenerator {
         }
         UserDefaults.standard.removeObject(forKey: "debugWeightEntryIDs")
 
-        try? context.save()
+        _ = PersistenceSave.commit(context, action: "save changes")
     }
 
     // MARK: - Workout Generation

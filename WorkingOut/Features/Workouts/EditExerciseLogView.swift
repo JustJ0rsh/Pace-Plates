@@ -105,7 +105,7 @@ struct EditExerciseLogView: View {
     }
 
     private var shouldShowIsolationControl: Bool {
-        !isCardioExercise && log.shouldOfferIsolationToggle
+        !isCardioExercise
     }
 
     var body: some View {
@@ -238,7 +238,7 @@ struct EditExerciseLogView: View {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(isIsolated ? "Double reps active (x2)" : "Double reps (x2)")
                                             .foregroundColor(AppTheme.textColor)
-                                        Text("Use for iso / uni / single-side sets")
+                                        Text("Use this for unilateral or alternating movements so each rep counts both sides (example: 10 reps logs as 20 total).")
                                             .font(.caption2)
                                             .foregroundStyle(.secondary)
                                     }
@@ -371,7 +371,7 @@ struct EditExerciseLogView: View {
                 if isNew && !didSaveExplicitly {
                     // User canceled; remove the newly created set
                     modelContext.delete(log)
-                    try? modelContext.save()
+                    _ = PersistenceSave.commit(modelContext, action: "save changes")
                 } else if !didSaveExplicitly {
                     // Persist current edits when dismissed without tapping Done
                     if isCardioExercise {
@@ -408,7 +408,7 @@ struct EditExerciseLogView: View {
                     // Save notes
                     log.notes = notesText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : notesText
                     
-                    try? modelContext.save()
+                    _ = PersistenceSave.commit(modelContext, action: "save changes")
                 }
             }
         }
@@ -432,7 +432,7 @@ struct EditExerciseLogView: View {
             // Delete empty cardio sets (no duration = meaningless)
             if log.durationSeconds ?? 0 == 0 {
                 modelContext.delete(log)
-                try? modelContext.save()
+                _ = PersistenceSave.commit(modelContext, action: "save changes")
                 repsFocused = false
                 weightFocused = false
                 durationFocused = false
@@ -454,7 +454,7 @@ struct EditExerciseLogView: View {
             // Delete empty strength sets (no reps = meaningless)
             if reps == 0 {
                 modelContext.delete(log)
-                try? modelContext.save()
+                _ = PersistenceSave.commit(modelContext, action: "save changes")
                 repsFocused = false
                 weightFocused = false
                 durationFocused = false
@@ -470,7 +470,7 @@ struct EditExerciseLogView: View {
         log.notes = notesText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : notesText
         log.isIsolated = isCardioExercise ? false : isIsolated
         
-        try? modelContext.save()
+        _ = PersistenceSave.commit(modelContext, action: "save changes")
         repsFocused = false
         weightFocused = false
         durationFocused = false

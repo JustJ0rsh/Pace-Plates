@@ -102,7 +102,7 @@ class PersistenceController {
         let hasBuiltIns = defs.contains(where: { !$0.isUserDefined })
         if !hasBuiltIns {
             ExerciseLibrary.populateInitialExercises(context: context)
-            try? context.save()
+            _ = PersistenceSave.commit(context, action: "save changes")
         }
         // Reclassify arm exercises to Biceps/Triceps when possible
         reclassifyArmExercises()
@@ -175,7 +175,7 @@ class PersistenceController {
             }
         }
         
-        if changed { try? context.save() }
+        if changed { _ = PersistenceSave.commit(context, action: "save changes") }
         return removedCount
     }
 
@@ -231,7 +231,7 @@ class PersistenceController {
             }
         }
 
-        if changed { try? context.save() }
+        if changed { _ = PersistenceSave.commit(context, action: "save changes") }
     }
     
     // MARK: - Exercise Definition Methods
@@ -239,7 +239,7 @@ class PersistenceController {
     func addExerciseDefinition(name: String, muscleGroup: String) {
         let exercise = ExerciseDefinition(name: name, muscleGroup: muscleGroup, isUserDefined: true)
         container.mainContext.insert(exercise)
-        try? container.mainContext.save()
+        _ = PersistenceSave.commit(container.mainContext, action: "save changes")
     }
     
     func fetchExerciseDefinitions() -> [ExerciseDefinition] {
@@ -266,7 +266,7 @@ class PersistenceController {
             if bicepsNames.contains(key) { d.muscleGroup = "Biceps"; changed = true; continue }
             if tricepsNames.contains(key) { d.muscleGroup = "Triceps"; changed = true; continue }
         }
-        if changed { try? context.save() }
+        if changed { _ = PersistenceSave.commit(context, action: "save changes") }
     }
     
     // MARK: - Workout Session Methods
@@ -274,7 +274,7 @@ class PersistenceController {
     func addWorkoutSession(date: Date = Date(), notes: String? = nil) -> WorkoutSession {
         let session = WorkoutSession(date: date, notes: notes)
         container.mainContext.insert(session)
-        try? container.mainContext.save()
+        _ = PersistenceSave.commit(container.mainContext, action: "save changes")
         return session
     }
     
@@ -288,7 +288,7 @@ class PersistenceController {
     func addRunningSession(distance: Double, duration: TimeInterval, notes: String? = nil, locations: Data? = nil) -> RunningSession {
         let session = RunningSession(distance: distance, duration: duration, notes: notes, locations: locations)
         container.mainContext.insert(session)
-        try? container.mainContext.save()
+        _ = PersistenceSave.commit(container.mainContext, action: "save changes")
         return session
     }
     
@@ -302,7 +302,7 @@ class PersistenceController {
     func addWeightEntry(weight: Double) -> WeightEntry {
         let entry = WeightEntry(weight: weight)
         container.mainContext.insert(entry)
-        try? container.mainContext.save()
+        _ = PersistenceSave.commit(container.mainContext, action: "save changes")
         return entry
     }
     

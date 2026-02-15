@@ -40,6 +40,7 @@ struct RunLogView: View {
     @State private var showSwipeDeleteConfirm: Bool = false
     @State private var lockedChartDate: Date? = nil // Keeps summary open until X is clicked
     @State private var showRunAssistant: Bool = false
+    @State private var saveErrorMessage: String? = nil
     
     // Filters
     private enum TimeRange: String, CaseIterable, Identifiable {
@@ -118,7 +119,9 @@ struct RunLogView: View {
                 let grouped: [Date: Double] = Dictionary(grouping: filteredSessions, by: { session in
                     calendar.startOfDay(for: session.date)
                 }).mapValues { sessions in
-                    sessions.reduce(0) { $0 + $1.distance }
+                    sessions.reduce(0) {
+                        $0 + UnitConverter.distance($1.distance, from: $1.distanceUnit, to: preferredDistanceUnit)
+                    }
                 }
                 let dailyAll: [DailyPoint] = grouped.keys.sorted().map { day in
                     DailyPoint(date: day, value: grouped[day] ?? 0)
@@ -131,7 +134,7 @@ struct RunLogView: View {
                     let pad: Double = max(0.1, span * 0.15)
                     let yLower: Double = max(0, minV - pad)
                     let yUpper: Double = maxV + pad
-                    let unitLabel = runningSessions.first?.distanceUnit ?? preferredDistanceUnit
+                    let unitLabel = UnitConverter.canonicalDistanceUnit(preferredDistanceUnit)
 
                     // Always show the Runs tile header; render chart or placeholder
                     VStack(alignment: .leading, spacing: 8) {
@@ -287,11 +290,12 @@ struct RunLogView: View {
                                         Divider().opacity(0.3)
                                         
                                         ForEach(sessionsOnDay.prefix(3)) { session in
+                                            let convertedDistance = UnitConverter.distance(session.distance, from: session.distanceUnit, to: unitLabel)
                                             HStack(spacing: 8) {
                                                 Image(systemName: activityIcon(for: session.activityType))
                                                     .font(.caption)
                                                     .foregroundStyle(AppTheme.accentColor)
-                                                Text("\(String(format: "%.2f", session.distance)) \(session.distanceUnit)")
+                                                Text("\(String(format: "%.2f", convertedDistance)) \(unitLabel)")
                                                     .font(.subheadline)
                                                 Text("•")
                                                     .foregroundStyle(AppTheme.secondaryTextColor)
@@ -319,7 +323,7 @@ struct RunLogView: View {
 
                     if !runningSessions.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            List {
+                            LazyVStack(spacing: 0) {
                                 ForEach(runningSessions) { session in
                                     Button {
                                         loadingSessionId = session.id
@@ -329,6 +333,7 @@ struct RunLogView: View {
                                     } label: {
                                         RunSessionRowContent(
                                             session: session,
+                                            preferredDistanceUnit: preferredDistanceUnit,
                                             locationName: locationCache[session.id],
                                             isEditing: isEditing,
                                             onDelete: {
@@ -340,9 +345,7 @@ struct RunLogView: View {
                                         )
                                     }
                                     .buttonStyle(.plain)
-                                    .listRowBackground(Color.clear)
-                                    .listRowSeparator(.hidden)
-                                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                                    .padding(.vertical, 8)
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                         Button(role: .destructive) {
                                             pendingSwipeDeleteSession = session
@@ -353,9 +356,6 @@ struct RunLogView: View {
                                     }
                                 }
                             }
-                            .listStyle(.plain)
-                            .scrollDisabled(true)
-                            .frame(height: CGFloat(runningSessions.count) * 80)
                         }
                         .floatingTile()
                         .onAppear {
@@ -398,7 +398,11 @@ struct RunLogView: View {
                 Button("Delete on Device", role: .destructive) {
                     if let session = pendingSwipeDeleteSession {
                         modelContext.delete(session)
-                        try? modelContext.save()
+                        _ = PersistenceSave.commit(
+                            modelContext,
+                            action: "delete run (swipe)",
+                            onFailure: { message in saveErrorMessage = message }
+                        )
                     }
                     pendingSwipeDeleteSession = nil
                 }
@@ -408,7 +412,11 @@ struct RunLogView: View {
                             let meters: Double = (session.distanceUnit == "mi") ? (session.distance * 1609.34) : (session.distance * 1000.0)
                             try? await HealthKitManager.shared.deleteRun(uuidString: session.healthWorkoutUUID, endDate: session.date, duration: session.duration, distanceMeters: meters)
                             modelContext.delete(session)
-                            try? modelContext.save()
+                            _ = PersistenceSave.commit(
+                                modelContext,
+                                action: "delete run + health (swipe)",
+                                onFailure: { message in saveErrorMessage = message }
+                            )
                         }
                         pendingSwipeDeleteSession = nil
                     }
@@ -558,6 +566,16 @@ struct RunLogView: View {
                     }
                 )
             }
+            .background {
+                Color.clear.alert("Save Failed", isPresented: Binding(
+                    get: { saveErrorMessage != nil },
+                    set: { if !$0 { saveErrorMessage = nil } }
+                )) {
+                    Button("OK", role: .cancel) { saveErrorMessage = nil }
+                } message: {
+                    Text(saveErrorMessage ?? "Couldn’t save your changes. Please try again.")
+                }
+            }
             .id(appTheme) // Force rebuild when theme changes
     }
     
@@ -632,7 +650,11 @@ struct RunLogView: View {
     private func deleteRunningSessions(offsets: IndexSet) {
          withAnimation { // Added animation
             offsets.map { runningSessions[$0] }.forEach(modelContext.delete)
-            try? modelContext.save() // Save after deleting
+            _ = PersistenceSave.commit(
+                modelContext,
+                action: "delete run sessions",
+                onFailure: { message in saveErrorMessage = message }
+            )
         }
     }
     
@@ -919,7 +941,11 @@ struct RunLogView: View {
             }
         }
 
-        try? modelContext.save()
+        _ = PersistenceSave.commit(
+            modelContext,
+            action: "import Health runs",
+            onFailure: { message in saveErrorMessage = message }
+        )
     }
 
     private func findSimilarRunID(
@@ -1049,7 +1075,7 @@ struct RunLogView: View {
                     if session.maxElevation == nil { session.maxElevation = elevationMetrics.max }
                 }
 
-                try? modelContext.save()
+                _ = PersistenceSave.commit(modelContext, action: "enrich run details")
             }
         } catch {
             // Best-effort enrichment only.
@@ -1175,6 +1201,7 @@ private enum RunImportAction {
 // MARK: - Optimized Run Session Row Content
 private struct RunSessionRowContent: View {
     let session: RunningSession
+    let preferredDistanceUnit: String
     let locationName: String?
     let isEditing: Bool
     let onDelete: () -> Void
@@ -1189,7 +1216,7 @@ private struct RunSessionRowContent: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(session.date.formatted(date: .abbreviated, time: .shortened))
                     .font(.headline)
-                Text("\(String(format: "%.1f", session.distance)) \(session.distanceUnit) • \(String(format: "%.0f", estimatedCalories)) kcal")
+                Text("\(String(format: "%.1f", displayDistance)) \(preferredDistanceUnit) • \(String(format: "%.0f", estimatedCalories)) kcal")
                     .font(.subheadline)
                 HStack(spacing: 4) {
                     Text(formattedDuration)
@@ -1226,11 +1253,15 @@ private struct RunSessionRowContent: View {
     }
     
     private var formattedPace: String {
-        guard session.distance > 0, session.duration > 0 else { return "—" }
-        let minutesPerUnit = (session.duration / 60.0) / session.distance
+        guard displayDistance > 0, session.duration > 0 else { return "—" }
+        let minutesPerUnit = (session.duration / 60.0) / displayDistance
         let mins = Int(minutesPerUnit)
         let secs = Int((minutesPerUnit - Double(mins)) * 60)
-        return String(format: "%d:%02d/%@", mins, secs, session.distanceUnit)
+        return String(format: "%d:%02d/%@", mins, secs, preferredDistanceUnit)
+    }
+
+    private var displayDistance: Double {
+        UnitConverter.distance(session.distance, from: session.distanceUnit, to: preferredDistanceUnit)
     }
     
     private var estimatedCalories: Double {
@@ -1543,7 +1574,7 @@ struct RunSessionDetailView: View {
                         let coords = reduced.map { RunCoordinate(latitude: $0.coordinate.latitude, longitude: $0.coordinate.longitude) }
                         if let data = try? JSONEncoder().encode(coords) {
                             session.locations = data
-                            try? modelContext.save()
+                            _ = PersistenceSave.commit(modelContext, action: "cache run route from Health")
                             cachedSegments = segments
                         }
                     }

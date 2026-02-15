@@ -133,7 +133,7 @@ extension TemplateSeeder {
                 changed = true
             }
         }
-        if changed { try? context.save() }
+        if changed { _ = PersistenceSave.commit(context, action: "save changes") }
     }
 
     /// Remove duplicate built-in templates by title, keeping a single copy.
@@ -166,7 +166,7 @@ extension TemplateSeeder {
             }
         }
 
-        if changed { try? context.save() }
+        if changed { _ = PersistenceSave.commit(context, action: "save changes") }
         return deleted
     }
 
@@ -199,7 +199,7 @@ extension TemplateSeeder {
             }
         }
 
-        if changed { try? context.save() }
+        if changed { _ = PersistenceSave.commit(context, action: "save changes") }
         return deleted
     }
 
@@ -228,7 +228,7 @@ extension TemplateSeeder {
             }
         }
 
-        if changed > 0 { try? context.save() }
+        if changed > 0 { _ = PersistenceSave.commit(context, action: "save changes") }
         return changed
     }
 
@@ -270,7 +270,7 @@ extension TemplateSeeder {
             changed += 1
         }
 
-        if changed > 0 { try? context.save() }
+        if changed > 0 { _ = PersistenceSave.commit(context, action: "save changes") }
         return changed
     }
 }

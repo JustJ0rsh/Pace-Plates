@@ -122,7 +122,7 @@ struct RunAssistantContainerView: View {
         guard let activePlan = RunAssistantService.shared.activePlan(context: modelContext) else { return }
         activePlan.profileSnapshotJSON = profileBinding.wrappedValue.asJSONString()
         activePlan.updatedAt = Date()
-        try? modelContext.save()
+        _ = PersistenceSave.commit(modelContext, action: "save changes")
         RunAssistantService.shared.setActivePlan(activePlan.id, context: modelContext)
     }
 }

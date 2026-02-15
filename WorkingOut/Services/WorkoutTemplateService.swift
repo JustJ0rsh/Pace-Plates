@@ -84,7 +84,7 @@ final class WorkoutTemplateService {
             result.append(template)
         }
 
-        try? context.save()
+        _ = PersistenceSave.commit(context, action: "save changes")
         return result
     }
     #endif
@@ -181,7 +181,7 @@ final class WorkoutTemplateService {
             }
             
             template.exerciseCount = createdExercises
-            try? context.save()
+            _ = PersistenceSave.commit(context, action: "save changes")
             print("✅ Created template '\(template.title)' with \(createdExercises) exercises")
             return template
             
@@ -247,7 +247,7 @@ final class WorkoutTemplateService {
         }
         
         template.exerciseCount = sortedNames.count
-        try? context.save()
+        _ = PersistenceSave.commit(context, action: "save changes")
         print("✅ Created custom template '\(template.title)'")
         return template
     }
@@ -295,7 +295,7 @@ final class WorkoutTemplateService {
         }
         
         template.exerciseCount = sortedNames.count
-        try? context.save()
+        _ = PersistenceSave.commit(context, action: "save changes")
         print("✅ Updated custom template '\(template.title)'")
     }
     
@@ -364,7 +364,7 @@ final class WorkoutTemplateService {
             }
         }
         
-        try? context.save()
+        _ = PersistenceSave.commit(context, action: "save changes")
         print("✅ Created workout session from template '\(template.title)'")
         return session
     }
@@ -531,7 +531,7 @@ final class WorkoutTemplateService {
             print("✅ Created template '\(template.title)' from markdown")
         }
         
-        try? context.save()
+        _ = PersistenceSave.commit(context, action: "save changes")
         return templates
     }
 

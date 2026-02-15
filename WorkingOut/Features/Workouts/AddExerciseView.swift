@@ -19,6 +19,7 @@ struct AddExerciseView: View {
     @State private var editingExercise: ExerciseDefinition? = nil
     @State private var editingExerciseName: String = ""
     @State private var editingExerciseMuscleGroup: String = ""
+    @State private var expandedMuscleGroups: Set<String> = []
 
     init(workoutSession: WorkoutSession, onAdd: ((ExerciseLog) -> Void)? = nil) {
         self.workoutSession = workoutSession
@@ -44,13 +45,28 @@ struct AddExerciseView: View {
         groupedExercises.keys.sorted()
     }
 
+    private func expansionBinding(for group: String) -> Binding<Bool> {
+        Binding(
+            get: {
+                if !searchText.isEmpty { return true }
+                return expandedMuscleGroups.contains(group)
+            },
+            set: { isExpanded in
+                if isExpanded {
+                    expandedMuscleGroups.insert(group)
+                } else {
+                    expandedMuscleGroups.remove(group)
+                }
+            }
+        )
+    }
 
     var body: some View {
         NavigationStack {
             List {
                 // Iterate over sorted muscle groups
                 ForEach(sortedMuscleGroups, id: \.self) { group in
-                    Section(header: Text(group).foregroundColor(AppTheme.textColor)) {
+                    DisclosureGroup(isExpanded: expansionBinding(for: group)) {
                         // Iterate over exercises within the group
                         ForEach(groupedExercises[group] ?? []) { exercise in
                             Button {
@@ -71,7 +87,6 @@ struct AddExerciseView: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            .listRowBackground(AppTheme.secondaryBackgroundColor)
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button {
                                     historyExerciseName = exercise.name
@@ -91,7 +106,12 @@ struct AddExerciseView: View {
                                 }
                             }
                         }
+                    } label: {
+                        Text(group)
+                            .font(.headline)
+                            .foregroundColor(AppTheme.textColor)
                     }
+                    .listRowBackground(AppTheme.secondaryBackgroundColor)
                 }
             }
             .listStyle(.plain)
@@ -263,7 +283,7 @@ struct AddExerciseView: View {
         // This automatically updates all logs that reference this exercise
         exercise.muscleGroup = editingExerciseMuscleGroup
         
-        try? modelContext.save()
+        _ = PersistenceSave.commit(modelContext, action: "save changes")
         
         // Close the sheet
         editingExercise = nil
@@ -284,7 +304,7 @@ struct AddExerciseView: View {
         }
 
         modelContext.delete(exercise)
-        try? modelContext.save()
+        _ = PersistenceSave.commit(modelContext, action: "save changes")
     }
 
     private func lastThreeWorkouts(forExerciseName name: String) -> [(date: Date, sets: [ExerciseLog])] {
@@ -365,7 +385,7 @@ struct AddExerciseView: View {
         
         // Saving the context might be better done when the user confirms the session is complete,
         // but saving here ensures the log is persisted immediately after adding.
-        try? modelContext.save()
+        _ = PersistenceSave.commit(modelContext, action: "save changes")
         
         if let onAdd { onAdd(log) }
         
@@ -382,7 +402,7 @@ struct AddExerciseView: View {
         )
         modelContext.insert(newExercise)
         // It's generally better to save changes together if possible
-        // try? modelContext.save() // Save potentially here or defer
+        // _ = PersistenceSave.commit(modelContext, action: "save changes") // Save potentially here or defer
 
         // Add the newly created exercise to the workout
         // Wait for save to complete or handle potential errors?

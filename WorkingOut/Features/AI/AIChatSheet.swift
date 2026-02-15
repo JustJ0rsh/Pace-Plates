@@ -468,7 +468,7 @@ struct AIChatSheet: View {
         let full = messages.map { ($0.role == .user ? "You: " : "AI: ") + $0.text }.joined(separator: "\n\n")
         let convo = AIConversation(mode: "ask", goal: requestBase.goal, prompt: messages.first?.text ?? "", response: full, model: "on-device")
         modelContext.insert(convo)
-        try? modelContext.save()
+        _ = PersistenceSave.commit(modelContext, action: "save changes")
     }
     
     private func clearHistory() {

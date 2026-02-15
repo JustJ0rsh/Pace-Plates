@@ -8,6 +8,7 @@ struct LogWeightView: View {
     @State private var weight: Double? // Use optional Double for TextField
     @FocusState private var weightFocused: Bool
     @AppStorage("weightUnit") private var weightUnit = "lbs" // Default unit
+    @State private var saveErrorMessage: String? = nil
     
     private var isInputValid: Bool {
         weight != nil && weight ?? 0 > 0
@@ -48,6 +49,14 @@ struct LogWeightView: View {
                 }
             }
             .onAppear { weightFocused = true }
+            .alert("Save Failed", isPresented: Binding(
+                get: { saveErrorMessage != nil },
+                set: { if !$0 { saveErrorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) { saveErrorMessage = nil }
+            } message: {
+                Text(saveErrorMessage ?? "Couldn’t save your changes. Please try again.")
+            }
         }
     }
     
@@ -56,12 +65,15 @@ struct LogWeightView: View {
         
         let newEntry = WeightEntry(weight: weightValue, weightUnit: weightUnit)
         modelContext.insert(newEntry)
-        
-        do {
-            try modelContext.save()
+
+        if PersistenceSave.commit(
+            modelContext,
+            action: "save weight entry",
+            onFailure: { message in saveErrorMessage = message }
+        ) {
             dismiss()
-        } catch {
-            // Consider surfacing a user-facing alert if needed
+        } else {
+            modelContext.delete(newEntry)
         }
     }
-} 
+}

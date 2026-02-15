@@ -211,7 +211,7 @@ struct ExerciseLibrary {
         
         if addedCount > 0 {
             print("✅ Added \(addedCount) new exercises to library")
-            try? context.save()
+            _ = PersistenceSave.commit(context, action: "save changes")
         }
     }
     

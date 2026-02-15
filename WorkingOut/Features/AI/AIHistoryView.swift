@@ -45,7 +45,7 @@ struct AIHistoryView: View {
     private func delete(at offsets: IndexSet) {
         guard let modelContext = conversations.first?.modelContext else { return }
         for index in offsets { modelContext.delete(conversations[index]) }
-        try? modelContext.save()
+        _ = PersistenceSave.commit(modelContext, action: "save changes")
     }
     
     private func displayTitle(for convo: AIConversation) -> String {

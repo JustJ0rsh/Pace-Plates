@@ -288,7 +288,7 @@ struct WorkoutTemplateListView: View {
                                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                             Button(role: .destructive) {
                                                 modelContext.delete(template)
-                                                try? modelContext.save()
+                                                _ = PersistenceSave.commit(modelContext, action: "save changes")
                                                 Haptics.notify(.warning)
                                             } label: {
                                                 Label("Delete", systemImage: "trash")
@@ -317,7 +317,7 @@ struct WorkoutTemplateListView: View {
                                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                             Button(role: .destructive) {
                                                 modelContext.delete(template)
-                                                try? modelContext.save()
+                                                _ = PersistenceSave.commit(modelContext, action: "save changes")
                                                 Haptics.notify(.warning)
                                             } label: {
                                                 Label("Delete", systemImage: "trash")
@@ -739,7 +739,7 @@ struct TemplateDetailView: View {
             Button("Cancel", role: .cancel) {}
             Button("Delete", role: .destructive) {
                 modelContext.delete(template)
-                try? modelContext.save()
+                _ = PersistenceSave.commit(modelContext, action: "save changes")
                 Haptics.notify(.warning)
                 dismiss()
             }

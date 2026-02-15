@@ -16,6 +16,7 @@ struct WeightLogView: View {
     @State private var pendingDeleteEntry: WeightEntry? = nil
     @State private var showDeleteConfirm: Bool = false
     @State private var hasScheduledInitialImport = false
+    @State private var saveErrorMessage: String? = nil
 
     // Time filter
     private enum TimeRange: String, CaseIterable, Identifiable {
@@ -43,13 +44,6 @@ struct WeightLogView: View {
         let start = cal.date(byAdding: .day, value: -days, to: todayStart) ?? todayStart
         let end = cal.date(byAdding: .day, value: 1, to: todayStart) ?? todayStart
         return start...end
-    }
-    
-    private func convertWeight(_ value: Double, from unit: String, to target: String) -> Double {
-        if unit == target { return value }
-        if unit == "kg" && target == "lbs" { return value * 2.20462 }
-        if unit == "lbs" && target == "kg" { return value / 2.20462 }
-        return value
     }
     
     var body: some View {
@@ -107,19 +101,18 @@ struct WeightLogView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("History")
                                 .font(.headline)
-                            List {
+                            LazyVStack(spacing: 0) {
                                 ForEach(weightEntries) { entry in
                                     WeightEntryRowContent(
                                         entry: entry,
+                                        preferredWeightUnit: preferredWeightUnit,
                                         isEditing: isEditing,
                                         onDelete: {
                                             pendingDeleteEntry = entry
                                             showDeleteConfirm = true
                                         }
                                     )
-                                    .listRowBackground(Color.clear)
-                                    .listRowSeparator(.hidden)
-                                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                                    .padding(.vertical, 8)
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                         Button(role: .destructive) {
                                             pendingDeleteEntry = entry
@@ -130,9 +123,6 @@ struct WeightLogView: View {
                                     }
                                 }
                             }
-                            .listStyle(.plain)
-                            .scrollDisabled(true)
-                            .frame(height: CGFloat(weightEntries.count) * 44)
                         }
                         .floatingTile()
                     }
@@ -174,7 +164,11 @@ struct WeightLogView: View {
                 if let entry = pendingDeleteEntry {
                     withAnimation {
                         modelContext.delete(entry)
-                        try? modelContext.save()
+                        _ = PersistenceSave.commit(
+                            modelContext,
+                            action: "delete weight entry",
+                            onFailure: { message in saveErrorMessage = message }
+                        )
                     }
                 }
                 pendingDeleteEntry = nil
@@ -186,6 +180,16 @@ struct WeightLogView: View {
         }
         .onAppear {
             scheduleInitialHealthImportIfNeeded()
+        }
+        .background {
+            Color.clear.alert("Save Failed", isPresented: Binding(
+                get: { saveErrorMessage != nil },
+                set: { if !$0 { saveErrorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) { saveErrorMessage = nil }
+            } message: {
+                Text(saveErrorMessage ?? "Couldn’t save your changes. Please try again.")
+            }
         }
         .id(appTheme) // Force rebuild when theme changes
     }
@@ -222,23 +226,20 @@ struct WeightLogView: View {
                 // Import new entries silently
                 await MainActor.run {
                     for entry in newWeights {
-                        // Convert from pounds to preferred unit if needed
-                        let weight: Double
-                        let unit: String
-                        if preferredWeightUnit == "kg" {
-                            weight = entry.weightInPounds / 2.20462
-                            unit = "kg"
-                        } else {
-                            weight = entry.weightInPounds
-                            unit = "lbs"
-                        }
+                        let unit = UnitConverter.canonicalWeightUnit(preferredWeightUnit)
+                        let weight = UnitConverter.weight(entry.weightInPounds, from: "lbs", to: unit)
 
                         let newEntry = WeightEntry(date: entry.date, weight: weight, weightUnit: unit)
                         modelContext.insert(newEntry)
                     }
 
-                    try? modelContext.save()
-                    weightLastHealthImportAt = Date().timeIntervalSince1970
+                    if PersistenceSave.commit(
+                        modelContext,
+                        action: "import Health weight entries",
+                        onFailure: { message in saveErrorMessage = message }
+                    ) {
+                        weightLastHealthImportAt = Date().timeIntervalSince1970
+                    }
                 }
             } catch {
                 // Silently ignore errors (like runs/hikes/walks)
@@ -275,7 +276,7 @@ struct WeightLogView: View {
         let sortedAll = entries.sorted { $0.date < $1.date }
         // Filter to last 7 days
         let sorted = sortedAll.filter { $0.date >= xDomain.lowerBound && $0.date < xDomain.upperBound }
-        let convertedWeights = sorted.map { convertWeight($0.weight, from: $0.weightUnit, to: preferredWeightUnit) }
+        let convertedWeights = sorted.map { UnitConverter.weight($0.weight, from: $0.weightUnit, to: preferredWeightUnit) }
         let cMin = convertedWeights.min() ?? 0
         let cMax = convertedWeights.max() ?? 0
         let cSpan = max(1.0, cMax - cMin)
@@ -292,6 +293,7 @@ struct WeightLogView: View {
 // MARK: - Optimized Weight Entry Row Content
 private struct WeightEntryRowContent: View {
     let entry: WeightEntry
+    let preferredWeightUnit: String
     let isEditing: Bool
     let onDelete: () -> Void
     
@@ -299,7 +301,7 @@ private struct WeightEntryRowContent: View {
         HStack {
             Text(entry.date.formatted(date: .abbreviated, time: .omitted))
             Spacer()
-            Text("\(String(format: "%.1f", entry.weight)) \(entry.weightUnit)")
+            Text("\(String(format: "%.1f", UnitConverter.weight(entry.weight, from: entry.weightUnit, to: preferredWeightUnit))) \(preferredWeightUnit)")
                 .foregroundStyle(AppTheme.secondaryTextColor)
             if isEditing {
                 Button(role: .destructive, action: onDelete) {
@@ -322,16 +324,9 @@ private struct WeightChartSection: View {
     @Binding var selectedChartDate: Date?
     @Binding var lockedChartDate: Date?
 
-    private func convertWeight(_ value: Double, from unit: String, to target: String) -> Double {
-        if unit == target { return value }
-        if unit == "kg" && target == "lbs" { return value * 2.20462 }
-        if unit == "lbs" && target == "kg" { return value / 2.20462 }
-        return value
-    }
-
     var body: some View {
         // Precompute light-weight values to help the type-checker
-        let convertedWeights = entries.map { convertWeight($0.weight, from: $0.weightUnit, to: preferredWeightUnit) }
+        let convertedWeights = entries.map { UnitConverter.weight($0.weight, from: $0.weightUnit, to: preferredWeightUnit) }
         let cMin = convertedWeights.min() ?? 0
         let cMax = convertedWeights.max() ?? 0
         let cSpan = max(1.0, cMax - cMin)
@@ -344,7 +339,7 @@ private struct WeightChartSection: View {
             Chart(entries) { entry in
                 LineMark(
                     x: .value("Date", entry.date),
-                    y: .value("Weight", convertWeight(entry.weight, from: entry.weightUnit, to: preferredWeightUnit))
+                    y: .value("Weight", UnitConverter.weight(entry.weight, from: entry.weightUnit, to: preferredWeightUnit))
                 )
                 .interpolationMethod(.linear)
                 .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
@@ -361,7 +356,7 @@ private struct WeightChartSection: View {
 
                     PointMark(
                         x: .value("Date", entry.date),
-                        y: .value("Weight", convertWeight(entry.weight, from: entry.weightUnit, to: preferredWeightUnit))
+                        y: .value("Weight", UnitConverter.weight(entry.weight, from: entry.weightUnit, to: preferredWeightUnit))
                     )
                     .symbol(Circle())
                     .symbolSize(100)
@@ -421,13 +416,13 @@ private struct WeightChartSection: View {
                             Text("Weight")
                                 .font(.caption)
                                 .foregroundStyle(AppTheme.secondaryTextColor)
-                            Text(String(format: "%.1f %@", convertWeight(selectedEntry.weight, from: selectedEntry.weightUnit, to: preferredWeightUnit), preferredWeightUnit))
+                            Text(String(format: "%.1f %@", UnitConverter.weight(selectedEntry.weight, from: selectedEntry.weightUnit, to: preferredWeightUnit), preferredWeightUnit))
                                 .font(.title3.bold())
                         }
 
                         if let prev = previousEntry {
-                            let currentWeight = convertWeight(selectedEntry.weight, from: selectedEntry.weightUnit, to: preferredWeightUnit)
-                            let prevWeight = convertWeight(prev.weight, from: prev.weightUnit, to: preferredWeightUnit)
+                            let currentWeight = UnitConverter.weight(selectedEntry.weight, from: selectedEntry.weightUnit, to: preferredWeightUnit)
+                            let prevWeight = UnitConverter.weight(prev.weight, from: prev.weightUnit, to: preferredWeightUnit)
                             let change = currentWeight - prevWeight
                             let isUp = change >= 0
                             let isGoodChange = (weightGoal == "gain") ? isUp : !isUp
@@ -465,7 +460,7 @@ private struct WeightChartSection: View {
             // Latest vs oldest summary
             if let latest = entries.last, let oldest = entries.first {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(String(format: "%.1f", convertWeight(latest.weight, from: latest.weightUnit, to: preferredWeightUnit)))
+                    Text(String(format: "%.1f", UnitConverter.weight(latest.weight, from: latest.weightUnit, to: preferredWeightUnit)))
                         .font(.system(size: 32, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                     Text(preferredWeightUnit)
@@ -473,8 +468,8 @@ private struct WeightChartSection: View {
                         .foregroundStyle(AppTheme.secondaryTextColor)
                     Spacer()
                     if entries.count >= 2 {
-                        let latestConv = convertWeight(latest.weight, from: latest.weightUnit, to: preferredWeightUnit)
-                        let oldestConv = convertWeight(oldest.weight, from: oldest.weightUnit, to: preferredWeightUnit)
+                        let latestConv = UnitConverter.weight(latest.weight, from: latest.weightUnit, to: preferredWeightUnit)
+                        let oldestConv = UnitConverter.weight(oldest.weight, from: oldest.weightUnit, to: preferredWeightUnit)
                         let delta = latestConv - oldestConv
                         let isUp = delta >= 0
                         let arrow = isUp ? "arrow.up" : "arrow.down"

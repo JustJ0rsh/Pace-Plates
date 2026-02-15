@@ -147,7 +147,7 @@ final class RunAssistantAIService {
             context.insert(session)
         }
 
-        try? context.save()
+        _ = PersistenceSave.commit(context, action: "save changes")
 
         if activate {
             RunAssistantService.shared.setActivePlan(plan.id, context: context)

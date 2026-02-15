@@ -69,7 +69,7 @@ final class RunAssistantService {
         }
 
         plan.updatedAt = Date()
-        try? context.save()
+        _ = PersistenceSave.commit(context, action: "save changes")
         return plan
     }
 
@@ -103,7 +103,7 @@ final class RunAssistantService {
             reschedulePlanRemindersIfNeeded(for: activePlan)
         }
 
-        try? context.save()
+        _ = PersistenceSave.commit(context, action: "save changes")
     }
 
     func archivePlan(_ planID: UUID, context: ModelContext) {
@@ -112,7 +112,7 @@ final class RunAssistantService {
         plan.isActive = false
         plan.updatedAt = Date()
         ReminderService.cancelRunningPlanReminders(planID: planID)
-        try? context.save()
+        _ = PersistenceSave.commit(context, action: "save changes")
     }
 
     func markSession(
@@ -128,14 +128,14 @@ final class RunAssistantService {
         session.completedRunSessionID = completedRunSessionID
         session.completedAt = (status == "completed" || status == "skipped") ? Date() : nil
         session.plan?.updatedAt = Date()
-        try? context.save()
+        _ = PersistenceSave.commit(context, action: "save changes")
     }
 
     func updateSessionIntensity(_ sessionID: UUID, intensityLevel: String, context: ModelContext) {
         guard let session = fetchSession(id: sessionID, context: context) else { return }
         session.intensityLevel = intensityLevel
         session.plan?.updatedAt = Date()
-        try? context.save()
+        _ = PersistenceSave.commit(context, action: "save changes")
     }
 
     func moveRestDay(
@@ -183,7 +183,7 @@ final class RunAssistantService {
 
         plan.updatedAt = Date()
         reschedulePlanRemindersIfNeeded(for: plan)
-        try? context.save()
+        _ = PersistenceSave.commit(context, action: "save changes")
 
     }
 
@@ -253,7 +253,7 @@ final class RunAssistantService {
 
         if didMutate {
             activePlan.updatedAt = Date()
-            try? context.save()
+            _ = PersistenceSave.commit(context, action: "save changes")
         }
     }
 
