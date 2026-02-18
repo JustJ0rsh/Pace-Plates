@@ -193,7 +193,9 @@ struct AIPlannerView: View {
                 }
             }
 
-            Text("Output will open in a new window and stream live.")
+            Text(mode == .plan
+                 ? "Output will open in a new window and stream live."
+                 : "Open structured Ask mode, then choose a health, strength, or endurance prompt.")
                 .font(.footnote)
                 .foregroundStyle(AppTheme.secondaryTextColor)
 
@@ -204,7 +206,7 @@ struct AIPlannerView: View {
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
                             .scaleEffect(0.9)
                     }
-                    Text(isGenerating ? "Generating…" : (mode == .plan ? "Generate Weekly Plan" : "Ask AI"))
+                    Text(isGenerating ? "Generating…" : (mode == .plan ? "Generate Weekly Plan" : "Open Structured Ask"))
                 }
                 .frame(maxWidth: .infinity)
             }

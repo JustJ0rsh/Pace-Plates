@@ -25,6 +25,7 @@ struct WorkoutPlanRequest {
 final class WorkoutPlanGenerator {
     enum Mode { case plan, ask }
     enum Availability { case available, unavailable, unknown }
+    enum AskGenerationProfile { case conversational, strictStructuredOutput }
 
     static let shared = WorkoutPlanGenerator()
     private init() {}
@@ -48,6 +49,54 @@ final class WorkoutPlanGenerator {
 
     // Last structured plan JSON emitted during generation (if any). Used for persistence/preview.
     static var lastStructuredPlanJSON: String? = nil
+
+    #if canImport(FoundationModels)
+    @available(iOS 26, *)
+    private static func generationOptionsForAsk(profile: AskGenerationProfile) -> GenerationOptions {
+        switch profile {
+        case .conversational:
+            return GenerationOptions(
+                sampling: .random(probabilityThreshold: 0.96),
+                temperature: 0.9
+            )
+        case .strictStructuredOutput:
+            return GenerationOptions(
+                sampling: .random(probabilityThreshold: 0.72),
+                temperature: 0.35
+            )
+        }
+    }
+
+    @available(iOS 26, *)
+    private static func generationOptionsForPlan() -> GenerationOptions {
+        GenerationOptions(
+            sampling: .random(probabilityThreshold: 0.9),
+            temperature: 0.55
+        )
+    }
+
+    private static func normalizeCoachAnswer(_ raw: String) -> String {
+        var text = raw
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Keep numbered and bulleted content readable when the model compresses lines.
+        text = text.replacingOccurrences(
+            of: #"(?<=\S)\s+(\d+\.)\s+"#,
+            with: "\n\n$1 ",
+            options: .regularExpression
+        )
+        text = text.replacingOccurrences(
+            of: #"(?<=\S)\s+([•\-])\s+"#,
+            with: "\n$1 ",
+            options: .regularExpression
+        )
+        text = text.replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
+        text = text.replacingOccurrences(of: #"[ \t]{2,}"#, with: " ", options: .regularExpression)
+        return text
+    }
+    #endif
 
     // Availability check: iOS 26+ devices with Apple Intelligence can run on‑device.
     // We conservatively return .unavailable unless the build defines AI_FOUNDATION_AVAILABLE.
@@ -150,6 +199,11 @@ final class WorkoutPlanGenerator {
 
     // Streams the generated plan. Uses on‑device model when available, else template fallback.
     func generatePlanStream(request: WorkoutPlanRequest) -> AsyncThrowingStream<String, Error> {
+        if request.mode == .ask {
+            return generateAskStream(request: request, history: [])
+        }
+        Self.lastStructuredPlanJSON = nil
+
         let availability = availability()
         switch availability {
         case .available:
@@ -160,7 +214,9 @@ final class WorkoutPlanGenerator {
     }
 
     // Streaming for Ask mode with concise conversation context (no repetition)
-    func generateAskStream(request: WorkoutPlanRequest, history: [(String, String)]) -> AsyncThrowingStream<String, Error> {
+    func generateAskStream(request: WorkoutPlanRequest,
+                           history: [(String, String)],
+                           profile: AskGenerationProfile = .conversational) -> AsyncThrowingStream<String, Error> {
         #if AI_FOUNDATION_AVAILABLE
         if #available(iOS 26, *) {
             #if canImport(FoundationModels)
@@ -168,12 +224,12 @@ final class WorkoutPlanGenerator {
             return AsyncThrowingStream { continuation in
                 Task {
                     do {
+                        let generationOptions = Self.generationOptionsForAsk(profile: profile)
                         // Use a fresh, ephemeral session to avoid context accumulation
                         let session: LanguageModelSession = await MainActor.run {
                             let s = LanguageModelSession(
                                 instructions: "You are a concise fitness/nutrition coach. Keep answers short, safe, and practical."
                             )
-                            s.prewarm()
                             return s
                         }
 
@@ -199,47 +255,38 @@ final class WorkoutPlanGenerator {
                         let safePrompt = Self.clampPrompt(prompt)
 
                         // Web search/tool calls disabled
-                        // Use proper Foundation Models API for conversation mode
                         #if canImport(FoundationModels)
                         if #available(iOS 26, *) {
                             do {
-                                print("🎯 Conversation: Using Foundation Models streamResponse() API for prompt: \(safePrompt.prefix(100))...")
+                                print("🎯 Conversation: Streaming Foundation Models response for prompt: \(safePrompt.prefix(100))...")
+                                var previousSnapshotText = ""
+                                var streamedAnyText = false
 
-                                let stream = session.streamResponse(
+                                for try await snapshot in session.streamResponse(
                                     to: safePrompt,
-                                    options: GenerationOptions(sampling: .greedy)
-                                )
-
-                                var lastSnapshot = ""
-                                var hasStreamedContent = false
-                                for try await partial in stream {
+                                    options: generationOptions
+                                ) {
                                     if Task.isCancelled { break }
-                                    let snapshot = partial.content
-                                    guard !snapshot.isEmpty else { continue }
-                                    let delta: String
-                                    if snapshot.hasPrefix(lastSnapshot) {
-                                        delta = String(snapshot.dropFirst(lastSnapshot.count))
-                                    } else {
-                                        delta = snapshot
-                                    }
-                                    guard !delta.isEmpty else { continue }
-                                    hasStreamedContent = true
-                                    continuation.yield(delta)
-                                    lastSnapshot = snapshot
-                                }
+                                    let currentText = snapshot.content
+                                        .replacingOccurrences(of: "\r\n", with: "\n")
+                                        .replacingOccurrences(of: "\r", with: "\n")
 
-                                if !hasStreamedContent {
-                                    // Fallback if no partial snapshots arrived.
-                                    let response = try await session.respond(
-                                        to: safePrompt,
-                                        options: GenerationOptions(sampling: .greedy)
+                                    let delta = AIStreamSmoothing.appendableDelta(
+                                        previous: previousSnapshotText,
+                                        current: currentText
                                     )
-                                    let fallbackText = response.content
-                                    if !fallbackText.isEmpty {
-                                        continuation.yield(fallbackText)
+                                    previousSnapshotText = currentText
+
+                                    guard !delta.isEmpty else { continue }
+                                    streamedAnyText = true
+                                    for piece in AIStreamSmoothing.wordChunked(delta, maxChunkChars: 34) {
+                                        continuation.yield(piece)
                                     }
                                 }
 
+                                if !streamedAnyText && !previousSnapshotText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    continuation.yield(previousSnapshotText)
+                                }
                                 continuation.finish()
                                 return
                             } catch {
@@ -258,11 +305,11 @@ final class WorkoutPlanGenerator {
                 }
             }
             #else
-            return generatePlanStream(request: request)
+            return generatePlanStreamFromTemplate(request: request)
             #endif
         }
         #endif
-        return generatePlanStream(request: request)
+        return generatePlanStreamFromTemplate(request: request)
     }
 
     // Web search disabled - always false
@@ -305,7 +352,6 @@ final class WorkoutPlanGenerator {
                             let s = LanguageModelSession(
                                 instructions: "You are a friendly, creative fitness/nutrition coach. Keep answers short, varied, and actionable."
                             )
-                            s.prewarm()
                             return s
                         }
 
@@ -314,83 +360,31 @@ final class WorkoutPlanGenerator {
                                                                                   weightUnit: request.weightUnit, 
                                                                                   distanceUnit: request.distanceUnit)
 
-                        // Build prompt(s)
-                        let prompt: String
-                            switch request.mode {
-                            case .plan:
-                                // TESTING: Enable @Generable structured generation
-                                // Previously disabled because nested schema was causing issues
-                                // Now testing with simplified prompt
-                                
-                                prompt = AIPromptBuilder.buildPlanPrompt(
-                                    goal: request.goal,
-                                    context: request.extraContext,
-                                    weightUnit: request.weightUnit,
-                                    distanceUnit: request.distanceUnit,
-                                    userStats: userStats
-                                )
-
-                            // Web search/tool calls removed
-                            case .ask:
-                                let equipment = UserDefaults.standard.string(forKey: "userEquipment")
-                                prompt = AIPromptBuilder.buildConversationPrompt(
-                                    goal: request.goal,
-                                    question: request.extraContext,
-                                    weightUnit: request.weightUnit,
-                                    distanceUnit: request.distanceUnit,
-                                    userStats: userStats,
-                                    equipment: equipment
-                                )
-
-                            // Web search/tool calls removed
-                        }
-
                         // Use proper Foundation Models API with guided generation
                         #if canImport(FoundationModels)
                         if #available(iOS 26, *) {
                             do {
-                                let safePrompt = Self.clampPrompt(prompt)
-                                print("🎯 Using Foundation Models streamResponse() API for prompt: \(safePrompt.prefix(100))...")
+                                if request.mode == .plan {
+                                    if await Self.streamStructuredPlanMarkdown(
+                                        session: session,
+                                        request: request,
+                                        userStats: userStats,
+                                        continuation: continuation
+                                    ) {
+                                        continuation.finish()
+                                        return
+                                    }
 
-                                let stream = session.streamResponse(
-                                    to: safePrompt,
-                                    options: GenerationOptions(sampling: .greedy)
-                                )
+                                    continuation.yield("⚠️ **Generation Failed**\n\nUnable to generate a structured plan right now. Please try again.")
+                                    continuation.finish()
+                                    return
+                                }
 
-                                var lastSnapshot = ""
-                                var hasStreamedContent = false
-                                for try await partial in stream {
+                                let askStream = self.generateAskStream(request: request, history: [])
+                                for try await chunk in askStream {
                                     if Task.isCancelled { break }
-                                    let snapshot = partial.content
-                                    guard !snapshot.isEmpty else { continue }
-                                    let delta: String
-                                    if snapshot.hasPrefix(lastSnapshot) {
-                                        delta = String(snapshot.dropFirst(lastSnapshot.count))
-                                    } else {
-                                        delta = snapshot
-                                    }
-                                    guard !delta.isEmpty else { continue }
-                                    hasStreamedContent = true
-                                    continuation.yield(delta)
-                                    lastSnapshot = snapshot
+                                    continuation.yield(chunk)
                                 }
-
-                                if !hasStreamedContent {
-                                    let response = try await session.respond(
-                                        to: safePrompt,
-                                        options: GenerationOptions(sampling: .greedy)
-                                    )
-                                    let fallbackText = response.content
-                                    if fallbackText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                        throw NSError(
-                                            domain: "WorkoutPlanGenerator",
-                                            code: -2,
-                                            userInfo: [NSLocalizedDescriptionKey: "AI generated empty response"]
-                                        )
-                                    }
-                                    continuation.yield(fallbackText)
-                                }
-
                                 continuation.finish()
                                 return
                             } catch {
@@ -399,21 +393,7 @@ final class WorkoutPlanGenerator {
 
                                 // Show user-friendly error message
                                 let errorMessage = error.localizedDescription
-                                if errorMessage.contains("empty response") {
-                                    continuation.yield("⚠️ **No Content Generated**\n\n")
-                                    continuation.yield("The AI model completed but didn't generate any content. ")
-                                    continuation.yield("This can happen if the request was unclear or too complex.\n\n")
-                                    continuation.yield("**Try:**\n")
-                                    continuation.yield("1. Simplify your request\n")
-                                    continuation.yield("2. Be more specific about what you need\n")
-                                    continuation.yield("3. Use the 'Reset Model Context' button to clear the session")
-                                    continuation.finish()
-                                    return
-                                }
-
-                                continuation.yield("⚠️ **Generation Failed**\n\n")
-                                continuation.yield("Unable to complete AI generation: \(errorMessage)\n\n")
-                                continuation.yield("Please try again or reset the model context.")
+                                continuation.yield("⚠️ **Generation Failed**\n\nUnable to complete AI generation: \(errorMessage)\n\nPlease try again or reset the model context.")
                                 continuation.finish()
                                 return
                             }
@@ -723,12 +703,12 @@ final class WorkoutPlanGenerator {
     // MARK: - Structured plan generation helpers
     #if canImport(FoundationModels)
     @available(iOS 26, *)
-    private static func tryGenerateStructuredPlanMarkdown(session: LanguageModelSession,
-                                                         request: WorkoutPlanRequest,
-                                                         userStats: UserStats) async throws -> String? {
-        // TEMPORARILY COMMENTED OUT: Testing @Generable guided generation instead of JSON prompt
-        /*
-        // Build a JSON-only prompt to generate a structured plan
+    private static func streamStructuredPlanMarkdown(
+        session: LanguageModelSession,
+        request: WorkoutPlanRequest,
+        userStats: UserStats,
+        continuation: AsyncThrowingStream<String, Error>.Continuation
+    ) async -> Bool {
         let instructions = AIPromptBuilder.buildPlanPrompt(
             goal: request.goal,
             context: request.extraContext,
@@ -736,76 +716,76 @@ final class WorkoutPlanGenerator {
             distanceUnit: request.distanceUnit,
             userStats: userStats
         )
+        let prompt = Self.clampPrompt(instructions)
 
-        let schemaHint = """
-Return ONLY valid JSON with this shape (no backticks, no prose):
-{
-  "title": String,
-  "overview": String,
-  "unit": String,
-  "weeks": [
-    { "title": String, "days": [
-      { "title": String, "type": String,
-        "items": [
-          { "name": String,
-            "sets": Number?,
-            "reps": Number?,
-            "suggestedWeight": String?,
-            "notes": String?,
-            "distance": Number?,
-            "distanceUnit": String?,
-            "pace": String?,
-            "durationMinutes": Number?,
-            "effort": String?
-          }
-        ]
-      }
-    ]}
-  ],
-  "guidance": String
-}
-Type values for "type" must be one of: "strengthUpper","strengthLower","fullBodyStrength","runEasy","runTempo","runIntervals","longRun","cyclingEndurance","rowing","swimming","activeRecovery","rest".
-Ensure strength days have 4–6 items; running items include distance and pace; non-running cardio uses duration/effort.
-"""
-
-        let jsonPrompt = Self.clampPrompt(instructions + "\n\n" + schemaHint)
-
-        // Ask the model
-        let response = try await session.respond(to: jsonPrompt)
-        let responseText: String
-        let mirror = Mirror(reflecting: response)
-        if let textValue = mirror.children.first(where: { $0.label?.contains("text") == true })?.value as? String {
-            responseText = textValue
-        } else if let contentValue = mirror.children.first(where: { $0.label?.contains("content") == true })?.value as? String {
-            responseText = contentValue
-        } else if let valueValue = mirror.children.first(where: { $0.label?.contains("value") == true })?.value as? String {
-            responseText = valueValue
-        } else {
-            responseText = String(describing: response)
-        }
-
-        guard let jsonString = extractJSONString(from: responseText) else { return nil }
-        guard let data = jsonString.data(using: .utf8) else { return nil }
-
-        // Decode into guided schema
         do {
-            let decoder = JSONDecoder()
-            let plan = try decoder.decode(WorkoutPlan.self, from: data)
-            Self.lastStructuredPlanJSON = jsonString
-            return formatMarkdown(from: plan, weightUnit: request.weightUnit, distanceUnit: request.distanceUnit)
+            var previousPreviewText = ""
+            var emittedText = ""
+            var finalRawContent: GeneratedContent? = nil
+
+            let stream = session.streamResponse(
+                to: prompt,
+                generating: WorkoutPlan.self,
+                options: Self.generationOptionsForPlan()
+            )
+
+            for try await snapshot in stream {
+                if Task.isCancelled { return false }
+
+                finalRawContent = snapshot.rawContent
+                let preview = partialMarkdownPreview(
+                    from: snapshot.rawContent,
+                    fallback: previousPreviewText,
+                    distanceUnit: request.distanceUnit
+                )
+                let delta = AIStreamSmoothing.appendableDelta(previous: previousPreviewText, current: preview)
+                previousPreviewText = preview
+
+                guard !delta.isEmpty else { continue }
+                for piece in AIStreamSmoothing.wordChunked(delta, maxChunkChars: 52) {
+                    emittedText += piece
+                    continuation.yield(piece)
+                }
+            }
+
+            guard let finalRawContent else { return false }
+            let finalPlan = try WorkoutPlan(finalRawContent)
+            let normalizedPlan = normalizePlan(finalPlan)
+            Self.lastStructuredPlanJSON = normalizedPlan.generatedContent.jsonString
+
+            let finalMarkdown = formatMarkdown(
+                from: normalizedPlan,
+                weightUnit: request.weightUnit,
+                distanceUnit: request.distanceUnit
+            )
+            let finalDelta = AIStreamSmoothing.appendableDelta(previous: emittedText, current: finalMarkdown)
+            if !finalDelta.isEmpty {
+                for piece in AIStreamSmoothing.wordChunked(finalDelta, maxChunkChars: 52) {
+                    continuation.yield(piece)
+                }
+            } else if emittedText.isEmpty && !finalMarkdown.isEmpty {
+                continuation.yield(finalMarkdown)
+            }
+            return true
         } catch {
-            print("❌ Structured decode failed: \(error)")
-            return nil
+            print("⚠️ Guided generation fallback to text stream: \(error.localizedDescription)")
+            return false
         }
-        */
-        return nil
     }
 
-    private static func extractJSONString(from text: String) -> String? {
-        guard let first = text.firstIndex(of: "{"), let last = text.lastIndex(of: "}") else { return nil }
-        let s = String(text[first...last])
-        // Trim code fences if present
-        return s.replacingOccurrences(of: "```json", with: "").replacingOccurrences(of: "```", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+    static func markdownFromStructuredPlanJSON(_ json: String, weightUnit: String, distanceUnit: String) -> String? {
+        if #available(iOS 26, *) {
+            guard let content = try? GeneratedContent(json: json),
+                  let plan = try? WorkoutPlan(content) else {
+                return nil
+            }
+            return formatMarkdown(
+                from: normalizePlan(plan),
+                weightUnit: weightUnit,
+                distanceUnit: distanceUnit
+            )
+        }
+        return nil
     }
 
     private static func formatMarkdown(from plan: WorkoutPlan, weightUnit: String, distanceUnit: String) -> String {
@@ -857,6 +837,288 @@ Ensure strength days have 4–6 items; running items include distance and pace; 
             out.append(plan.guidance)
         }
         return out.joined(separator: "\n")
+    }
+
+    private static func partialMarkdownPreview(from rawContent: GeneratedContent,
+                                               fallback: String,
+                                               distanceUnit: String) -> String {
+        guard let data = rawContent.jsonString.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return fallback
+        }
+
+        var out: [String] = ["## This Week's Training Plan", ""]
+
+        let overview = stringValue(root["overview"])
+        if !overview.isEmpty {
+            out.append(overview)
+            out.append("")
+        }
+
+        if let weeks = arrayValue(root["weeks"]),
+           let firstWeek = weeks.first.flatMap(dictionaryValue),
+           let days = arrayValue(firstWeek["days"]) {
+            for dayValue in days {
+                guard let day = dictionaryValue(dayValue) else { continue }
+                let dayTitle = stringValue(day["title"])
+                guard !dayTitle.isEmpty else { continue }
+
+                out.append("### \(dayTitle)")
+
+                var emittedItems = false
+                if let items = arrayValue(day["items"]) {
+                    for itemValue in items {
+                        guard let item = dictionaryValue(itemValue),
+                              let line = previewLine(from: item, distanceUnit: distanceUnit) else { continue }
+                        out.append(line)
+                        emittedItems = true
+                    }
+                }
+
+                if !emittedItems {
+                    let dayType = stringValue(day["type"]).lowercased()
+                    if dayType == DayType.activeRecovery.rawValue.lowercased() {
+                        out.append("- Active Recovery")
+                    } else if dayType == DayType.rest.rawValue.lowercased() {
+                        out.append("- Rest Day")
+                    }
+                }
+
+                out.append("")
+            }
+        }
+
+        let guidance = stringValue(root["guidance"])
+        if !guidance.isEmpty {
+            out.append("---")
+            out.append(guidance)
+        }
+
+        let rendered = out.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return rendered.isEmpty ? fallback : rendered
+    }
+
+    private static func previewLine(from item: [String: Any], distanceUnit: String) -> String? {
+        let name = stringValue(item["name"]).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nil }
+
+        if let sets = intValue(item["sets"]), let reps = intValue(item["reps"]) {
+            let suggestedWeight = stringValue(item["suggestedWeight"])
+            if !suggestedWeight.isEmpty {
+                return "- **\(name)** — \(sets)x\(reps) @ \(suggestedWeight)"
+            }
+            return "- **\(name)** — \(sets)x\(reps)"
+        }
+
+        if let distance = doubleValue(item["distance"]) {
+            let unit = {
+                let found = stringValue(item["distanceUnit"])
+                return found.isEmpty ? distanceUnit : found
+            }()
+            var line = "- \(name): \(String(format: "%.1f", distance)) \(unit)"
+            let pace = stringValue(item["pace"])
+            if !pace.isEmpty { line += " @ \(pace)" }
+            if let minutes = intValue(item["durationMinutes"]) { line += " (\(minutes) min)" }
+            let effort = stringValue(item["effort"])
+            if !effort.isEmpty { line += " — \(effort)" }
+            return line
+        }
+
+        let notes = stringValue(item["notes"])
+        if !notes.isEmpty {
+            return "- \(name): \(notes)"
+        }
+        return "- \(name)"
+    }
+
+    private static func normalizePlan(_ plan: WorkoutPlan, calendar: Calendar = .current) -> WorkoutPlan {
+        let normalizedWeek = normalizeWeek(plan.weeks.first, calendar: calendar)
+        return WorkoutPlan(
+            title: plan.title,
+            overview: plan.overview,
+            unit: plan.unit,
+            weeks: [normalizedWeek],
+            guidance: plan.guidance
+        )
+    }
+
+    private static func normalizeWeek(_ week: Week?, calendar: Calendar) -> Week {
+        let orderedWeekdays = localeWeekdayOrder(calendar: calendar)
+        let sourceDays = week?.days ?? []
+        var buckets: [Int: Day] = [:]
+
+        for (offset, day) in sourceDays.enumerated() {
+            let weekday = weekdayIndex(from: day.title, calendar: calendar)
+                ?? orderedWeekdays[offset % orderedWeekdays.count]
+            let normalized = Day(
+                title: weekdayLabel(for: weekday, calendar: calendar),
+                type: day.type,
+                items: deduplicatedItems(day.items)
+            )
+
+            if let existing = buckets[weekday] {
+                buckets[weekday] = mergeDays(existing, normalized, weekday: weekday, calendar: calendar)
+            } else {
+                buckets[weekday] = normalized
+            }
+        }
+
+        let normalizedDays: [Day] = orderedWeekdays.map { weekday in
+            if let existing = buckets[weekday] {
+                return Day(
+                    title: weekdayLabel(for: weekday, calendar: calendar),
+                    type: existing.type,
+                    items: deduplicatedItems(existing.items)
+                )
+            }
+            return Day(
+                title: weekdayLabel(for: weekday, calendar: calendar),
+                type: .rest,
+                items: []
+            )
+        }
+
+        let title = week?.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return Week(
+            title: title?.isEmpty == false ? title! : "Week 1",
+            days: normalizedDays
+        )
+    }
+
+    private static func mergeDays(_ primary: Day,
+                                  _ secondary: Day,
+                                  weekday: Int,
+                                  calendar: Calendar) -> Day {
+        let mergedItems = deduplicatedItems(primary.items + secondary.items)
+        var mergedType = preferredDayType(primary: primary.type, secondary: secondary.type)
+        if !mergedItems.isEmpty && (mergedType == .rest || mergedType == .activeRecovery) {
+            mergedType = firstTrainingType(from: [primary.type, secondary.type]) ?? .fullBodyStrength
+        }
+        return Day(
+            title: weekdayLabel(for: weekday, calendar: calendar),
+            type: mergedType,
+            items: mergedItems
+        )
+    }
+
+    private static func preferredDayType(primary: DayType, secondary: DayType) -> DayType {
+        if primary == .rest || primary == .activeRecovery {
+            if secondary != .rest && secondary != .activeRecovery {
+                return secondary
+            }
+        }
+        if secondary == .rest || secondary == .activeRecovery {
+            return primary
+        }
+        return primary
+    }
+
+    private static func firstTrainingType(from values: [DayType]) -> DayType? {
+        values.first(where: { $0 != .rest && $0 != .activeRecovery })
+    }
+
+    private static func deduplicatedItems(_ items: [Item]) -> [Item] {
+        var seen: Set<String> = []
+        var result: [Item] = []
+        for item in items {
+            let key = itemDedupKey(item)
+            if seen.insert(key).inserted {
+                result.append(item)
+            }
+        }
+        return result
+    }
+
+    private static func itemDedupKey(_ item: Item) -> String {
+        let name = normalizedToken(item.name)
+        let sets = item.sets.map(String.init) ?? ""
+        let reps = item.reps.map(String.init) ?? ""
+        let weight = normalizedToken(item.suggestedWeight ?? "")
+        let distance = item.distance.map { String(format: "%.2f", $0) } ?? ""
+        let unit = normalizedToken(item.distanceUnit ?? "")
+        let pace = normalizedToken(item.pace ?? "")
+        let duration = item.durationMinutes.map(String.init) ?? ""
+        let effort = normalizedToken(item.effort ?? "")
+        return "\(name)|\(sets)|\(reps)|\(weight)|\(distance)|\(unit)|\(pace)|\(duration)|\(effort)"
+    }
+
+    private static func normalizedToken(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+    }
+
+    private static func localeWeekdayOrder(calendar: Calendar) -> [Int] {
+        let firstWeekday = calendar.firstWeekday
+        return (0..<7).map { ((firstWeekday - 1 + $0) % 7) + 1 }
+    }
+
+    private static func weekdayLabel(for weekday: Int, calendar: Calendar) -> String {
+        let symbols = calendar.shortWeekdaySymbols
+        let index = max(0, min(6, weekday - 1))
+        return symbols.indices.contains(index) ? symbols[index] : "Day \(weekday)"
+    }
+
+    private static func weekdayIndex(from title: String, calendar: Calendar) -> Int? {
+        let lowered = title.lowercased()
+        let normalized = lowered.replacingOccurrences(of: "[^a-z]", with: " ", options: .regularExpression)
+        let compact = lowered.replacingOccurrences(of: "[^a-z]", with: "", options: .regularExpression)
+        let tokens = Set(normalized.split(separator: " ").map(String.init))
+
+        for idx in 0..<7 {
+            let full = normalizedDayToken(calendar.weekdaySymbols[idx])
+            let short = normalizedDayToken(calendar.shortWeekdaySymbols[idx])
+            if tokens.contains(full) || tokens.contains(short) || compact.contains(full) || compact.contains(short) {
+                return idx + 1
+            }
+        }
+
+        let fallback: [(String, Int)] = [
+            ("sun", 1), ("sunday", 1),
+            ("mon", 2), ("monday", 2),
+            ("tue", 3), ("tues", 3), ("tuesday", 3),
+            ("wed", 4), ("wednesday", 4),
+            ("thu", 5), ("thur", 5), ("thurs", 5), ("thursday", 5),
+            ("fri", 6), ("friday", 6),
+            ("sat", 7), ("saturday", 7)
+        ]
+        for (token, weekday) in fallback where tokens.contains(token) || compact.contains(token) {
+            return weekday
+        }
+        return nil
+    }
+
+    private static func normalizedDayToken(_ value: String) -> String {
+        value.lowercased().replacingOccurrences(of: "[^a-z]", with: "", options: .regularExpression)
+    }
+
+    private static func dictionaryValue(_ value: Any?) -> [String: Any]? {
+        value as? [String: Any]
+    }
+
+    private static func arrayValue(_ value: Any?) -> [Any]? {
+        value as? [Any]
+    }
+
+    private static func stringValue(_ value: Any?) -> String {
+        if let text = value as? String { return text }
+        if let number = value as? NSNumber { return number.stringValue }
+        return ""
+    }
+
+    private static func intValue(_ value: Any?) -> Int? {
+        if let int = value as? Int { return int }
+        if let number = value as? NSNumber { return number.intValue }
+        if let string = value as? String, let int = Int(string) { return int }
+        return nil
+    }
+
+    private static func doubleValue(_ value: Any?) -> Double? {
+        if let double = value as? Double { return double }
+        if let number = value as? NSNumber { return number.doubleValue }
+        if let string = value as? String, let double = Double(string) { return double }
+        return nil
     }
     #endif
     

@@ -34,6 +34,7 @@ enum AIPromptBuilder {
 
         // User stats summary (compact for Ask mode)
         lines.append(contentsOf: formatUserStats(userStats, compact: true))
+        lines.append("Nutrition math rule: if using g/kg and body weight is in lb, convert lb ÷ 2.20462 first. Never treat lb as kg.")
         if let base = userStats.typicalRunDistance {
             lines.append("Typical run distance: \(String(format: "%.1f", base)) \(distanceUnit)")
         }
@@ -189,7 +190,17 @@ enum AIPromptBuilder {
         lines.append("Experience Level: \(stats.experienceLevel == "beginner" ? "New to Working Out (Beginner)" : "Experienced")")
         
         if let weight = stats.latestWeight {
-            lines.append("Weight: \(String(format: "%.1f", weight)) \(stats.weightUnit)")
+            let weightLine: String
+            if stats.weightUnit.lowercased() == "lbs" {
+                let kg = convertWeight(weight, from: "lbs", to: "kg")
+                weightLine = "Weight: \(String(format: "%.1f", weight)) lbs (\(String(format: "%.1f", kg)) kg)"
+            } else if stats.weightUnit.lowercased() == "kg" {
+                let lbs = convertWeight(weight, from: "kg", to: "lbs")
+                weightLine = "Weight: \(String(format: "%.1f", weight)) kg (\(String(format: "%.1f", lbs)) lbs)"
+            } else {
+                weightLine = "Weight: \(String(format: "%.1f", weight)) \(stats.weightUnit)"
+            }
+            lines.append(weightLine)
         }
         
         if compact {
@@ -240,5 +251,12 @@ enum AIPromptBuilder {
     
     private static func clamp(_ text: String) -> String {
         text.count <= maxPromptChars ? text : String(text.prefix(maxPromptChars))
+    }
+
+    private static func convertWeight(_ value: Double, from: String, to: String) -> Double {
+        if from == to { return value }
+        if from == "kg" && to == "lbs" { return value * 2.20462 }
+        if from == "lbs" && to == "kg" { return value / 2.20462 }
+        return value
     }
 }

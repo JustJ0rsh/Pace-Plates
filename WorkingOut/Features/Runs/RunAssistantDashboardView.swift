@@ -1,5 +1,11 @@
 import SwiftUI
 import SwiftData
+#if canImport(UIKit)
+import UIKit
+#endif
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
 
 struct RunAssistantDashboardView: View {
     enum AIApprovalResult {
@@ -26,6 +32,7 @@ struct RunAssistantDashboardView: View {
     @State private var pendingAIStyle: String = "hybrid"
     @State private var pendingAITitle: String = "Generate Balanced Plan"
     @State private var restDayTargets: [Int: Int] = [:]
+    @State private var selectedWeekOverride: Int? = nil
 
     private var activePlan: RunningPlan? {
         plans.first(where: { $0.isActive && !$0.isArchived })
@@ -35,10 +42,11 @@ struct RunAssistantDashboardView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 if let plan = activePlan {
+                    let displayedWeek = displayedWeekIndex(for: plan)
                     activePlanCard(plan)
                     todayCard(plan)
-                    weekSessionsCard(plan)
-                    restDayMoveCard(plan)
+                    weekSessionsCard(plan, weekIndex: displayedWeek)
+                    restDayMoveCard(plan, weekIndex: displayedWeek)
                 } else {
                     ContentUnavailableView(
                         "No Active Plan",
@@ -48,8 +56,10 @@ struct RunAssistantDashboardView: View {
                     .frame(maxWidth: .infinity)
                 }
 
-                if RunAssistantAIService.shared.canGenerate() {
+                if WorkoutPlanGenerator.shared.availability() == .available {
                     aiCard
+                } else {
+                    aiUnavailableCard
                 }
 
                 savedPlansCard
@@ -73,9 +83,13 @@ struct RunAssistantDashboardView: View {
         }
         .task {
             reconcileIfPossible()
+            RunAssistantAIService.shared.prewarmIfPossible()
         }
         .onChange(of: runs.count) { _, _ in
             reconcileIfPossible()
+        }
+        .onChange(of: activePlan?.id) { _, _ in
+            selectedWeekOverride = nil
         }
         .sheet(isPresented: $showAIGenerationSheet) {
             RunAssistantAIGenerationSheet(
@@ -207,101 +221,140 @@ struct RunAssistantDashboardView: View {
     }
 
     @ViewBuilder
-    private func weekSessionsCard(_ plan: RunningPlan) -> some View {
-        let week = RunAssistantService.shared.sessionsForCurrentWeek(plan: plan)
+    private func weekSessionsCard(_ plan: RunningPlan, weekIndex: Int) -> some View {
+        let week = RunAssistantService.shared.sessionsForWeek(plan: plan, weekIndex: weekIndex)
+        let weekCount = RunAssistantService.shared.totalWeekCount(plan: plan)
+        let canGoPrev = weekIndex > 0
+        let canGoNext = weekIndex < (weekCount - 1)
 
         VStack(alignment: .leading, spacing: 8) {
-            Text("Current Week")
-                .font(.headline)
+            HStack(alignment: .center, spacing: 10) {
+                Text("Week \(weekIndex + 1) of \(weekCount)")
+                    .font(.headline)
 
-            ForEach(week) { session in
-                HStack(alignment: .center, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(weekdayName(session)): \(session.sessionType.capitalized)")
-                            .font(.subheadline.bold())
-                        sessionSummary(session)
-                            .font(.caption)
-                            .foregroundStyle(AppTheme.secondaryTextColor)
+                Spacer()
+
+                if selectedWeekOverride != nil {
+                    Button("Auto") {
+                        selectedWeekOverride = nil
                     }
-
-                    Spacer()
-
-                    if session.status == "completed" {
-                        HStack(spacing: 8) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                            Button("Undo") {
-                                RunAssistantService.shared.markSession(
-                                    session.id,
-                                    status: "pending",
-                                    completionSource: nil,
-                                    completedRunSessionID: nil,
-                                    context: modelContext
-                                )
-                            }
-                            .font(.caption)
-                            .buttonStyle(.plain)
-                        }
-                    } else if session.status == "skipped" {
-                        HStack(spacing: 8) {
-                            Image(systemName: "minus.circle.fill")
-                                .foregroundStyle(.orange)
-                            Button("Undo") {
-                                RunAssistantService.shared.markSession(
-                                    session.id,
-                                    status: "pending",
-                                    completionSource: nil,
-                                    completedRunSessionID: nil,
-                                    context: modelContext
-                                )
-                            }
-                            .font(.caption)
-                            .buttonStyle(.plain)
-                        }
-                    } else {
-                        HStack(spacing: 8) {
-                            Menu {
-                                Button("Easy") { RunAssistantService.shared.updateSessionIntensity(session.id, intensityLevel: "easy", context: modelContext) }
-                                Button("Moderate") { RunAssistantService.shared.updateSessionIntensity(session.id, intensityLevel: "moderate", context: modelContext) }
-                                Button("Hard") { RunAssistantService.shared.updateSessionIntensity(session.id, intensityLevel: "hard", context: modelContext) }
-                            } label: {
-                                Text(session.intensityLevel.capitalized)
-                                    .font(.caption)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(AppTheme.backgroundColor.opacity(0.25))
-                                    .clipShape(Capsule())
-                            }
-
-                            Button {
-                                RunAssistantService.shared.markSession(
-                                    session.id,
-                                    status: "completed",
-                                    completionSource: "manual",
-                                    completedRunSessionID: nil,
-                                    context: modelContext
-                                )
-                            } label: {
-                                Image(systemName: "checkmark.circle")
-                            }
-                            .buttonStyle(.plain)
-
-                            Button {
-                                RunAssistantService.shared.markSession(
-                                    session.id,
-                                    status: "skipped",
-                                    completionSource: "manual",
-                                    completedRunSessionID: nil,
-                                    context: modelContext
-                                )
-                            } label: {
-                                Image(systemName: "minus.circle")
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
+                    .buttonStyle(.bordered)
                 }
-                .padding(.vertical, 2)
+
+                Button {
+                    guard canGoPrev else { return }
+                    let target = RunAssistantService.shared.clampedWeekIndex(weekIndex - 1, plan: plan)
+                    selectedWeekOverride = target
+                } label: {
+                    Image(systemName: "chevron.left")
+                }
+                .buttonStyle(.bordered)
+                .disabled(!canGoPrev)
+
+                Button {
+                    guard canGoNext else { return }
+                    let target = RunAssistantService.shared.clampedWeekIndex(weekIndex + 1, plan: plan)
+                    selectedWeekOverride = target
+                } label: {
+                    Image(systemName: "chevron.right")
+                }
+                .buttonStyle(.bordered)
+                .disabled(!canGoNext)
+            }
+
+            if week.isEmpty {
+                Text("No sessions scheduled for this week.")
+                    .foregroundStyle(AppTheme.secondaryTextColor)
+            } else {
+                ForEach(week) { session in
+                    HStack(alignment: .center, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(weekdayName(session)): \(session.sessionType.capitalized)")
+                                .font(.subheadline.bold())
+                            sessionSummary(session)
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.secondaryTextColor)
+                        }
+
+                        Spacer()
+
+                        if session.status == "completed" {
+                            HStack(spacing: 8) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                                Button("Undo") {
+                                    RunAssistantService.shared.markSession(
+                                        session.id,
+                                        status: "pending",
+                                        completionSource: nil,
+                                        completedRunSessionID: nil,
+                                        context: modelContext
+                                    )
+                                }
+                                .font(.caption)
+                                .buttonStyle(.plain)
+                            }
+                        } else if session.status == "skipped" {
+                            HStack(spacing: 8) {
+                                Image(systemName: "minus.circle.fill")
+                                    .foregroundStyle(.orange)
+                                Button("Undo") {
+                                    RunAssistantService.shared.markSession(
+                                        session.id,
+                                        status: "pending",
+                                        completionSource: nil,
+                                        completedRunSessionID: nil,
+                                        context: modelContext
+                                    )
+                                }
+                                .font(.caption)
+                                .buttonStyle(.plain)
+                            }
+                        } else {
+                            HStack(spacing: 8) {
+                                Menu {
+                                    Button("Easy") { RunAssistantService.shared.updateSessionIntensity(session.id, intensityLevel: "easy", context: modelContext) }
+                                    Button("Moderate") { RunAssistantService.shared.updateSessionIntensity(session.id, intensityLevel: "moderate", context: modelContext) }
+                                    Button("Hard") { RunAssistantService.shared.updateSessionIntensity(session.id, intensityLevel: "hard", context: modelContext) }
+                                } label: {
+                                    Text(session.intensityLevel.capitalized)
+                                        .font(.caption)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(AppTheme.backgroundColor.opacity(0.25))
+                                        .clipShape(Capsule())
+                                }
+
+                                Button {
+                                    RunAssistantService.shared.markSession(
+                                        session.id,
+                                        status: "completed",
+                                        completionSource: "manual",
+                                        completedRunSessionID: nil,
+                                        context: modelContext
+                                    )
+                                } label: {
+                                    Image(systemName: "checkmark.circle")
+                                }
+                                .buttonStyle(.plain)
+
+                                Button {
+                                    RunAssistantService.shared.markSession(
+                                        session.id,
+                                        status: "skipped",
+                                        completionSource: "manual",
+                                        completedRunSessionID: nil,
+                                        context: modelContext
+                                    )
+                                } label: {
+                                    Image(systemName: "minus.circle")
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
             }
         }
         .padding()
@@ -311,11 +364,10 @@ struct RunAssistantDashboardView: View {
     }
 
     @ViewBuilder
-    private func restDayMoveCard(_ plan: RunningPlan) -> some View {
-        let weekIndex = currentWeekIndex(for: plan)
-        let currentWeek = (plan.sessions ?? []).filter { $0.weekIndex == weekIndex }
-        let restWeekdays = Array(Set(currentWeek.filter { $0.sessionType == "rest" }.map { weekdayNumber($0) })).sorted()
-        let nonRestWeekdays = Array(Set(currentWeek.filter { $0.sessionType != "rest" }.map { weekdayNumber($0) })).sorted()
+    private func restDayMoveCard(_ plan: RunningPlan, weekIndex: Int) -> some View {
+        let week = RunAssistantService.shared.sessionsForWeek(plan: plan, weekIndex: weekIndex)
+        let restWeekdays = Array(Set(week.filter { $0.sessionType == "rest" }.map { weekdayNumber($0) })).sorted()
+        let nonRestWeekdays = Array(Set(week.filter { $0.sessionType != "rest" }.map { weekdayNumber($0) })).sorted()
 
         VStack(alignment: .leading, spacing: 10) {
             Text("Move Rest Days")
@@ -351,7 +403,7 @@ struct RunAssistantDashboardView: View {
                     .padding(.vertical, 4)
                 }
             } else {
-                Text("No movable rest day this week.")
+                Text("No movable rest day in this week.")
                     .foregroundStyle(AppTheme.secondaryTextColor)
             }
         }
@@ -371,17 +423,26 @@ struct RunAssistantDashboardView: View {
     }
 
     private var aiCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("More Plans (Apple Intelligence)")
-                .font(.headline)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 8) {
+                Text("More Plans")
+                    .font(.headline)
+                Spacer()
+                Text("Apple Intelligence")
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(AppTheme.accentColor.opacity(0.16))
+                    .clipShape(Capsule())
+            }
             Text("Generate personalized plans using your cardio and weight data.")
                 .font(.caption)
                 .foregroundStyle(AppTheme.secondaryTextColor)
 
-            HStack {
-                aiButton("Generate Faster Plan", style: "speed")
-                aiButton("Generate Endurance Plan", style: "endurance")
-                aiButton("Generate Balanced Plan", style: "hybrid")
+            VStack(spacing: 8) {
+                ForEach(aiPlanOptions) { option in
+                    aiButton(option)
+                }
             }
         }
         .padding()
@@ -390,15 +451,115 @@ struct RunAssistantDashboardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
-    @ViewBuilder
-    private func aiButton(_ title: String, style: String) -> some View {
-        Button(title) {
-            pendingAIStyle = style
-            pendingAITitle = title
-            showAIGenerationSheet = true
+    private var aiUnavailableCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 8) {
+                Text("More Plans")
+                    .font(.headline)
+                Spacer()
+                Text("AI Unavailable")
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.orange.opacity(0.20))
+                    .clipShape(Capsule())
+            }
+
+            Text(runAssistantUnavailableTitle)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppTheme.textColor)
+
+            Text(runAssistantUnavailableDescription)
+                .font(.caption)
+                .foregroundStyle(AppTheme.secondaryTextColor)
+
+            if shouldShowAISettingsButton {
+                Button {
+                    openSettings()
+                } label: {
+                    Label("Open Settings", systemImage: "gear")
+                }
+                .buttonStyle(.borderedProminent)
+            }
         }
-        .buttonStyle(.bordered)
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.secondaryBackgroundColor)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private struct AIPlanOption: Identifiable {
+        let id: String
+        let title: String
+        let subtitle: String
+        let icon: String
+        let style: String
+    }
+
+    private var aiPlanOptions: [AIPlanOption] {
+        [
+            AIPlanOption(
+                id: "speed",
+                title: "Generate Faster Plan",
+                subtitle: "Build speed, intervals, and threshold focus",
+                icon: "bolt.fill",
+                style: "speed"
+            ),
+            AIPlanOption(
+                id: "endurance",
+                title: "Generate Endurance Plan",
+                subtitle: "Increase base volume and long-run capacity",
+                icon: "figure.run.circle",
+                style: "endurance"
+            ),
+            AIPlanOption(
+                id: "hybrid",
+                title: "Generate Balanced Plan",
+                subtitle: "Blend speed and endurance for all-around progress",
+                icon: "dial.low.fill",
+                style: "hybrid"
+            )
+        ]
+    }
+
+    @ViewBuilder
+    private func aiButton(_ option: AIPlanOption) -> some View {
+        Button {
+            pendingAIStyle = option.style
+            pendingAITitle = option.title
+            showAIGenerationSheet = true
+        } label: {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: option.icon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 20)
+                    .foregroundStyle(AppTheme.accentColor)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(option.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppTheme.textColor)
+                    Text(option.subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.secondaryTextColor)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppTheme.secondaryTextColor)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(AppTheme.accentColor.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
         .disabled(showAIGenerationSheet)
+        .opacity(showAIGenerationSheet ? 0.65 : 1.0)
     }
 
     private var savedPlansCard: some View {
@@ -456,9 +617,10 @@ struct RunAssistantDashboardView: View {
         RunAssistantService.shared.reconcileCompletions(activePlan: activePlan, runs: runs, context: modelContext)
     }
 
-    private func currentWeekIndex(for plan: RunningPlan) -> Int {
-        let calendar = Calendar.current
-        return max(0, calendar.dateComponents([.weekOfYear], from: plan.startDate, to: Date()).weekOfYear ?? 0)
+    private func displayedWeekIndex(for plan: RunningPlan) -> Int {
+        let autoWeek = RunAssistantService.shared.autoDisplayWeekIndex(plan: plan)
+        let base = selectedWeekOverride ?? autoWeek
+        return RunAssistantService.shared.clampedWeekIndex(base, plan: plan)
     }
 
     private func todaySession(for plan: RunningPlan) -> RunningPlanSession? {
@@ -512,7 +674,20 @@ struct RunAssistantDashboardView: View {
         if session.sessionType == "rest" {
             Text("Rest day")
         } else {
-            Text("\(String(format: "%.2f", miles)) mi • \(Int(minutes)) min")
+            let parts = [
+                miles > 0.01 ? "\(String(format: "%.2f", miles)) mi" : nil,
+                minutes >= 1 ? "\(Int(minutes)) min" : nil
+            ].compactMap { $0 }
+
+            if parts.isEmpty {
+                if let notes = session.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
+                    Text(notes)
+                } else {
+                    Text("Planned training session")
+                }
+            } else {
+                Text(parts.joined(separator: " • "))
+            }
         }
     }
 
@@ -549,6 +724,70 @@ struct RunAssistantDashboardView: View {
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
         return formatter.string(from: date)
+    }
+
+    private var runAssistantUnavailableTitle: String {
+        #if AI_FOUNDATION_AVAILABLE
+        if #available(iOS 26, *) {
+            #if canImport(FoundationModels)
+            let model = SystemLanguageModel.default
+            switch model.availability {
+            case .unavailable(.appleIntelligenceNotEnabled):
+                return "Apple Intelligence Not Enabled"
+            case .unavailable(.modelNotReady):
+                return "AI Model Not Ready"
+            case .unavailable(.deviceNotEligible):
+                return "Device Not Supported"
+            default:
+                return "Apple Intelligence Unavailable"
+            }
+            #endif
+        }
+        #endif
+        return "Apple Intelligence Unavailable"
+    }
+
+    private var runAssistantUnavailableDescription: String {
+        #if AI_FOUNDATION_AVAILABLE
+        if #available(iOS 26, *) {
+            #if canImport(FoundationModels)
+            let model = SystemLanguageModel.default
+            switch model.availability {
+            case .unavailable(.appleIntelligenceNotEnabled):
+                return "Enable Apple Intelligence in Settings > Apple Intelligence & Siri to generate personalized AI running plans."
+            case .unavailable(.modelNotReady):
+                return "The AI model is still downloading or preparing on this device. Try again shortly."
+            case .unavailable(.deviceNotEligible):
+                return "This device does not support Apple Intelligence. AI running plan generation requires compatible hardware."
+            default:
+                return "AI running plan generation is currently unavailable."
+            }
+            #endif
+        }
+        #endif
+        return "AI running plan generation is not available on this device."
+    }
+
+    private var shouldShowAISettingsButton: Bool {
+        #if AI_FOUNDATION_AVAILABLE
+        if #available(iOS 26, *) {
+            #if canImport(FoundationModels)
+            let model = SystemLanguageModel.default
+            if case .unavailable(.appleIntelligenceNotEnabled) = model.availability {
+                return true
+            }
+            #endif
+        }
+        #endif
+        return false
+    }
+
+    private func openSettings() {
+        #if canImport(UIKit)
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
+        #endif
     }
 }
 
@@ -644,7 +883,7 @@ private struct RunAssistantBuiltInPlanSheet: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(.ultraThinMaterial)
+                .background(AppTheme.secondaryBackgroundColor)
                 .overlay(alignment: .top) {
                     Divider()
                 }
@@ -687,44 +926,40 @@ private struct RunAssistantAIGenerationSheet: View {
     @State private var isSaving: Bool = false
     @State private var draft: RunAssistantAIService.PlanDraft? = nil
     @State private var localError: String? = nil
-    @State private var streamText: String = ""
     @State private var generationID: Int = 0
+    @State private var streamingOpacity: Double = 0.5
+    @State private var waitingForFirstChunk: Bool = true
+    @State private var displayedStreamText: String = ""
+    @State private var fullBufferedStreamText: String = ""
 
     var body: some View {
         NavigationStack {
             Group {
                 if isLoading {
-                    VStack(alignment: .leading, spacing: 14) {
-                        HStack(spacing: 10) {
-                            ProgressView().scaleEffect(1.2)
-                            Text("Streaming AI generation")
-                                .foregroundStyle(AppTheme.secondaryTextColor)
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 10) {
+                            HStack(alignment: .bottom) {
+                                Spacer(minLength: 40)
+                                loadingBubble(text: loadingPromptText, isAssistant: false, isStreamingBubble: false)
+                            }
+
+                            HStack(alignment: .bottom) {
+                                if waitingForFirstChunk {
+                                    loadingBubble(text: "Generating…", isAssistant: true, isStreamingBubble: true)
+                                } else {
+                                    loadingBubble(
+                                        text: displayedStreamText,
+                                        isAssistant: true,
+                                        isStreamingBubble: false
+                                    )
+                                }
+                                Spacer(minLength: 40)
+                            }
                         }
-
-                        Text("Live output")
-                            .font(.caption.bold())
-                            .foregroundStyle(AppTheme.secondaryTextColor)
-
-                        ScrollView {
-                            Text(
-                                streamText.isEmpty
-                                ? "Preparing on-device model. You will see generation text here as it arrives."
-                                : streamText
-                            )
-                                .font(.footnote.monospaced())
-                                .foregroundStyle(AppTheme.secondaryTextColor)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 220, maxHeight: .infinity, alignment: .topLeading)
-                        .padding(10)
-                        .background(AppTheme.secondaryBackgroundColor)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-
-                        Text("\(streamText.count) characters streamed")
-                            .font(.caption2)
-                            .foregroundStyle(AppTheme.secondaryTextColor.opacity(0.9))
+                        .padding(.horizontal, 14)
+                        .padding(.top, 10)
+                        .padding(.bottom, 24)
                     }
-                    .padding(16)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 } else if let localError {
                     VStack(spacing: 14) {
@@ -740,14 +975,24 @@ private struct RunAssistantAIGenerationSheet: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let draft {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text(draft.name)
-                                .font(.title3.bold())
-                            Text("\(draft.durationWeeks) weeks • \(draft.primaryGoal.capitalized) • \(draft.daysPerWeek) days/week")
-                                .font(.subheadline)
-                                .foregroundStyle(AppTheme.secondaryTextColor)
-
-                            Divider()
+                        VStack(alignment: .leading, spacing: 14) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(draft.name)
+                                    .font(.title3.bold())
+                                Text("\(draft.durationWeeks) weeks • \(draft.primaryGoal.capitalized) • \(draft.daysPerWeek) days/week")
+                                    .font(.subheadline)
+                                    .foregroundStyle(AppTheme.secondaryTextColor)
+                            }
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .fill(AppTheme.secondaryBackgroundColor.opacity(0.92))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .strokeBorder(AppTheme.textColor.opacity(0.10), lineWidth: 1)
+                            )
 
                             ForEach(groupedWeekIndexes(draft), id: \.self) { week in
                                 VStack(alignment: .leading, spacing: 6) {
@@ -765,10 +1010,16 @@ private struct RunAssistantAIGenerationSheet: View {
                                         .padding(.vertical, 3)
                                     }
                                 }
-                                .padding(10)
+                                .padding(12)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(AppTheme.secondaryBackgroundColor)
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                .background(
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .fill(AppTheme.secondaryBackgroundColor.opacity(0.92))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .strokeBorder(AppTheme.textColor.opacity(0.10), lineWidth: 1)
+                                )
                             }
                         }
                         .padding(.horizontal)
@@ -784,29 +1035,48 @@ private struct RunAssistantAIGenerationSheet: View {
                     Button("Close") { dismiss() }
                 }
             }
+            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
+            .appBackground(AppTheme.gradientRuns)
+            .foregroundColor(AppTheme.textColor)
             .safeAreaInset(edge: .bottom) {
                 if draft != nil && !isLoading {
                     HStack(spacing: 10) {
-                        Button("Approve Plan") {
+                        Button {
                             savePlan(activate: false)
+                        } label: {
+                            Text("Approve Plan")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(Capsule().fill(AppTheme.accentColor.opacity(0.82)))
                         }
-                        .buttonStyle(.bordered)
-                        .frame(maxWidth: .infinity)
                         .disabled(isSaving)
 
-                        Button("Approve & Start Plan") {
+                        Button {
                             savePlan(activate: true)
+                        } label: {
+                            Text("Approve & Start Plan")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(Capsule().fill(AppTheme.accentColor))
                         }
-                        .buttonStyle(.borderedProminent)
-                        .frame(maxWidth: .infinity)
                         .disabled(isSaving)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(.ultraThinMaterial)
-                    .overlay(alignment: .top) {
-                        Divider()
-                    }
+                    .background(
+                        VStack(spacing: 0) {
+                            Divider()
+                            Rectangle()
+                                .fill(.ultraThinMaterial)
+                        }
+                        .ignoresSafeArea()
+                    )
                 }
             }
             .task(id: generationID) {
@@ -819,16 +1089,27 @@ private struct RunAssistantAIGenerationSheet: View {
         isLoading = true
         localError = nil
         draft = nil
-        streamText = ""
+        waitingForFirstChunk = true
+        displayedStreamText = ""
+        fullBufferedStreamText = ""
+        streamingOpacity = 0.2
+        withAnimation(.easeInOut(duration: 0.25)) {
+            streamingOpacity = 1.0
+        }
         do {
             draft = try await RunAssistantAIService.shared.generateDraft(
                 style: style,
                 profile: profile,
                 context: modelContext,
                 onStreamChunk: { chunk in
-                    streamText += chunk
+                    if waitingForFirstChunk && !chunk.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        waitingForFirstChunk = false
+                    }
+                    fullBufferedStreamText += chunk
+                    displayedStreamText = sanitizeStreamPreview(fullBufferedStreamText)
                 }
             )
+            displayedStreamText = sanitizeStreamPreview(fullBufferedStreamText)
             isLoading = false
         } catch is CancellationError {
             // Expected when the user regenerates while a generation is in-flight.
@@ -847,6 +1128,113 @@ private struct RunAssistantAIGenerationSheet: View {
         isSaving = false
         onFinished(.success(activate ? .started : .saved))
         dismiss()
+    }
+
+    private var loadingPromptText: String {
+        "Build a \(style.replacingOccurrences(of: "_", with: " ")) running plan for me. \(profile.daysPerWeek) days per week, focused on \(profile.goalFocus)."
+    }
+
+    @ViewBuilder
+    private func loadingBubble(text: String, isAssistant: Bool, isStreamingBubble: Bool) -> some View {
+        let bubbleFill: Color = isAssistant
+            ? AppTheme.secondaryBackgroundColor.opacity(0.90)
+            : AppTheme.accentColor.opacity(0.22)
+        let showGeneratingState = isAssistant && isStreamingBubble
+
+        VStack(alignment: .leading, spacing: 0) {
+            if showGeneratingState {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.textColor))
+                        .scaleEffect(0.85)
+                    Text(text)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(AppTheme.textColor)
+                }
+                .padding(14)
+            } else {
+                MarkdownView(text: text)
+                    .padding(14)
+            }
+        }
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(bubbleFill)
+
+                RoundedRectangle(cornerRadius: 18)
+                    .strokeBorder(AppTheme.textColor.opacity(0.12), lineWidth: 1)
+            }
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 4)
+        .opacity(isAssistant && isStreamingBubble ? streamingOpacity : 1.0)
+    }
+
+    private func sanitizeStreamPreview(_ text: String) -> String {
+        let normalized = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let lines = normalized.components(separatedBy: "\n")
+
+        var intro: [String] = []
+        var weekOrder: [Int] = []
+        var weekSections: [Int: [String]] = [:]
+        var currentWeek: Int? = nil
+        var seenWeeks: Set<Int> = []
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if let weekNumber = weekNumber(from: trimmed) {
+                currentWeek = weekNumber
+                if seenWeeks.insert(weekNumber).inserted {
+                    weekOrder.append(weekNumber)
+                }
+                // If the model loops and repeats week headings, keep the latest section only.
+                weekSections[weekNumber] = []
+                continue
+            }
+
+            if let currentWeek {
+                weekSections[currentWeek, default: []].append(line)
+            } else {
+                intro.append(line)
+            }
+        }
+
+        var output = collapseConsecutiveDuplicateLines(intro)
+        if !output.isEmpty && !weekOrder.isEmpty {
+            output.append("")
+        }
+
+        for (index, week) in weekOrder.enumerated() {
+            output.append("Week \(week)")
+            output.append(contentsOf: collapseConsecutiveDuplicateLines(weekSections[week] ?? []))
+            if index < weekOrder.count - 1 {
+                output.append("")
+            }
+        }
+
+        let rendered = output.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return rendered.isEmpty ? "Generating running plan preview..." : rendered
+    }
+
+    private func collapseConsecutiveDuplicateLines(_ lines: [String]) -> [String] {
+        var collapsed: [String] = []
+        for line in lines {
+            if collapsed.last != line {
+                collapsed.append(line)
+            }
+        }
+        return collapsed
+    }
+
+    private func weekNumber(from line: String) -> Int? {
+        let lower = line.lowercased()
+        guard lower.hasPrefix("week ") else { return nil }
+        let suffix = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+        let digits = suffix.prefix { $0.isNumber }
+        guard !digits.isEmpty, let week = Int(digits), week > 0 else { return nil }
+        return week
     }
 
     private func groupedWeekIndexes(_ draft: RunAssistantAIService.PlanDraft) -> [Int] {
@@ -873,7 +1261,17 @@ private struct RunAssistantAIGenerationSheet: View {
         let minutes = (session.targetDurationSeconds ?? 0) / 60
         let pace = session.targetPaceMinPerMile.map { " @ \(formatPaceMinSec($0))/mi" } ?? ""
         let notes = session.notes.map { " • \($0)" } ?? ""
-        return String(format: "%.2f mi • %.0f min", miles, minutes) + pace + notes
+        let parts = [
+            miles > 0.01 ? String(format: "%.2f mi", miles) : nil,
+            minutes >= 1 ? String(format: "%.0f min", minutes) : nil
+        ].compactMap { $0 }
+
+        if parts.isEmpty {
+            let notes = session.notes?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let fallback = (notes?.isEmpty == false ? notes : nil) ?? "Planned training session"
+            return fallback + pace
+        }
+        return parts.joined(separator: " • ") + pace + notes
     }
 
     private func formatPaceMinSec(_ minPerMile: Double) -> String {

@@ -47,6 +47,7 @@ struct AIConversationSheet: View {
     @State private var userIsDragging: Bool = false
     @State private var showTemplateSuccess = false
     @State private var createdTemplatesCount = 0
+    @State private var waitingForFirstChunk = true
 
     init(mode: Mode, request: WorkoutPlanRequest) {
         self.mode = mode
@@ -60,82 +61,47 @@ struct AIConversationSheet: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 0) {
-                        #if canImport(FoundationModels)
-                        if let json = structuredPlanJSON, useStructuredPlanView, let view = try? StructuredPlanCards(json: json) {
-                            view
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(16)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                        .fill(.ultraThinMaterial)
-                                )
-                                .id("streamText")
-                                .opacity(isStreaming ? streamingOpacity : 1.0)
-                                .overlay(alignment: .bottomTrailing) {
-                                    if isStreaming {
-                                        ProgressView()
-                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                            .scaleEffect(0.9)
-                                            .frame(width: 36, height: 36)
-                                            .background(
-                                                Circle()
-                                                    .fill(.ultraThinMaterial)
-                                            )
-                                            .padding(10)
-                                    }
-                                }
+                        if isStreaming && waitingForFirstChunk {
+                            preStreamLoadingContent
                         } else {
+                            #if canImport(FoundationModels)
+                            if let json = structuredPlanJSON, useStructuredPlanView, let view = try? StructuredPlanCards(json: json) {
+                                view
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(16)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                            .fill(AppTheme.secondaryBackgroundColor.opacity(0.92))
+                                    )
+                                    .id("streamText")
+                                    .opacity(isStreaming ? streamingOpacity : 1.0)
+                            } else {
+                                MarkdownView(text: displayText)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(16)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                            .fill(AppTheme.secondaryBackgroundColor.opacity(0.92))
+                                    )
+                                    .id("streamText")
+                                    .opacity(isStreaming ? streamingOpacity : 1.0)
+                            }
+                            #else
                             MarkdownView(text: displayText)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(16)
                                 .background(
                                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                        .fill(.ultraThinMaterial)
+                                        .fill(AppTheme.secondaryBackgroundColor.opacity(0.92))
                                 )
                                 .id("streamText")
                                 .opacity(isStreaming ? streamingOpacity : 1.0)
-                                .overlay(alignment: .bottomTrailing) {
-                                    if isStreaming {
-                                        ProgressView()
-                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                            .scaleEffect(0.9)
-                                            .frame(width: 36, height: 36)
-                                            .background(
-                                                Circle()
-                                                    .fill(.ultraThinMaterial)
-                                            )
-                                            .padding(10)
-                                    }
-                                }
-                        }
-                        #else
-                        MarkdownView(text: displayText)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(16)
-                            .background(
-                                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .fill(.ultraThinMaterial)
-                            )
-                            .id("streamText")
-                            .opacity(isStreaming ? streamingOpacity : 1.0)
-                            .overlay(alignment: .bottomTrailing) {
-                                if isStreaming {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                        .scaleEffect(0.9)
-                                        .frame(width: 36, height: 36)
-                                        .background(
-                                            Circle()
-                                                .fill(.ultraThinMaterial)
-                                        )
-                                        .padding(10)
-                                }
+                            #endif
+                            
+                            // Citations section at the bottom
+                            if !citations.isEmpty {
+                                citationsSection
                             }
-                        #endif
-                        
-                        // Citations section at the bottom
-                        if !citations.isEmpty {
-                            citationsSection
                         }
                     }
                     .padding(.horizontal, 16)
@@ -202,7 +168,7 @@ struct AIConversationSheet: View {
             .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
-            .appBackground(AppTheme.gradientAI)
+            .appBackground(AppTheme.gradientRuns)
             .foregroundColor(AppTheme.textColor)
             // Do not block scrolling: observe drag simultaneously
             .simultaneousGesture(
@@ -341,6 +307,7 @@ struct AIConversationSheet: View {
             streamTask?.cancel()
             streamTask = nil
             isStreaming = false
+            waitingForFirstChunk = false
         }
         .alert("Error", isPresented: .constant(errorText != nil)) {
             Button("OK", role: .cancel) { errorText = nil }
@@ -356,9 +323,69 @@ struct AIConversationSheet: View {
             if !isStreaming {
                 return "No response generated. Please try again."
             }
-            return "Generating…"
+            return ""
         }
         return displayedText
+    }
+
+    @ViewBuilder
+    private var preStreamLoadingContent: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .bottom) {
+                Spacer(minLength: 40)
+                loadingBubble(text: loadingPromptText, isAssistant: false, isGeneratingBubble: false)
+            }
+
+            HStack(alignment: .bottom) {
+                loadingBubble(text: "Generating…", isAssistant: true, isGeneratingBubble: true)
+                    .id("streamText")
+                Spacer(minLength: 40)
+            }
+        }
+    }
+
+    private var loadingPromptText: String {
+        let trimmed = request.extraContext.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        if mode == .plan {
+            return "Create a weekly training plan for my \(request.goal) goal."
+        }
+        return "Help with my training and fitness questions."
+    }
+
+    @ViewBuilder
+    private func loadingBubble(text: String, isAssistant: Bool, isGeneratingBubble: Bool) -> some View {
+        let bubbleFill: Color = isAssistant
+            ? AppTheme.secondaryBackgroundColor.opacity(0.90)
+            : AppTheme.accentColor.opacity(0.22)
+
+        VStack(alignment: .leading, spacing: 0) {
+            if isGeneratingBubble {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.textColor))
+                        .scaleEffect(0.85)
+                    Text(text)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(AppTheme.textColor)
+                }
+                .padding(14)
+            } else {
+                MarkdownView(text: text)
+                    .padding(14)
+            }
+        }
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(bubbleFill)
+
+                RoundedRectangle(cornerRadius: 18)
+                    .strokeBorder(AppTheme.textColor.opacity(0.12), lineWidth: 1)
+            }
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 4)
+        .opacity(isAssistant && isGeneratingBubble ? streamingOpacity : 1.0)
     }
     
     // Subtle top/bottom fade overlays inside the chat tile to achieve a "liquid glass" edge blend
@@ -411,7 +438,7 @@ struct AIConversationSheet: View {
             }
         }
         .padding(.vertical, 16)
-        .background(.ultraThinMaterial)
+        .background(AppTheme.secondaryBackgroundColor.opacity(0.90))
         .cornerRadius(16)
         .padding(.horizontal, 20)
         .padding(.top, 20)
@@ -424,52 +451,51 @@ struct AIConversationSheet: View {
                 streamingOpacity = 0.2
                 displayedText = ""
                 fullBufferedText = ""
+                waitingForFirstChunk = true
                 autoFollow = true
-                withAnimation(.easeInOut(duration: 2.0)) {
+                withAnimation(.easeInOut(duration: 0.25)) {
                     streamingOpacity = 1.0
                 }
             }
-            
-            // Start character reveal task
-            let revealTask = Task {
-                while !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: 8_000_000) // 8ms between chars
-                    await MainActor.run {
-                        guard isStreaming else { return }
-                        if displayedText.count < fullBufferedText.count {
-                            let nextIndex = fullBufferedText.index(fullBufferedText.startIndex, offsetBy: displayedText.count + 1)
-                            displayedText = String(fullBufferedText[..<nextIndex])
-                            content = displayedText
-                        }
-                    }
-                }
-            }
-            
+
             for try await chunk in WorkoutPlanGenerator.shared.generatePlanStream(request: request) {
                 // Check for cancellation
                 if Task.isCancelled { break }
                 
                 await MainActor.run {
-                    let sanitized = sanitize(fullBufferedText + chunk)
-                    fullBufferedText = sanitized
+                    if waitingForFirstChunk && !chunk.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        waitingForFirstChunk = false
+                    }
+                    fullBufferedText += chunk
+                    displayedText = fullBufferedText
+                    content = fullBufferedText
                 }
             }
-            
-            // Wait for all characters to be revealed
-            while displayedText.count < fullBufferedText.count && !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 50_000_000)
-            }
-            
-            revealTask.cancel()
-            
-            // Ensure final text is fully displayed
+
             await MainActor.run {
-                displayedText = fullBufferedText
-                content = fullBufferedText
-                // Extract citations from the final content
-                citations = parseCitations(from: fullBufferedText)
-                // Capture structured plan (if any) for data-driven view/persistence
                 structuredPlanJSON = WorkoutPlanGenerator.lastStructuredPlanJSON
+
+                var finalized = fullBufferedText
+                if mode == .plan,
+                   let structuredPlanJSON {
+                    #if canImport(FoundationModels)
+                    if let markdown = WorkoutPlanGenerator.markdownFromStructuredPlanJSON(
+                        structuredPlanJSON,
+                        weightUnit: request.weightUnit,
+                        distanceUnit: request.distanceUnit
+                    ) {
+                        finalized = markdown
+                    }
+                    #endif
+                }
+
+                finalized = sanitize(finalized)
+                finalized = fillPlaceholdersIfNeeded(in: finalized)
+
+                fullBufferedText = finalized
+                displayedText = finalized
+                content = finalized
+                citations = parseCitations(from: finalized)
             }
         } catch is CancellationError {
             // Silently handle cancellation
@@ -478,8 +504,7 @@ struct AIConversationSheet: View {
         }
         await MainActor.run {
             isStreaming = false
-            content = fillPlaceholdersIfNeeded(in: content)
-            displayedText = content
+            waitingForFirstChunk = false
             streamingOpacity = 1.0
             streamTask = nil
             autoFollow = false

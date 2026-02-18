@@ -10,21 +10,29 @@ struct AIChatSheet: View {
         var text: String
     }
 
+    struct QuickAskPrompt: Identifiable {
+        let id: String
+        let icon: String
+        let title: String
+        let subtitle: String
+        let userMessage: String
+        let prompt: String
+    }
+
     let requestBase: WorkoutPlanRequest
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
     @State private var messages: [Message] = []
-    @State private var input: String = ""
     @State private var isStreaming: Bool = false
     @State private var errorText: String? = nil
     @State private var showSaved: Bool = false
-    @FocusState private var inputFocused: Bool
 
     @State private var streamingOpacity: Double = 0.5
     @State private var lastStreamedAssistantID: UUID? = nil
     @State private var streamTask: Task<Void, Never>? = nil
+    @State private var waitingForFirstChunk: Bool = false
     @State private var showClearConfirmation: Bool = false
     @State private var displayedText: String = ""
     @State private var fullBufferedText: String = ""
@@ -35,18 +43,123 @@ struct AIChatSheet: View {
     @State private var scrollViewHeight: CGFloat = 0
     @State private var autoFollow: Bool = true
     @State private var userIsDragging: Bool = false
+    @State private var floatingPromptAnimation: Bool = false
+
+    private let quickPrompts: [QuickAskPrompt] = [
+        QuickAskPrompt(
+            id: "strength-block",
+            icon: "dumbbell.fill",
+            title: "Strength Focus Plan",
+            subtitle: "Get stronger with clear progressions",
+            userMessage: "Build me a strength-focused training plan.",
+            prompt: """
+            Build a practical 4-week strength-focused plan.
+            Return exactly these sections:
+            1) Weekly split
+            2) Main lifts with sets/reps/intensity targets
+            3) Accessory work
+            4) Progression and deload rules
+            Keep it realistic for a busy adult.
+            """
+        ),
+        QuickAskPrompt(
+            id: "endurance-build",
+            icon: "figure.run.circle",
+            title: "Endurance Build",
+            subtitle: "Improve aerobic base and long-run stamina",
+            userMessage: "Create an endurance-focused progression.",
+            prompt: """
+            Create a 6-week endurance progression focused on sustainable mileage.
+            Return exactly:
+            1) Weekly mileage targets
+            2) Session types (easy/tempo/long/recovery)
+            3) Intensity guidance using RPE
+            4) Signs to back off and recover
+            """
+        ),
+        QuickAskPrompt(
+            id: "hybrid-strength-cardio",
+            icon: "flame.fill",
+            title: "Hybrid Training Week",
+            subtitle: "Balance strength and cardio together",
+            userMessage: "Give me a balanced strength + cardio week.",
+            prompt: """
+            Design a balanced weekly routine that combines strength and cardio without overtraining.
+            Return exactly:
+            1) Day-by-day schedule
+            2) Strength days (lift focus + volume)
+            3) Cardio days (duration/intensity)
+            4) Recovery day placement and rationale
+            """
+        ),
+        QuickAskPrompt(
+            id: "health-recovery-audit",
+            icon: "heart.text.square.fill",
+            title: "Recovery & Health Audit",
+            subtitle: "Sleep, stress, soreness, and readiness",
+            userMessage: "Audit my recovery and health habits for training.",
+            prompt: """
+            Review recovery quality for someone training 4-6 days per week.
+            Return exactly:
+            1) Daily recovery checklist
+            2) Red flags for overreaching
+            3) Sleep/hydration/protein targets
+            4) What to adjust first when fatigue rises
+            """
+        ),
+        QuickAskPrompt(
+            id: "muscle-gain-nutrition",
+            icon: "fork.knife.circle.fill",
+            title: "Muscle Gain Nutrition",
+            subtitle: "Fuel strength and recovery better",
+            userMessage: "Create nutrition guidelines to gain muscle.",
+            prompt: """
+            Create a simple muscle-gain nutrition framework for training performance.
+            Return exactly:
+            1) Calorie and protein strategy
+            2) Meal timing around workouts
+            3) Easy high-protein meal ideas
+            4) Weekly check-in adjustments
+            """
+        ),
+        QuickAskPrompt(
+            id: "running-speed-endurance",
+            icon: "figure.run",
+            title: "Run Faster + Longer",
+            subtitle: "Build pace and endurance safely",
+            userMessage: "Help me improve both running speed and endurance.",
+            prompt: """
+            Build a running progression that improves speed and endurance at the same time.
+            Return exactly:
+            1) Key weekly workouts
+            2) Pacing guidance by workout type
+            3) Warm-up/cool-down protocol
+            4) Injury-risk safeguards
+            """
+        )
+    ]
 
     var body: some View {
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 10) {
+                        if messages.isEmpty && !isStreaming {
+                            Text("Pick a guided prompt to generate focused coaching for strength, endurance, and overall fitness.")
+                                .font(.footnote)
+                                .foregroundStyle(AppTheme.secondaryTextColor)
+                                .padding(.bottom, 8)
+                            floatingPromptRows
+                        }
+
                         ForEach(messages) { msg in
                             messageRow(msg)
                                 .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity))
                                 .id(msg.id)
                         }
-                        if isStreaming { typingRow().id("progress") }
+                        if isStreaming && messages.last?.id != lastStreamedAssistantID {
+                            typingRow().id("progress")
+                        }
                         
                         // Web search results disabled
                     }
@@ -66,88 +179,27 @@ struct AIChatSheet: View {
                         }
                     )
                     .overlay {
-                        // Material fade overlays - positioned inside the scroll view
+                        // Top fade overlay to improve legibility against navigation chrome.
                         VStack(spacing: 0) {
                             // Top fade - only visible when scrolled down from top
                             if shouldShowTopFade {
-                                ZStack {
-                                    // Background gradient fade for seamless blending
-                                    LinearGradient(
-                                        stops: [
-                                            .init(color: Color(red: 0.09, green: 0.04, blue: 0.18), location: 0.0),
-                                            .init(color: Color(red: 0.09, green: 0.04, blue: 0.18).opacity(0.9), location: 0.05),
-                                            .init(color: Color(red: 0.09, green: 0.04, blue: 0.18).opacity(0.7), location: 0.15),
-                                            .init(color: Color(red: 0.09, green: 0.04, blue: 0.18).opacity(0.4), location: 0.35),
-                                            .init(color: Color(red: 0.09, green: 0.04, blue: 0.18).opacity(0.15), location: 0.5),
-                                            .init(color: .clear, location: 0.65)
-                                        ],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                    
-                                    // Subtle material overlay for depth
-                                    Rectangle()
-                                        .fill(.regularMaterial)
-                                        .opacity(0.3)
-                                        .mask(
-                                            LinearGradient(
-                                                stops: [
-                                                    .init(color: .black, location: 0.0),
-                                                    .init(color: .black.opacity(0.5), location: 0.3),
-                                                    .init(color: .clear, location: 0.65)
-                                                ],
-                                                startPoint: .top,
-                                                endPoint: .bottom
-                                            )
-                                        )
-                                }
+                                LinearGradient(
+                                    stops: [
+                                        .init(color: AppTheme.backgroundColor.opacity(0.95), location: 0.0),
+                                        .init(color: AppTheme.backgroundColor.opacity(0.75), location: 0.30),
+                                        .init(color: .clear, location: 0.70)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
                                 .frame(height: 120)
                                 .allowsHitTesting(false)
                                 .transition(.opacity)
                             }
                             
                             Spacer()
-                            
-                            // Bottom fade - only visible when not at bottom
-                            if shouldShowBottomFade {
-                                ZStack {
-                                    // Background gradient fade for seamless blending
-                                    LinearGradient(
-                                        stops: [
-                                            .init(color: .clear, location: 0.35),
-                                            .init(color: Color(red: 0.01, green: 0.08, blue: 0.20).opacity(0.15), location: 0.5),
-                                            .init(color: Color(red: 0.01, green: 0.08, blue: 0.20).opacity(0.4), location: 0.65),
-                                            .init(color: Color(red: 0.01, green: 0.08, blue: 0.20).opacity(0.7), location: 0.85),
-                                            .init(color: Color(red: 0.01, green: 0.08, blue: 0.20).opacity(0.9), location: 0.95),
-                                            .init(color: Color(red: 0.01, green: 0.08, blue: 0.20), location: 1.0)
-                                        ],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                    
-                                    // Subtle material overlay for depth
-                                    Rectangle()
-                                        .fill(.regularMaterial)
-                                        .opacity(0.3)
-                                        .mask(
-                                            LinearGradient(
-                                                stops: [
-                                                    .init(color: .clear, location: 0.35),
-                                                    .init(color: .black.opacity(0.5), location: 0.7),
-                                                    .init(color: .black, location: 1.0)
-                                                ],
-                                                startPoint: .top,
-                                                endPoint: .bottom
-                                            )
-                                        )
-                                }
-                                .frame(height: 120)
-                                .allowsHitTesting(false)
-                                .transition(.opacity)
-                            }
                         }
                         .animation(.easeInOut(duration: 0.2), value: shouldShowTopFade)
-                        .animation(.easeInOut(duration: 0.2), value: shouldShowBottomFade)
                     }
                 }
                 .coordinateSpace(name: "scroll")
@@ -167,7 +219,7 @@ struct AIChatSheet: View {
                     if isStreaming { autoFollow = isPinnedToBottom && !userIsDragging }
                 }
                 .contentShape(Rectangle())
-                .onTapGesture { inputFocused = false; dismissKeyboard() }
+                .onTapGesture { dismissKeyboard() }
                 .onChange(of: messages.count) { _, _ in
                     // Only auto-scroll when new messages are added, not during streaming
                     if !isStreaming {
@@ -193,46 +245,45 @@ struct AIChatSheet: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 0) {
-                HStack(spacing: 12) {
-                    HStack(spacing: 0) {
-                        TextField("Ask anything...", text: $input, axis: .vertical)
-                            .lineLimit(1...5)
-                            .focused($inputFocused)
-                            .onSubmit(send)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 14)
+            if shouldShowBottomPromptBar {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("Training Prompt Packs")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppTheme.secondaryTextColor)
+                        Spacer()
+                        if waitingForFirstChunk {
+                            HStack(spacing: 6) {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.secondaryTextColor))
+                                    .scaleEffect(0.75)
+                                Text("Generating…")
+                                    .font(.caption2)
+                                    .foregroundStyle(AppTheme.secondaryTextColor)
+                            }
+                        }
                     }
-                    .background(
-                        RoundedRectangle(cornerRadius: 22)
-                            .fill(AppTheme.textColor.opacity(0.08))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 22)
-                            .strokeBorder(AppTheme.textColor.opacity(0.12), lineWidth: 1)
-                    )
 
-                    Button(action: send) {
-                        let canSend = !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isStreaming
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(canSend ? .white : AppTheme.textColor.opacity(0.7))
-                            .frame(width: 36, height: 36)
-                            .background(
-                                Circle()
-                                    .fill(canSend ? AppTheme.accentColor : AppTheme.secondaryBackgroundColor)
-                            )
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(quickPrompts) { template in
+                                promptCard(template)
+                            }
+                        }
                     }
-                    .disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isStreaming)
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-            }
-            .background(
-                Rectangle()
-                    .fill(.ultraThinMaterial)
+                .padding(.top, 10)
+                .padding(.bottom, 12)
+                .background(
+                    VStack(spacing: 0) {
+                        Divider()
+                        Rectangle()
+                            .fill(.ultraThinMaterial)
+                    }
                     .ignoresSafeArea()
-            )
+                )
+            }
         }
         .navigationTitle("AI Assistant")
         .navigationBarTitleDisplayMode(.inline)
@@ -260,13 +311,13 @@ struct AIChatSheet: View {
                     .disabled(messages.isEmpty)
             }
         }
-        .appBackground(AppTheme.gradientAI)
+        .appBackground(AppTheme.gradientRuns)
         .foregroundColor(AppTheme.textColor)
         .scrollDismissesKeyboard(.interactively)
         .simultaneousGesture(
             DragGesture(minimumDistance: 1)
                 .onChanged { _ in
-                    inputFocused = false; dismissKeyboard()
+                    dismissKeyboard()
                     if isStreaming {
                         userIsDragging = true
                         autoFollow = false
@@ -280,6 +331,11 @@ struct AIChatSheet: View {
                 }
         )
         .alert("Error", isPresented: .constant(errorText != nil)) { Button("OK", role: .cancel) { errorText = nil } } message: { Text(errorText ?? "") }
+        .alert("Saved", isPresented: $showSaved) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Conversation saved")
+        }
         .confirmationDialog("Clear Chat History?", isPresented: $showClearConfirmation) {
             Button("Clear All Messages", role: .destructive) {
                 performClear()
@@ -288,12 +344,16 @@ struct AIChatSheet: View {
         } message: {
             Text("This will clear the current conversation and start fresh. The AI will lose all context from this session.")
         }
-        .task { await prewarm() }
+        .task {
+            floatingPromptAnimation = true
+            await prewarm()
+        }
         .onDisappear {
             // Cancel any ongoing streaming when the view disappears
             streamTask?.cancel()
             streamTask = nil
             isStreaming = false
+            waitingForFirstChunk = false
         }
     }
 
@@ -307,17 +367,27 @@ struct AIChatSheet: View {
 
     // Web search disabled; no toggle or detection needed
 
-    private func send() {
-        let question = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !question.isEmpty else { return }
-        
-        // Clear input immediately and dismiss keyboard
-        input = ""
-        inputFocused = false
+    private func send(template: QuickAskPrompt) {
+        send(
+            question: template.prompt,
+            userMessage: template.userMessage,
+            appendUserMessage: true
+        )
+    }
+
+    private func send(question: String, userMessage: String, appendUserMessage: Bool) {
+        let question = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !question.isEmpty, !isStreaming else { return }
+
         Haptics.playImpact(.light)
-        
-        withAnimation(.snappy) { messages.append(.init(role: .user, text: question)) }
+
+        if appendUserMessage {
+            withAnimation(.snappy) {
+                messages.append(.init(role: .user, text: userMessage))
+            }
+        }
         isStreaming = true
+        waitingForFirstChunk = true
         autoFollow = true
         let req = WorkoutPlanRequest(
             goal: requestBase.goal,
@@ -337,32 +407,16 @@ struct AIChatSheet: View {
                     streamingOpacity = 0.2
                     displayedText = ""
                     fullBufferedText = ""
-                    withAnimation(.easeInOut(duration: 2.0)) {
+                    let placeholder = Message(role: .assistant, text: "Generating…")
+                    withAnimation(.snappy) { messages.append(placeholder) }
+                    lastStreamedAssistantID = placeholder.id
+                    withAnimation(.easeInOut(duration: 0.25)) {
                         streamingOpacity = 1.0
                     }
                 }
 
                 // Web search disabled: no searching indicator
-                
-                // Start character reveal task
-                let revealTask = Task {
-                    while !Task.isCancelled {
-                        try? await Task.sleep(nanoseconds: 8_000_000) // 8ms between chars for smooth reveal
-                        await MainActor.run {
-                            guard isStreaming else { return }
-                            if displayedText.count < fullBufferedText.count {
-                                let nextIndex = fullBufferedText.index(fullBufferedText.startIndex, offsetBy: displayedText.count + 1)
-                                displayedText = String(fullBufferedText[..<nextIndex])
-                                
-                                // Update the message with the revealed text
-                                if let idx = messages.lastIndex(where: { $0.role == .assistant }) {
-                                    messages[idx].text = displayedText
-                                }
-                            }
-                        }
-                    }
-                }
-                
+
                 for try await chunk in WorkoutPlanGenerator.shared.generateAskStream(request: req, history: messages.map { ($0.role == .user ? "User" : "Assistant", $0.text) }) {
                     // Check for cancellation
                     if Task.isCancelled { break }
@@ -370,30 +424,32 @@ struct AIChatSheet: View {
                     // Web search/tool indicators removed
 
                     await MainActor.run {
-                        // Only create the assistant message when we have actual content
                         if isFirstChunk {
+                            waitingForFirstChunk = false
                             fullBufferedText = chunk
-                            let newAssistant = Message(role: .assistant, text: "")
-                            withAnimation(.snappy) { messages.append(newAssistant) }
-                            lastStreamedAssistantID = newAssistant.id
+                            displayedText = fullBufferedText
+                            if let streamingID = lastStreamedAssistantID,
+                               let idx = messages.lastIndex(where: { $0.id == streamingID }) {
+                                messages[idx].text = displayedText
+                            }
                             isFirstChunk = false
                         } else {
                             fullBufferedText += chunk
+                            displayedText = fullBufferedText
+                            if let streamingID = lastStreamedAssistantID,
+                               let idx = messages.lastIndex(where: { $0.id == streamingID }) {
+                                messages[idx].text = displayedText
+                            }
                         }
                     }
                 }
-                
-                // Wait for all characters to be revealed
-                while displayedText.count < fullBufferedText.count && !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: 50_000_000) // Check every 50ms
-                }
-                
-                revealTask.cancel()
-                
+
                 // Ensure final text is fully displayed
                 await MainActor.run {
-                    if let idx = messages.lastIndex(where: { $0.role == .assistant }) {
-                        messages[idx].text = fullBufferedText
+                    if let streamingID = lastStreamedAssistantID,
+                       let idx = messages.lastIndex(where: { $0.id == streamingID }) {
+                        displayedText = fullBufferedText
+                        messages[idx].text = fullBufferedText.isEmpty ? "No response generated. Please try again." : fullBufferedText
                     }
                 }
             } catch is CancellationError {
@@ -442,19 +498,33 @@ struct AIChatSheet: View {
                     // Retry the question automatically
                     await MainActor.run {
                         isStreaming = false
+                        waitingForFirstChunk = false
                     }
                     
                     // Small delay then retry
                     try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
-                    send() // Retry with fresh context
+                    await MainActor.run {
+                        send(
+                            question: question,
+                            userMessage: userMessage,
+                            appendUserMessage: false
+                        )
+                    }
                     return
                 } else {
                     // Other errors - show to user
-                    await MainActor.run { errorText = error.localizedDescription }
+                    await MainActor.run {
+                        errorText = error.localizedDescription
+                        if let streamingID = lastStreamedAssistantID,
+                           let idx = messages.lastIndex(where: { $0.id == streamingID }) {
+                            messages[idx].text = "Unable to generate response. Please try again."
+                        }
+                    }
                 }
             }
             await MainActor.run {
                 isStreaming = false
+                waitingForFirstChunk = false
                 lastStreamedAssistantID = nil
                 streamingOpacity = 1.0
                 streamTask = nil
@@ -468,7 +538,12 @@ struct AIChatSheet: View {
         let full = messages.map { ($0.role == .user ? "You: " : "AI: ") + $0.text }.joined(separator: "\n\n")
         let convo = AIConversation(mode: "ask", goal: requestBase.goal, prompt: messages.first?.text ?? "", response: full, model: "on-device")
         modelContext.insert(convo)
-        _ = PersistenceSave.commit(modelContext, action: "save changes")
+        if PersistenceSave.commit(modelContext, action: "save changes") {
+            showSaved = true
+            Haptics.notify(.success)
+        } else {
+            errorText = "Couldn’t save your conversation. Please try again."
+        }
     }
     
     private func clearHistory() {
@@ -480,6 +555,7 @@ struct AIChatSheet: View {
         streamTask?.cancel()
         streamTask = nil
         isStreaming = false
+        waitingForFirstChunk = false
         
         // Clear all state
         withAnimation(.snappy) {
@@ -489,7 +565,6 @@ struct AIChatSheet: View {
         fullBufferedText = ""
         streamingOpacity = 0.5
         lastStreamedAssistantID = nil
-        input = ""
         
         // Clear conversation summary
         WorkoutPlanGenerator.lastConversationSummary = nil
@@ -501,6 +576,112 @@ struct AIChatSheet: View {
     }
 
     // Search results UI removed
+
+    private var shouldShowBottomPromptBar: Bool {
+        messages.contains(where: { $0.role == .user })
+    }
+
+    @ViewBuilder
+    private var floatingPromptRows: some View {
+        VStack(spacing: 14) {
+            floatingPromptRow(
+                prompts: [quickPrompts[0], quickPrompts[3], quickPrompts[1]],
+                xShift: floatingPromptAnimation ? -10 : 10
+            )
+            floatingPromptRow(
+                prompts: [quickPrompts[2], quickPrompts[5], quickPrompts[4]],
+                xShift: floatingPromptAnimation ? 8 : -8
+            )
+            floatingPromptRow(
+                prompts: [quickPrompts[1], quickPrompts[4], quickPrompts[0]],
+                xShift: floatingPromptAnimation ? -6 : 6
+            )
+            .padding(.bottom, 8)
+        }
+        .onAppear {
+            floatingPromptAnimation = true
+        }
+    }
+
+    @ViewBuilder
+    private func floatingPromptRow(prompts: [QuickAskPrompt], xShift: CGFloat) -> some View {
+        HStack(spacing: 10) {
+            ForEach(prompts) { template in
+                floatingQuestionChip(template)
+            }
+        }
+        .padding(.horizontal, 8)
+        .offset(x: xShift)
+        .animation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true), value: floatingPromptAnimation)
+    }
+
+    @ViewBuilder
+    private func floatingQuestionChip(_ template: QuickAskPrompt) -> some View {
+        Button {
+            send(template: template)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: template.icon)
+                    .font(.caption.weight(.semibold))
+                Text(template.title)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(AppTheme.secondaryBackgroundColor.opacity(0.92))
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .strokeBorder(AppTheme.textColor.opacity(0.12), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.18), radius: 8, x: 0, y: 4)
+        }
+        .buttonStyle(.plain)
+        .disabled(isStreaming)
+        .opacity(isStreaming ? 0.65 : 1.0)
+    }
+
+    @ViewBuilder
+    private func promptCard(_ template: QuickAskPrompt) -> some View {
+        Button {
+            send(template: template)
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: template.icon)
+                        .font(.caption.weight(.semibold))
+                        .frame(width: 22, height: 22)
+                        .background(AppTheme.accentColor.opacity(0.14))
+                        .clipShape(Circle())
+                    Text(template.title)
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
+                Text(template.subtitle)
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.secondaryTextColor)
+                    .lineLimit(2)
+                Spacer(minLength: 0)
+                Text("Tap to ask")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(AppTheme.accentColor)
+            }
+            .frame(width: 208, height: 120, alignment: .topLeading)
+            .padding(12)
+            .background(AppTheme.secondaryBackgroundColor.opacity(0.92))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(AppTheme.textColor.opacity(0.10), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isStreaming)
+        .opacity(isStreaming ? 0.65 : 1.0)
+    }
 
     @ViewBuilder
     private func messageRow(_ msg: Message) -> some View {
@@ -520,9 +701,13 @@ struct AIChatSheet: View {
         let isCurrentlyStreaming = isAssistant && isStreaming &&
                                     lastStreamedAssistantID != nil &&
                                     messages.last?.id == lastStreamedAssistantID
+        let showGeneratingState = isCurrentlyStreaming && waitingForFirstChunk && text == "Generating…"
 
         let hasVerifiedContent = text.contains("=== VERIFIED") || text.contains("VERIFIED INFORMATION")
         let hasCitations = text.contains("[1]") || text.contains("[2]") || text.contains("source")
+        let bubbleFill: Color = isAssistant
+            ? AppTheme.secondaryBackgroundColor.opacity(hasVerifiedContent || hasCitations ? 0.96 : 0.90)
+            : AppTheme.accentColor.opacity(0.22)
 
         VStack(alignment: .leading, spacing: 0) {
             if hasVerifiedContent || hasCitations {
@@ -542,46 +727,31 @@ struct AIChatSheet: View {
                 .padding(.leading, 6)
             }
 
-            MarkdownView(text: text)
+            if showGeneratingState {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.textColor))
+                        .scaleEffect(0.85)
+                    Text("Generating…")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(AppTheme.textColor)
+                }
                 .padding(14)
+            } else {
+                MarkdownView(text: text)
+                    .padding(14)
+            }
         }
         .background(
             ZStack {
                 RoundedRectangle(cornerRadius: 18)
-                    .fill(.ultraThinMaterial)
-
-                RoundedRectangle(cornerRadius: 18)
-                    .fill(
-                        LinearGradient(
-                            colors: isAssistant ? [
-                                hasVerifiedContent || hasCitations ?
-                                    AppTheme.secondaryBackgroundColor.opacity(0.5) :
-                                    AppTheme.secondaryBackgroundColor.opacity(0.4),
-                                hasVerifiedContent || hasCitations ?
-                                    AppTheme.secondaryBackgroundColor.opacity(0.3) :
-                                    AppTheme.secondaryBackgroundColor.opacity(0.2)
-                            ] : [
-                                AppTheme.accentColor.opacity(0.3),
-                                AppTheme.accentColor.opacity(0.15)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                    .fill(bubbleFill)
 
                 RoundedRectangle(cornerRadius: 18)
                     .strokeBorder(
-                        LinearGradient(
-                            colors: hasVerifiedContent || hasCitations ? [
-                                Color.green.opacity(0.3),
-                                Color.green.opacity(0.1)
-                            ] : [
-                                AppTheme.textColor.opacity(0.25),
-                                AppTheme.textColor.opacity(0.05)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
+                        hasVerifiedContent || hasCitations
+                            ? Color.green.opacity(0.35)
+                            : AppTheme.textColor.opacity(0.12),
                         lineWidth: 1
                     )
             }
@@ -611,7 +781,7 @@ struct AIChatSheet: View {
             }
         }
         .padding(10)
-        .background(AppTheme.secondaryBackgroundColor.opacity(0.55))
+        .background(AppTheme.secondaryBackgroundColor.opacity(0.90))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
@@ -627,21 +797,6 @@ struct AIChatSheet: View {
         return scrollOffset < -10
     }
     
-    private var shouldShowBottomFade: Bool {
-        // Only show if we have content and are not at the bottom
-        // Check if content extends beyond viewport
-        guard !messages.isEmpty else { return false }
-        let isContentScrollable = contentHeight > scrollViewHeight
-        if !isContentScrollable { return false }
-        
-        // Calculate approximate distance from bottom
-        let scrolledDistance = abs(scrollOffset)
-        let maxScrollDistance = max(0, contentHeight - scrollViewHeight)
-        let distanceFromBottom = maxScrollDistance - scrolledDistance
-        
-        return distanceFromBottom > 10
-    }
-
     private var isPinnedToBottom: Bool {
         if contentHeight <= scrollViewHeight + 1 { return true }
         let scrolledDistance = abs(scrollOffset)

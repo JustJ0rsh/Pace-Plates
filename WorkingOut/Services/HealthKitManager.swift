@@ -2,10 +2,15 @@ import Foundation
 import HealthKit
 import CoreLocation
 
+extension Notification.Name {
+    static let healthKitWorkoutsDidChange = Notification.Name("healthKitWorkoutsDidChange")
+}
+
 @MainActor
 final class HealthKitManager: ObservableObject {
     static let shared = HealthKitManager()
     private let healthStore = HKHealthStore()
+    private var workoutObserverQuery: HKObserverQuery?
 
     // MARK: - Types
     private let readTypes: Set<HKObjectType> = {
@@ -66,6 +71,33 @@ final class HealthKitManager: ObservableObject {
         let distanceType = HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning)!
         let distanceStatus = healthStore.authorizationStatus(for: distanceType)
         return workoutStatus == .sharingAuthorized || distanceStatus == .sharingAuthorized
+    }
+
+    // MARK: - Live Workout Change Observation
+    func startWorkoutChangeObservationIfNeeded() {
+        guard HKHealthStore.isHealthDataAvailable() else { return }
+        guard workoutObserverQuery == nil else { return }
+
+        let sampleType = HKObjectType.workoutType()
+        let query = HKObserverQuery(sampleType: sampleType, predicate: nil) { [weak self] _, completionHandler, error in
+            defer { completionHandler() }
+            guard self != nil else { return }
+            guard error == nil else { return }
+
+            UserDefaults.standard.set(true, forKey: "runsPendingHealthImport")
+            NotificationCenter.default.post(name: .healthKitWorkoutsDidChange, object: nil)
+        }
+
+        workoutObserverQuery = query
+        healthStore.execute(query)
+
+        healthStore.enableBackgroundDelivery(for: sampleType, frequency: .immediate) { _, _ in }
+    }
+
+    func stopWorkoutChangeObservation() {
+        guard let query = workoutObserverQuery else { return }
+        healthStore.stop(query)
+        workoutObserverQuery = nil
     }
 
     // MARK: - Save Workout

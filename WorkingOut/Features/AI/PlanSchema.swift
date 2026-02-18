@@ -29,7 +29,10 @@ struct WorkoutPlan: Codable, Equatable {
     @Guide(description: "The unit for weights and distances, e.g. 'lbs' or 'kg'.")
     let unit: String
 
-    @Guide(description: "One week of training with 7 days. IMPORTANT: Generate exactly 1 week with 7 days.")
+    @Guide(
+        description: "One week of training with 7 days. IMPORTANT: Generate exactly 1 week with 7 days.",
+        .count(1)
+    )
     let weeks: [Week]
 
     @Guide(description: "Short guidance on nutrition, recovery, and progression.")
@@ -41,7 +44,7 @@ struct Week: Codable, Equatable {
     @Guide(description: "Human-friendly label for the week, e.g. 'Week 1'.")
     let title: String
 
-    @Guide(description: "Seven day plan for this week.")
+    @Guide(description: "Seven day plan for this week.", .count(7))
     let days: [Day]
 }
 

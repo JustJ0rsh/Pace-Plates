@@ -319,7 +319,15 @@ struct SettingsView: View {
         .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
-        .sheet(item: $exportURL, onDismiss: { exportURL = nil }) { item in
+        .sheet(item: $exportURL, onDismiss: {
+            exportURL = nil
+            if pendingExportConfirmation {
+                alertMessage = "Export complete"
+                Haptics.playImpact(.light)
+                showAlert = true
+                pendingExportConfirmation = false
+            }
+        }) { item in
             ShareSheet(items: [item.url])
         }
         .alert("Backup", isPresented: $showAlert) {
@@ -420,6 +428,7 @@ struct SettingsView: View {
     @State private var showImporter: Bool = false
     private struct IdentifiableURL: Identifiable { let id = UUID(); let url: URL }
     @State private var exportURL: IdentifiableURL? = nil
+    @State private var pendingExportConfirmation: Bool = false
     // Use URL-bound sheet to avoid blank first presentation
     @State private var showAlert: Bool = false
     @State private var alertMessage: String = ""
@@ -619,6 +628,7 @@ struct SettingsView: View {
         do {
             let url = try DataBackupService.exportAll(context: modelContext)
             exportURL = IdentifiableURL(url: url)
+            pendingExportConfirmation = true
         } catch {
             alertMessage = "Export failed: \(error.localizedDescription)"
             showAlert = true
@@ -639,6 +649,7 @@ struct SettingsView: View {
             PersistenceController.shared.deduplicateExerciseDefinitions()
             PersistenceController.shared.ensureDefaultExercisesPresent()
             alertMessage = "Import complete"
+            Haptics.playImpact(.light)
             showAlert = true
         } catch {
             alertMessage = "Import failed: \(error.localizedDescription)"

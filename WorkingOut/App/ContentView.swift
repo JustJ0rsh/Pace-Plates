@@ -64,6 +64,7 @@ struct ContentView: View {
         .modelContainer(persistenceController.container)
         .onAppear {
             AppTheme.applyGlobalTheme()
+            HealthKitManager.shared.startWorkoutChangeObservationIfNeeded()
             // Check Apple Intelligence availability
             aiAvailability = WorkoutPlanGenerator.shared.availability()
             // Seed + cleanup the exercise library safely (idempotent)

@@ -42,7 +42,7 @@ enum DataBackupService {
         let fm = FileManager.default
         let tmp = fm.temporaryDirectory
         let formatter = DateFormatter(); formatter.dateFormat = "yyyyMMdd-HHmmss"
-        let name = "WorkingOut-Backup-\(formatter.string(from: Date())).json"
+        let name = "Pace&Plates-Backup-\(formatter.string(from: Date())).json"
         let url = tmp.appendingPathComponent(name)
         try data.write(to: url, options: .atomic)
         return url

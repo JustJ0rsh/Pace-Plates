@@ -273,13 +273,12 @@ final class RunAssistantService {
         return ((try? context.fetch(descriptor)) ?? []).filter { !$0.isArchived }
     }
 
-    func sessionsForCurrentWeek(plan: RunningPlan, referenceDate: Date = Date()) -> [RunningPlanSession] {
+    func sessionsForWeek(plan: RunningPlan, weekIndex: Int) -> [RunningPlanSession] {
         guard let sessions = plan.sessions, !sessions.isEmpty else { return [] }
-        let calendar = Calendar.current
-        let weekNumber = max(0, calendar.dateComponents([.weekOfYear], from: plan.startDate, to: referenceDate).weekOfYear ?? 0)
+        let clampedWeek = clampedWeekIndex(weekIndex, plan: plan)
 
         return sessions
-            .filter { $0.weekIndex == weekNumber }
+            .filter { $0.weekIndex == clampedWeek }
             .sorted { lhs, rhs in
                 let leftWeekday = weekdayNumber(for: lhs)
                 let rightWeekday = weekdayNumber(for: rhs)
@@ -288,6 +287,44 @@ final class RunAssistantService {
                 }
                 return leftWeekday < rightWeekday
             }
+    }
+
+    func isWeekComplete(plan: RunningPlan, weekIndex: Int) -> Bool {
+        let weekSessions = sessionsForWeek(plan: plan, weekIndex: weekIndex)
+        guard !weekSessions.isEmpty else { return false }
+        return weekSessions.allSatisfy { $0.status != "pending" }
+    }
+
+    func calendarWeekIndex(plan: RunningPlan, referenceDate: Date = Date()) -> Int {
+        let calendar = Calendar.current
+        let raw = calendar.dateComponents([.weekOfYear], from: plan.startDate, to: referenceDate).weekOfYear ?? 0
+        return clampedWeekIndex(max(0, raw), plan: plan)
+    }
+
+    func autoDisplayWeekIndex(plan: RunningPlan, referenceDate: Date = Date()) -> Int {
+        let baseWeek = calendarWeekIndex(plan: plan, referenceDate: referenceDate)
+        let lastWeek = max(0, plan.durationWeeks - 1)
+
+        guard isWeekComplete(plan: plan, weekIndex: baseWeek), baseWeek < lastWeek else {
+            return baseWeek
+        }
+        return baseWeek + 1
+    }
+
+    func sessionsForCurrentWeek(plan: RunningPlan, referenceDate: Date = Date()) -> [RunningPlanSession] {
+        sessionsForWeek(
+            plan: plan,
+            weekIndex: calendarWeekIndex(plan: plan, referenceDate: referenceDate)
+        )
+    }
+
+    func clampedWeekIndex(_ weekIndex: Int, plan: RunningPlan) -> Int {
+        let maxWeek = max(0, plan.durationWeeks - 1)
+        return min(max(0, weekIndex), maxWeek)
+    }
+
+    func totalWeekCount(plan: RunningPlan) -> Int {
+        max(1, plan.durationWeeks)
     }
 
     // MARK: - Private

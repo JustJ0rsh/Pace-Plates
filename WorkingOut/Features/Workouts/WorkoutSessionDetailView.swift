@@ -19,6 +19,7 @@ struct WorkoutSessionDetailView: View {
     @State private var editingLog: ExerciseLog? = nil
     @State private var editingLogIsNew: Bool = false
     @State private var saveWorkItem: DispatchWorkItem? = nil
+    @State private var titleSaveWorkItem: DispatchWorkItem? = nil
     @State private var showingAddExercise: Bool = false
     @State private var showingDatePicker: Bool = false
     @FocusState private var notesFocused: Bool
@@ -73,8 +74,9 @@ struct WorkoutSessionDetailView: View {
             .padding(.horizontal, AppTheme.padding)
             .padding(.top)
         }
-        .onChange(of: titleText) { _, _ in
+        .onChange(of: titleText) { _, newValue in
             didEditTitle = true
+            scheduleTitleSave(newValue)
         }
         .onTapGesture { notesFocused = false; dismissKeyboard() }
         .sheet(isPresented: $showingDatePicker) {
@@ -156,10 +158,12 @@ struct WorkoutSessionDetailView: View {
         .onDisappear {
             // Flush any pending notes save work and persist the session when leaving this screen
             saveWorkItem?.cancel()
+            titleSaveWorkItem?.cancel()
+            titleSaveWorkItem = nil
             if session.notes != notesBuffer {
                 session.notes = notesBuffer
             }
-            // Only persist title if user actually edited it; avoid writing fallback "Gym Session" for brand-new sessions
+            // Persist latest title text (covers swipe-back while editing)
             if didEditTitle, session.title != titleText {
                 session.title = titleText
             }
@@ -206,6 +210,18 @@ struct WorkoutSessionDetailView: View {
     }
     
     // MARK: Actions
+
+    private func scheduleTitleSave(_ newValue: String) {
+        titleSaveWorkItem?.cancel()
+        let work = DispatchWorkItem { [session, modelContext] in
+            if session.title != newValue {
+                session.title = newValue
+                _ = PersistenceSave.commit(modelContext, action: "save changes")
+            }
+        }
+        titleSaveWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+    }
     
     private func deleteExerciseLogs(offsets: IndexSet) {
         guard var logs = session.exerciseLogs else { return }

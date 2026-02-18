@@ -4,6 +4,7 @@ import SwiftData
 import MapKit
 import CoreLocation
 import Charts
+import Combine
 
 struct RunLogView: View {
     @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
@@ -41,6 +42,10 @@ struct RunLogView: View {
     @State private var lockedChartDate: Date? = nil // Keeps summary open until X is clicked
     @State private var showRunAssistant: Bool = false
     @State private var saveErrorMessage: String? = nil
+    @State private var visibleRunCount: Int = 30
+    @State private var hasInitializedRunPagination: Bool = false
+    @State private var healthChangeDebounceTask: Task<Void, Never>? = nil
+    private let runPageSize: Int = 30
     
     // Filters
     private enum TimeRange: String, CaseIterable, Identifiable {
@@ -72,6 +77,14 @@ struct RunLogView: View {
         // Upper bound is start of tomorrow to make the X-axis inclusive of today
         let endExclusive = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? todayStart
         return start...endExclusive
+    }
+
+    private var displayedRuns: [RunningSession] {
+        Array(runningSessions.prefix(max(0, visibleRunCount)))
+    }
+
+    private var hasMoreRuns: Bool {
+        runningSessions.count > displayedRuns.count
     }
     
     var body: some View {
@@ -324,7 +337,7 @@ struct RunLogView: View {
                     if !runningSessions.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
                             LazyVStack(spacing: 0) {
-                                ForEach(runningSessions) { session in
+                                ForEach(displayedRuns) { session in
                                     Button {
                                         loadingSessionId = session.id
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
@@ -355,6 +368,24 @@ struct RunLogView: View {
                                         }
                                     }
                                 }
+                            }
+
+                            if hasMoreRuns {
+                                Divider().padding(.top, 6).opacity(0.25)
+
+                                HStack(spacing: 10) {
+                                    Text("Showing \(displayedRuns.count) of \(runningSessions.count) runs")
+                                        .font(.footnote)
+                                        .foregroundStyle(AppTheme.secondaryTextColor)
+
+                                    Spacer()
+
+                                    Button("Load 30 More") {
+                                        visibleRunCount = min(visibleRunCount + runPageSize, runningSessions.count)
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                }
+                                .padding(.top, 8)
                             }
                         }
                         .floatingTile()
@@ -528,6 +559,15 @@ struct RunLogView: View {
                 
             }
             .onAppear {
+                if !hasInitializedRunPagination {
+                    hasInitializedRunPagination = true
+                    visibleRunCount = min(runPageSize, runningSessions.count)
+                }
+                HealthKitManager.shared.startWorkoutChangeObservationIfNeeded()
+                if UserDefaults.standard.bool(forKey: "runsPendingHealthImport") {
+                    UserDefaults.standard.set(false, forKey: "runsPendingHealthImport")
+                    importHealthRuns(limit: 30, force: true)
+                }
                 // Request location permission only when entering Runs for the first time
                 if !requestedLocationAuthOnce {
                     requestedLocationAuthOnce = true
@@ -541,8 +581,20 @@ struct RunLogView: View {
                 scheduleInitialHealthImportIfNeeded()
                 reconcileAssistantPlanCompletions()
             }
-            .onChange(of: runningSessions.count) { _, _ in
+            .onChange(of: runningSessions.count) { oldCount, newCount in
+                if oldCount == 0 && visibleRunCount == 0 && newCount > 0 {
+                    visibleRunCount = min(runPageSize, newCount)
+                } else {
+                    visibleRunCount = min(visibleRunCount, newCount)
+                }
                 reconcileAssistantPlanCompletions()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .healthKitWorkoutsDidChange)) { _ in
+                scheduleImportForHealthWorkoutUpdate()
+            }
+            .onDisappear {
+                healthChangeDebounceTask?.cancel()
+                healthChangeDebounceTask = nil
             }
             .sheet(isPresented: $showRunTracking) {
                 NavigationStack {
@@ -886,6 +938,18 @@ struct RunLogView: View {
         Task {
             try? await Task.sleep(nanoseconds: 400_000_000)
             importHealthRuns()
+        }
+    }
+
+    private func scheduleImportForHealthWorkoutUpdate() {
+        healthChangeDebounceTask?.cancel()
+        healthChangeDebounceTask = Task(priority: .utility) {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                UserDefaults.standard.set(false, forKey: "runsPendingHealthImport")
+                importHealthRuns(limit: 30, force: true)
+            }
         }
     }
 
@@ -1502,6 +1566,7 @@ struct RunSessionDetailView: View {
                                 .foregroundStyle(AppTheme.secondaryTextColor)
                         }
                         if let notes = session.notes { Text("Notes: \(notes)") }
+
                     }
                     .floatingTile()
 
