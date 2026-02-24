@@ -22,10 +22,19 @@ struct HomeView: View {
     @State private var selectedChartTab: ChartTab = .volume
     @State private var quickWorkoutSession: WorkoutSession? = nil
     @State private var showQuickRunTracking: Bool = false
+    @State private var quickCardioActivityType: String = "running"
     @State private var showQuickWeightLog: Bool = false
     @State private var saveErrorMessage: String? = nil
 
     private enum ChartTab: Hashable { case volume, runs, weight }
+    
+    private let quickCardioOptions: [(title: String, activityType: String, icon: String)] = [
+        ("Run", "running", "figure.run"),
+        ("Walk", "walking", "figure.walk"),
+        ("Hike", "hiking", "figure.hiking"),
+        ("Cycle", "cycling", "bicycle"),
+        ("Row", "rowing", "figure.rower")
+    ]
     
     // Last 7 days window (inclusive of today). X domain ends at start of tomorrow.
     private var last7DaysDomain: ClosedRange<Date> {
@@ -427,9 +436,14 @@ struct HomeView: View {
     @ViewBuilder
     private var quickActionsCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Quick Log")
-                .font(.headline)
-                .foregroundStyle(AppTheme.textColor)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("Quick Log")
+                    .font(.headline)
+                    .foregroundStyle(AppTheme.textColor)
+                Text("Press and hold for more options")
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.secondaryTextColor)
+            }
 
             Button {
                 Haptics.playImpact(.light)
@@ -441,13 +455,21 @@ struct HomeView: View {
             .buttonStyle(.borderedProminent)
 
             Button {
-                Haptics.playImpact(.light)
-                showQuickRunTracking = true
+                startQuickCardio(activityType: "running")
             } label: {
                 Label("Start Run", systemImage: "figure.run")
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.borderedProminent)
+            .contextMenu {
+                ForEach(quickCardioOptions, id: \.activityType) { option in
+                    Button {
+                        startQuickCardio(activityType: option.activityType)
+                    } label: {
+                        Label(option.title, systemImage: option.icon)
+                    }
+                }
+            }
 
             Button {
                 Haptics.playImpact(.light)
@@ -473,6 +495,31 @@ struct HomeView: View {
             return
         }
         quickWorkoutSession = session
+    }
+    
+    private func startQuickCardio(activityType: String) {
+        Haptics.playImpact(.light)
+        quickCardioActivityType = activityType
+        showQuickRunTracking = true
+    }
+    
+    private func quickCardioTrackingTitle(for activityType: String) -> String {
+        switch activityType {
+        case "walking":
+            return "Tracking Walk"
+        case "hiking":
+            return "Tracking Hike"
+        case "cycling":
+            return "Tracking Ride"
+        case "rowing":
+            return "Tracking Row"
+        case "elliptical":
+            return "Tracking Elliptical"
+        case "stairClimbing":
+            return "Tracking Stair Climbing"
+        default:
+            return "Tracking Run"
+        }
     }
     
     // MARK: Body
@@ -552,13 +599,14 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showQuickRunTracking) {
             NavigationStack {
-                RunTrackingProView(activityType: "running")
-                    .navigationTitle("Tracking Run")
+                RunTrackingProView(activityType: quickCardioActivityType)
+                    .navigationTitle(quickCardioTrackingTitle(for: quickCardioActivityType))
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
                     .toolbarBackground(.visible, for: .navigationBar)
                     .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
             }
+            .id(quickCardioActivityType)
             .appBackground(AppTheme.gradientRuns)
             .foregroundColor(AppTheme.textColor)
             .tint(AppTheme.accentColor)

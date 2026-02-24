@@ -79,14 +79,35 @@ final class RunAssistantAIService {
             throw AIError.unavailable
         }
 
-        let prompt = await buildPrompt(style: style, profile: profile, context: context)
+        let detailedPrompt = await buildPrompt(style: style, profile: profile, context: context, compact: false)
+        var promptUsed = detailedPrompt
 
         prewarmIfPossible()
 
-        let decoded = try await generateGuidedPayload(prompt: prompt, onStreamChunk: onStreamChunk)
+        let decoded: AIRunPlanPayload
+        do {
+            decoded = try await generateGuidedPayload(prompt: detailedPrompt, onStreamChunk: onStreamChunk)
+        } catch {
+            if isModelContextOverflow(error) {
+                let compactPrompt = await buildPrompt(style: style, profile: profile, context: context, compact: true)
+                promptUsed = compactPrompt
+                do {
+                    decoded = try await generateGuidedPayload(prompt: compactPrompt, onStreamChunk: onStreamChunk)
+                } catch {
+                    if isModelContextOverflow(error) {
+                        let fallback = fallbackDraft(style: style, profile: profile, prompt: compactPrompt, context: context)
+                        return applyPaceGoalProgression(fallback, profile: profile, context: context)
+                    }
+                    throw error
+                }
+            } else {
+                throw error
+            }
+        }
+
         let normalized = normalizePayload(decoded, profile: profile)
         try validate(payload: normalized)
-        let baseDraft = draftFromPayload(normalized, prompt: prompt)
+        let baseDraft = draftFromPayload(normalized, prompt: promptUsed)
         return applyPaceGoalProgression(baseDraft, profile: profile, context: context)
     }
 
@@ -151,7 +172,7 @@ final class RunAssistantAIService {
 
     // MARK: - Prompting
 
-    private func buildPrompt(style: String, profile: RunAssistantProfile, context: ModelContext) async -> String {
+    private func buildPrompt(style: String, profile: RunAssistantProfile, context: ModelContext, compact: Bool) async -> String {
         let runs = ((try? context.fetch(FetchDescriptor<RunningSession>(sortBy: [SortDescriptor(\RunningSession.date, order: .reverse)]))) ?? [])
         let recentRuns = Array(runs.prefix(24)).filter { $0.duration > 0 && $0.distance > 0 }
         let calendar = Calendar.current
@@ -209,6 +230,35 @@ final class RunAssistantAIService {
             """
         }
 
+        if compact {
+            return """
+Create a progressive running plan.
+Follow the app schema exactly.
+
+STYLE: \(style)
+TARGET: \(target) mile(s)
+ABILITY: \(profile.abilityLevel)
+DAYS_PER_WEEK: \(daysPerWeek)
+LONG_RUN_WEEKDAY: \(longRunWeekday)
+PRIMARY_GOAL: \(profile.goalFocus)
+CURRENT_AVERAGE_PACE_MIN_PER_MILE: \(String(format: "%.2f", profile.currentAveragePaceMinPerMile))
+PACE_GOAL_MIN_PER_MILE: \(String(format: "%.2f", profile.paceGoalMinPerMile))
+LOCAL_LAST_4_WEEKS_MILES: \(String(format: "%.1f", miles4Weeks))
+LOCAL_AVG_WEEKLY_MILES: \(String(format: "%.1f", avgWeeklyMiles))
+LOCAL_MEDIAN_PACE: \(formatPace(medianPace))
+LOCAL_ACTIVITY_MIX: \(localActivityMix)
+HK: \(hkSummary)
+
+Rules:
+- durationWeeks should be between 6 and 12.
+- Use weeks 0...(durationWeeks-1).
+- Include exactly 7 sessions per week (weekday 1...7 exactly once).
+- Include exactly DAYS_PER_WEEK non-rest sessions per week.
+- Keep one long run on LONG_RUN_WEEKDAY when possible.
+- Use concise notes (max 1 short sentence).
+"""
+        }
+
         return """
 Create a progressive running plan for a couch-to-distance assistant.
 Use the response schema provided by the app.
@@ -252,6 +302,7 @@ BODY_CONTEXT:
 
 Rules:
 - Use weeks 0...(durationWeeks-1)
+- Keep durationWeeks between 6 and 12 unless user profile clearly requires otherwise.
 - Include only weekday values 1..7
 - Include exactly DAYS_PER_WEEK non-rest sessions per week.
 - Fill all non-training weekdays with rest sessions so each week has all 7 days.
@@ -263,6 +314,20 @@ Rules:
 - Week over week, push pace slightly faster (harder sessions first) toward the pace goal.
 - Keep easy/recovery slower than tempo/interval while still trending faster over the plan.
 """
+    }
+
+    private func isModelContextOverflow(_ error: Error) -> Bool {
+        let details = "\(error.localizedDescription) \(String(describing: error))".lowercased()
+        let markers = [
+            "context size",
+            "context window",
+            "maximum context",
+            "model context",
+            "prompt is too long",
+            "input is too long",
+            "exceeds context"
+        ]
+        return markers.contains(where: { details.contains($0) })
     }
 
     private func miles(for run: RunningSession) -> Double {
@@ -1134,13 +1199,135 @@ Rules:
 
             var updatedSession = session
             updatedSession.targetPaceMinPerMile = pace
+
+            let volumeFactor = weeklyVolumeFactor(
+                weekIndex: session.weekIndex,
+                totalWeeks: totalWeeks,
+                abilityLevel: profile.abilityLevel
+            )
+            let fraction = sessionDistanceFraction(
+                sessionType: session.sessionType,
+                progress: progress
+            )
+            let bounds = distanceBounds(
+                sessionType: session.sessionType,
+                targetMiles: profile.targetDistanceMiles
+            )
+            var targetMiles = profile.targetDistanceMiles
+                * fraction
+                * abilityDistanceScale(for: profile.abilityLevel)
+                * volumeFactor
+
             if let meters = session.targetDistanceMeters, meters > 0 {
-                let miles = meters / 1609.34
-                updatedSession.targetDurationSeconds = miles * pace * 60.0
+                let existingMiles = meters / 1609.34
+                // Blend existing output with deterministic progression to keep some personalization.
+                targetMiles = (targetMiles * 0.70) + (existingMiles * 0.30)
             }
+
+            targetMiles = quantizedMiles(targetMiles)
+            targetMiles = min(max(targetMiles, bounds.min), bounds.max)
+
+            updatedSession.targetDistanceMeters = targetMiles * 1609.34
+            updatedSession.targetDurationSeconds = targetMiles * pace * 60.0
             return updatedSession
         }
         return updated
+    }
+
+    private struct SessionDistanceBounds {
+        var min: Double
+        var max: Double
+    }
+
+    private func weeklyVolumeFactor(weekIndex: Int, totalWeeks: Int, abilityLevel: String) -> Double {
+        let growth: Double
+        let cap: Double
+        switch abilityLevel {
+        case "brand_new":
+            growth = 1.03
+            cap = 1.30
+        case "continuous":
+            growth = 1.07
+            cap = 1.70
+        default:
+            growth = 1.05
+            cap = 1.50
+        }
+
+        var factor = pow(growth, Double(max(0, weekIndex)))
+
+        let weekNumber = weekIndex + 1
+        if weekNumber % 4 == 0 {
+            factor *= 0.88 // Deload every fourth week.
+        }
+        if weekIndex == totalWeeks - 1 {
+            factor *= 0.92 // Taper/test week.
+        } else if weekIndex == totalWeeks - 2 {
+            factor *= 0.96
+        }
+
+        return min(max(0.85, factor), cap)
+    }
+
+    private func abilityDistanceScale(for abilityLevel: String) -> Double {
+        switch abilityLevel {
+        case "brand_new": return 0.90
+        case "continuous": return 1.10
+        default: return 1.00
+        }
+    }
+
+    private func sessionDistanceFraction(sessionType: String, progress: Double) -> Double {
+        let clamped = min(max(progress, 0.0), 1.0)
+        let (start, end): (Double, Double)
+        switch sessionType {
+        case "long":
+            (start, end) = (0.62, 1.08)
+        case "tempo":
+            (start, end) = (0.42, 0.78)
+        case "interval":
+            (start, end) = (0.36, 0.64)
+        case "recovery":
+            (start, end) = (0.32, 0.58)
+        default: // easy
+            (start, end) = (0.40, 0.72)
+        }
+        return start + ((end - start) * clamped)
+    }
+
+    private func distanceBounds(sessionType: String, targetMiles: Double) -> SessionDistanceBounds {
+        switch sessionType {
+        case "long":
+            return SessionDistanceBounds(
+                min: max(0.9, targetMiles * 0.45),
+                max: max(1.2, targetMiles * 1.20)
+            )
+        case "tempo":
+            return SessionDistanceBounds(
+                min: max(0.7, targetMiles * 0.35),
+                max: max(1.0, targetMiles * 0.90)
+            )
+        case "interval":
+            return SessionDistanceBounds(
+                min: max(0.6, targetMiles * 0.30),
+                max: max(0.9, targetMiles * 0.75)
+            )
+        case "recovery":
+            return SessionDistanceBounds(
+                min: max(0.5, targetMiles * 0.25),
+                max: max(0.9, targetMiles * 0.70)
+            )
+        default: // easy
+            return SessionDistanceBounds(
+                min: max(0.7, targetMiles * 0.35),
+                max: max(1.0, targetMiles * 0.85)
+            )
+        }
+    }
+
+    private func quantizedMiles(_ miles: Double) -> Double {
+        let clamped = max(0.4, miles)
+        return (clamped * 4.0).rounded() / 4.0
     }
 
     private func baselinePaceMinPerMile(

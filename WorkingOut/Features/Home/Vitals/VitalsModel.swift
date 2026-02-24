@@ -83,13 +83,20 @@ final class VitalsModel: ObservableObject {
 
             // Sleep (last night duration)
             group.addTask {
-                if let seconds = try? await self.hk.lastNightSleepDuration(), seconds > 0 {
+                if let breakdown = try? await self.hk.lastNightSleepScoreBreakdown() {
+                    let hours = breakdown.sleepDurationSeconds / 3600.0
+                    await MainActor.run {
+                        self.sleepDuration = String(format: "%.1f h", hours)
+                        self.simpleSleepScore = "\(breakdown.totalScore)"
+                    }
+                } else if let seconds = try? await self.hk.lastNightSleepDuration(), seconds > 0 {
+                    // Fallback when score breakdown is unavailable.
                     let hours = seconds / 3600.0
-                    await MainActor.run { self.sleepDuration = String(format: "%.1f h", hours) }
-
-                    // Optional simple score vs 8h goal
                     let score = max(0, min(100, (hours / 8.0) * 100.0))
-                    await MainActor.run { self.simpleSleepScore = String(format: "%.0f", score) }
+                    await MainActor.run {
+                        self.sleepDuration = String(format: "%.1f h", hours)
+                        self.simpleSleepScore = String(format: "%.0f", score)
+                    }
                 }
             }
         }

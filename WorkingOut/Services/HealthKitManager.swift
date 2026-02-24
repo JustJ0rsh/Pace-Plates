@@ -8,6 +8,20 @@ extension Notification.Name {
 
 @MainActor
 final class HealthKitManager: ObservableObject {
+    struct SleepScoreBreakdown {
+        let totalScore: Int
+        let durationScore: Int
+        let bedtimeScore: Int
+        let interruptionScore: Int
+        let sleepDurationSeconds: TimeInterval
+    }
+
+    private struct SleepSessionSummary {
+        let start: Date
+        let end: Date
+        let asleepSeconds: TimeInterval
+    }
+
     static let shared = HealthKitManager()
     private let healthStore = HKHealthStore()
     private var workoutObserverQuery: HKObserverQuery?
@@ -477,73 +491,208 @@ final class HealthKitManager: ObservableObject {
     }
 
     func lastNightSleepDuration() async throws -> TimeInterval {
-        guard let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else { return 0 }
-        let cal = Calendar.current
+        guard let breakdown = try await lastNightSleepScoreBreakdown() else { return 0 }
+        return breakdown.sleepDurationSeconds
+    }
+
+    func lastNightSleepScoreBreakdown() async throws -> SleepScoreBreakdown? {
+        let calendar = Calendar.current
         let now = Date()
-        // Define "Last Night" as the sleep session ending today.
-        // We look back to yesterday 6 PM to cover the start of sleep, and end at current time.
-        // This handles sleep crossing midnight (e.g. 11 PM - 7 AM).
-        let startOfDay = cal.startOfDay(for: now)
-        guard let yesterday6PM = cal.date(byAdding: .hour, value: -6, to: startOfDay) else { return 0 }
-        
-        let pred = HKQuery.predicateForSamples(withStart: yesterday6PM, end: now, options: .strictEndDate)
-        let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+        let todayStart = calendar.startOfDay(for: now)
+        guard let lookbackStart = calendar.date(byAdding: .day, value: -14, to: todayStart)?
+            .addingTimeInterval(-6 * 3600) else { return nil }
+
+        let samples = try await fetchSleepSamples(from: lookbackStart, to: now)
+        guard !samples.isEmpty else { return nil }
+
+        let asleepValues: Set<Int> = [
+            HKCategoryValueSleepAnalysis.asleepCore.rawValue,
+            HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
+            HKCategoryValueSleepAnalysis.asleepREM.rawValue,
+            HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue
+        ]
+        let inBedValues: Set<Int> = [HKCategoryValueSleepAnalysis.inBed.rawValue]
+        let awakeValues: Set<Int> = [HKCategoryValueSleepAnalysis.awake.rawValue]
+
+        let mergedAsleep = mergeIntervals(intervals: intervals(from: samples, matching: asleepValues))
+        guard !mergedAsleep.isEmpty else { return nil }
+
+        let sessions = detectSleepSessions(fromMergedAsleepIntervals: mergedAsleep)
+        guard !sessions.isEmpty else { return nil }
+
+        let lastNightCandidates = sessions.filter { $0.end >= todayStart }
+        guard let lastNightSession = lastNightCandidates.max(by: { $0.asleepSeconds < $1.asleepSeconds }) else { return nil }
+
+        let mergedInBed = mergeIntervals(intervals: intervals(from: samples, matching: inBedValues))
+        let mergedAwake = mergeIntervals(intervals: intervals(from: samples, matching: awakeValues))
+
+        let bedtime = inferredBedtime(for: lastNightSession, inBedIntervals: mergedInBed) ?? lastNightSession.start
+        let awakeSeconds = totalOverlapDuration(of: mergedAwake, with: (start: lastNightSession.start, end: lastNightSession.end))
+        let interruptionCount = countInterruptions(intervals: mergedAwake, in: (start: lastNightSession.start, end: lastNightSession.end))
+
+        let bedtimeMinutes = minutesSinceMidnight(for: bedtime, calendar: calendar)
+        let historicalBedtimes = sessions
+            .filter { $0.end < todayStart }
+            .sorted { $0.end > $1.end }
+            .prefix(7)
+            .map { minutesSinceMidnight(for: $0.start, calendar: calendar) }
+
+        let bedtimeDeviation: Double = {
+            guard let baseline = circularMeanMinute(of: Array(historicalBedtimes)) else { return 0 }
+            return circularMinutesDistance(bedtimeMinutes, baseline)
+        }()
+
+        let durationScore = durationPoints(forAsleepSeconds: lastNightSession.asleepSeconds)
+        let bedtimeScore = bedtimePoints(forDeviationMinutes: bedtimeDeviation)
+        let interruptionScore = interruptionPoints(interruptionCount: interruptionCount, awakeSeconds: awakeSeconds)
+        let total = max(0, min(100, durationScore + bedtimeScore + interruptionScore))
+
+        return SleepScoreBreakdown(
+            totalScore: total,
+            durationScore: durationScore,
+            bedtimeScore: bedtimeScore,
+            interruptionScore: interruptionScore,
+            sleepDurationSeconds: lastNightSession.asleepSeconds
+        )
+    }
+
+    private func fetchSleepSamples(from start: Date, to end: Date) async throws -> [HKCategorySample] {
+        guard let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else { return [] }
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
 
         return try await withCheckedThrowingContinuation { cont in
-            let q = HKSampleQuery(sampleType: type, predicate: pred, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, err in
-                if let err = err { cont.resume(throwing: err); return }
-                
-                // Filter for actual sleep samples (not in bed, awake, etc.)
-                let sleepSamples = (samples as? [HKCategorySample])?
-                    .filter { $0.value == HKCategoryValueSleepAnalysis.asleepCore.rawValue
-                           || $0.value == HKCategoryValueSleepAnalysis.asleepDeep.rawValue
-                           || $0.value == HKCategoryValueSleepAnalysis.asleepREM.rawValue
-                           || $0.value == HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue
-                    } ?? []
-                
-                // ISSUE FIX: Devices like Oura Ring create overlapping samples for different sleep stages
-                // (e.g., one sample for "asleep" 10pm-6am AND separate samples for REM, Deep, Core)
-                // Simply summing durations can count the same time period multiple times
-                
-                // Solution: Merge overlapping time intervals before calculating total duration
-                let total = self.mergeAndCalculateSleepDuration(samples: sleepSamples)
-                cont.resume(returning: total)
+            let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, error in
+                if let error = error {
+                    cont.resume(throwing: error)
+                    return
+                }
+                cont.resume(returning: (samples as? [HKCategorySample]) ?? [])
             }
-            healthStore.execute(q)
+            healthStore.execute(query)
         }
     }
-    
-    /// Merges overlapping sleep samples and calculates total duration
-    /// This prevents double-counting when devices report overlapping sleep stages
-    nonisolated private func mergeAndCalculateSleepDuration(samples: [HKCategorySample]) -> TimeInterval {
-        guard !samples.isEmpty else { return 0 }
-        
-        // Sort samples by start date
-        let sorted = samples.sorted { $0.startDate < $1.startDate }
-        
-        // Merge overlapping intervals
+
+    nonisolated private func intervals(from samples: [HKCategorySample], matching values: Set<Int>) -> [(start: Date, end: Date)] {
+        samples
+            .filter { values.contains($0.value) && $0.endDate > $0.startDate }
+            .map { ($0.startDate, $0.endDate) }
+    }
+
+    nonisolated private func mergeIntervals(intervals: [(start: Date, end: Date)], allowingGap gap: TimeInterval = 0) -> [(start: Date, end: Date)] {
+        guard !intervals.isEmpty else { return [] }
+        let sorted = intervals.sorted { $0.start < $1.start }
+
         var merged: [(start: Date, end: Date)] = []
-        var currentStart = sorted[0].startDate
-        var currentEnd = sorted[0].endDate
-        
-        for i in 1..<sorted.count {
-            let sample = sorted[i]
-            if sample.startDate <= currentEnd {
-                // Overlapping or adjacent - extend the current interval
-                currentEnd = max(currentEnd, sample.endDate)
+        var current = sorted[0]
+
+        for interval in sorted.dropFirst() {
+            if interval.start <= current.end.addingTimeInterval(gap) {
+                current.end = max(current.end, interval.end)
             } else {
-                // Gap found - save current interval and start new one
-                merged.append((start: currentStart, end: currentEnd))
-                currentStart = sample.startDate
-                currentEnd = sample.endDate
+                merged.append(current)
+                current = interval
             }
         }
-        // Don't forget the last interval
-        merged.append((start: currentStart, end: currentEnd))
-        
-        // Calculate total duration from merged intervals
-        let totalDuration = merged.reduce(0.0) { $0 + $1.end.timeIntervalSince($1.start) }
-        return totalDuration
+        merged.append(current)
+        return merged
+    }
+
+    nonisolated private func detectSleepSessions(fromMergedAsleepIntervals intervals: [(start: Date, end: Date)]) -> [SleepSessionSummary] {
+        guard !intervals.isEmpty else { return [] }
+        let maxGap: TimeInterval = 2 * 3600
+
+        var sessions: [SleepSessionSummary] = []
+        var sessionStart = intervals[0].start
+        var sessionEnd = intervals[0].end
+        var asleepTotal = intervals[0].end.timeIntervalSince(intervals[0].start)
+
+        for interval in intervals.dropFirst() {
+            if interval.start <= sessionEnd.addingTimeInterval(maxGap) {
+                asleepTotal += interval.end.timeIntervalSince(interval.start)
+                sessionEnd = max(sessionEnd, interval.end)
+            } else {
+                sessions.append(SleepSessionSummary(start: sessionStart, end: sessionEnd, asleepSeconds: asleepTotal))
+                sessionStart = interval.start
+                sessionEnd = interval.end
+                asleepTotal = interval.end.timeIntervalSince(interval.start)
+            }
+        }
+
+        sessions.append(SleepSessionSummary(start: sessionStart, end: sessionEnd, asleepSeconds: asleepTotal))
+        return sessions
+    }
+
+    nonisolated private func totalOverlapDuration(of intervals: [(start: Date, end: Date)], with window: (start: Date, end: Date)) -> TimeInterval {
+        intervals.reduce(0) { total, interval in
+            let overlapStart = max(interval.start, window.start)
+            let overlapEnd = min(interval.end, window.end)
+            guard overlapEnd > overlapStart else { return total }
+            return total + overlapEnd.timeIntervalSince(overlapStart)
+        }
+    }
+
+    nonisolated private func countInterruptions(intervals: [(start: Date, end: Date)], in window: (start: Date, end: Date)) -> Int {
+        intervals.reduce(0) { count, interval in
+            let overlapStart = max(interval.start, window.start)
+            let overlapEnd = min(interval.end, window.end)
+            return overlapEnd.timeIntervalSince(overlapStart) >= 60 ? (count + 1) : count
+        }
+    }
+
+    nonisolated private func inferredBedtime(for session: SleepSessionSummary, inBedIntervals: [(start: Date, end: Date)]) -> Date? {
+        let windowStart = session.start.addingTimeInterval(-3 * 3600)
+        let overlapping = inBedIntervals.filter { interval in
+            interval.end > windowStart && interval.start < session.end
+        }
+        return overlapping.map(\.start).min()
+    }
+
+    nonisolated private func durationPoints(forAsleepSeconds seconds: TimeInterval) -> Int {
+        let hours = max(0, seconds / 3600)
+        let raw = min(1.0, hours / 8.0) * 50.0
+        return Int(raw.rounded())
+    }
+
+    nonisolated private func bedtimePoints(forDeviationMinutes deviation: Double) -> Int {
+        let penalty = min(30.0, max(0, deviation) / 9.0)
+        return max(0, Int((30.0 - penalty).rounded()))
+    }
+
+    nonisolated private func interruptionPoints(interruptionCount: Int, awakeSeconds: TimeInterval) -> Int {
+        let awakeMinutes = max(0, awakeSeconds / 60.0)
+        let penalty = Double(interruptionCount) * 1.8 + (awakeMinutes / 12.0)
+        let raw = 20.0 - penalty
+        return max(0, min(20, Int(raw.rounded())))
+    }
+
+    nonisolated private func minutesSinceMidnight(for date: Date, calendar: Calendar) -> Double {
+        let components = calendar.dateComponents([.hour, .minute], from: date)
+        let hours = Double(components.hour ?? 0)
+        let minutes = Double(components.minute ?? 0)
+        return hours * 60.0 + minutes
+    }
+
+    nonisolated private func circularMeanMinute(of values: [Double]) -> Double? {
+        guard !values.isEmpty else { return nil }
+        let full = 24.0 * 60.0
+
+        let vectors = values.map { value -> (sin: Double, cos: Double) in
+            let angle = (value / full) * 2.0 * .pi
+            return (sin(angle), cos(angle))
+        }
+
+        let sumSin = vectors.reduce(0.0) { $0 + $1.sin }
+        let sumCos = vectors.reduce(0.0) { $0 + $1.cos }
+        var angle = atan2(sumSin, sumCos)
+        if angle < 0 { angle += 2.0 * .pi }
+        return (angle / (2.0 * .pi)) * full
+    }
+
+    nonisolated private func circularMinutesDistance(_ lhs: Double, _ rhs: Double) -> Double {
+        let full = 24.0 * 60.0
+        let raw = abs(lhs - rhs).truncatingRemainder(dividingBy: full)
+        return min(raw, full - raw)
     }
     
     // MARK: - User Profile Characteristics
