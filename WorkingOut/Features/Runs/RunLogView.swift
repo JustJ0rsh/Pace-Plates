@@ -817,8 +817,8 @@ struct RunLogView: View {
 
         Task(priority: .utility) {
             do {
-                // Try to fetch recent workouts (will no-op if not authorized)
-                let workouts = try await HealthKitManager.shared.fetchRecentRuns(limit: limit)
+                let changes = try await HealthKitManager.shared.fetchCardioWorkoutChanges(resetAnchor: false, limit: limit)
+                let workouts = changes.added
                 let existingRuns = await MainActor.run {
                     runningSessions.map {
                         ExistingRunSnapshot(
@@ -836,6 +836,10 @@ struct RunLogView: View {
                 let runLookup = existingRuns
                 var actions: [RunImportAction] = []
                 var uuidsToEnrich = Set<String>()
+
+                for deletedUUID in changes.deletedUUIDs {
+                    actions.append(.delete(healthWorkoutUUID: deletedUUID))
+                }
 
                 for w in workouts {
                     // Map HK activity to our string type
@@ -978,6 +982,10 @@ struct RunLogView: View {
                     similar.locations = locations
                 }
 
+            case let .delete(healthWorkoutUUID):
+                guard let session = runningSessions.first(where: { $0.healthWorkoutUUID == healthWorkoutUUID }) else { continue }
+                modelContext.delete(session)
+
             case let .insert(payload):
                 let model = RunningSession(
                     date: payload.date,
@@ -1103,6 +1111,9 @@ struct RunLogView: View {
 
             let avgCadence = needs.needsCadence ? (try? await HealthKitManager.shared.averageCadence(for: workout)) : nil
             let maxCadence = needs.needsCadence ? (try? await HealthKitManager.shared.maxCadence(for: workout)) : nil
+            let avgStrideLength = needs.needsStrideLength ? (try? await HealthKitManager.shared.averageStrideLength(for: workout)) : nil
+            let verticalOscillation = needs.needsVerticalOscillation ? (try? await HealthKitManager.shared.averageVerticalOscillation(for: workout)) : nil
+            let groundContactTime = needs.needsGroundContactTime ? (try? await HealthKitManager.shared.averageGroundContactTime(for: workout)) : nil
 
             let avgPower = needs.needsPower ? (try? await HealthKitManager.shared.averagePower(for: workout)) : nil
             let maxPower = needs.needsPower ? (try? await HealthKitManager.shared.maxPower(for: workout)) : nil
@@ -1125,6 +1136,15 @@ struct RunLogView: View {
                 if needs.needsCadence {
                     if session.avgCadence == nil, let avgCadence { session.avgCadence = avgCadence }
                     if session.maxCadence == nil, let maxCadence { session.maxCadence = maxCadence }
+                }
+                if needs.needsStrideLength, session.avgStrideLength == nil, let avgStrideLength {
+                    session.avgStrideLength = avgStrideLength
+                }
+                if needs.needsVerticalOscillation, session.verticalOscillation == nil, let verticalOscillation {
+                    session.verticalOscillation = verticalOscillation
+                }
+                if needs.needsGroundContactTime, session.groundContactTime == nil, let groundContactTime {
+                    session.groundContactTime = groundContactTime
                 }
 
                 if needs.needsPower {
@@ -1154,6 +1174,9 @@ struct RunLogView: View {
             needsRoute: session.locations.isEmpty,
             needsHeartRate: session.avgHeartRate == nil || session.maxHeartRate == nil || session.minHeartRate == nil,
             needsCadence: session.avgCadence == nil || session.maxCadence == nil,
+            needsStrideLength: session.avgStrideLength == nil,
+            needsVerticalOscillation: session.verticalOscillation == nil,
+            needsGroundContactTime: session.groundContactTime == nil,
             needsPower: session.avgPower == nil || session.maxPower == nil,
             needsElevation: session.totalAscent == nil || session.totalDescent == nil || session.minElevation == nil || session.maxElevation == nil
         )
@@ -1221,11 +1244,14 @@ private struct RunEnrichmentNeeds {
     let needsRoute: Bool
     let needsHeartRate: Bool
     let needsCadence: Bool
+    let needsStrideLength: Bool
+    let needsVerticalOscillation: Bool
+    let needsGroundContactTime: Bool
     let needsPower: Bool
     let needsElevation: Bool
 
     var requiresAnyFetch: Bool {
-        needsCalories || needsRoute || needsHeartRate || needsCadence || needsPower || needsElevation
+        needsCalories || needsRoute || needsHeartRate || needsCadence || needsStrideLength || needsVerticalOscillation || needsGroundContactTime || needsPower || needsElevation
     }
 }
 
@@ -1259,6 +1285,7 @@ private enum RunImportAction {
         calories: Double?,
         locations: Data?
     )
+    case delete(healthWorkoutUUID: String)
     case insert(NewRunPayload)
 }
 
@@ -1756,12 +1783,15 @@ struct RunSessionDetailView: View {
 // MARK: - Run Stats View
 struct RunStatsView: View {
     @Environment(\.modelContext) private var modelContext
+    @AppStorage("measurementSystem") private var measurementSystem: String = "imperial"
     let session: RunningSession
     let coordinates: [CLLocationCoordinate2D]
     let heartRateSamples: [(timestamp: Date, bpm: Double)]
     let isLoadingHeartRate: Bool
     
     @State private var loadError: String? = nil
+    
+    private var usesImperial: Bool { measurementSystem == "imperial" }
     
     // Decode stored coordinates with full data (altitude, timestamp)
     private var fullCoordinates: [RunCoordinate] {
@@ -1976,6 +2006,35 @@ struct RunStatsView: View {
         if hours > 0 { return String(format: "%d:%02d:%02d", hours, minutes, seconds) }
         else { return String(format: "%d:%02d", minutes, seconds) }
     }
+
+    private func formatElevation(_ meters: Double) -> String {
+        if usesImperial {
+            return String(format: "%.0f ft", meters * 3.28084)
+        }
+        return String(format: "%.0f m", meters)
+    }
+
+    private var strideUnitLabel: String {
+        usesImperial ? "ft" : "m"
+    }
+
+    private func formatStrideValue(_ meters: Double) -> String {
+        if usesImperial {
+            return String(format: "%.2f", meters * 3.28084)
+        }
+        return String(format: "%.2f", meters)
+    }
+
+    private var verticalOscillationUnitLabel: String {
+        usesImperial ? "in" : "cm"
+    }
+
+    private func formatVerticalOscillationValue(_ centimeters: Double) -> String {
+        if usesImperial {
+            return String(format: "%.2f", centimeters / 2.54)
+        }
+        return String(format: "%.1f", centimeters)
+    }
     
     // Average pace
     private var averagePace: String {
@@ -2173,16 +2232,16 @@ struct RunStatsView: View {
                             GridItem(.flexible(minimum: 150))
                         ], spacing: 12) {
                             StatCard(title: "Total Ascent", 
-                                   value: session.totalAscent.map { String(format: "%.0f m", $0) } ?? "N/A", 
+                                   value: session.totalAscent.map { formatElevation($0) } ?? "N/A", 
                                    subtitle: "")
                             StatCard(title: "Total Descent", 
-                                   value: session.totalDescent.map { String(format: "%.0f m", $0) } ?? "N/A", 
+                                   value: session.totalDescent.map { formatElevation($0) } ?? "N/A", 
                                    subtitle: "")
                             StatCard(title: "Min Elevation", 
-                                   value: session.minElevation.map { String(format: "%.0f m", $0) } ?? "N/A", 
+                                   value: session.minElevation.map { formatElevation($0) } ?? "N/A", 
                                    subtitle: "")
                             StatCard(title: "Max Elevation", 
-                                   value: session.maxElevation.map { String(format: "%.0f m", $0) } ?? "N/A", 
+                                   value: session.maxElevation.map { formatElevation($0) } ?? "N/A", 
                                    subtitle: "")
                         }
                         
@@ -2214,11 +2273,11 @@ struct RunStatsView: View {
                                 Divider().opacity(0.2)
                             }
                             if let avgStride = session.avgStrideLength {
-                                DynamicRow(label: "Avg Stride Length", value: String(format: "%.2f", avgStride), unit: "m")
+                                DynamicRow(label: "Avg Stride Length", value: formatStrideValue(avgStride), unit: strideUnitLabel)
                                 Divider().opacity(0.2)
                             }
                             if let vertOsc = session.verticalOscillation {
-                                DynamicRow(label: "Vertical Oscillation", value: String(format: "%.1f", vertOsc), unit: "cm")
+                                DynamicRow(label: "Vertical Oscillation", value: formatVerticalOscillationValue(vertOsc), unit: verticalOscillationUnitLabel)
                                 Divider().opacity(0.2)
                             }
                             if let gct = session.groundContactTime {
