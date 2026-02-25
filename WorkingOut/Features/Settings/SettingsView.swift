@@ -2,6 +2,8 @@ import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
 import HealthKit
+import CoreLocation
+import UIKit
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
@@ -19,6 +21,7 @@ struct SettingsView: View {
     @AppStorage("useStructuredPlanView") private var useStructuredPlanView: Bool = false
     @AppStorage("enableWeeklyWeightReminder") private var enableWeeklyWeightReminder: Bool = false
     @AppStorage("showVitalsOnHome") private var showVitalsOnHome: Bool = true
+    @AppStorage("enableBackgroundRunTracking") private var enableBackgroundRunTracking: Bool = false
     @AppStorage("runsLastHealthImportAt") private var runsLastHealthImportAt: Double = 0
     @AppStorage("weightLastHealthImportAt") private var weightLastHealthImportAt: Double = 0
     @FocusState private var ageFocused: Bool
@@ -36,6 +39,8 @@ struct SettingsView: View {
     @State private var isRefreshingHealthData: Bool = false
     @State private var showHealthSyncResult: Bool = false
     @State private var healthSyncResultMessage: String = ""
+    @State private var locationAuthorizationStatus: CLAuthorizationStatus = CLLocationManager().authorizationStatus
+    private let locationManager = CLLocationManager()
     #if DEBUG
     @State private var confirmAddSampleData: Bool = false
     @State private var confirmRemoveSampleData: Bool = false
@@ -218,6 +223,27 @@ struct SettingsView: View {
                 }
 
                 Section("Health & Sync") {
+                    Toggle(isOn: $enableBackgroundRunTracking) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Background Run Tracking")
+                            Text("Keep tracking active when Pace & Plates is in the background. Requires \"Always\" location access.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .onChange(of: enableBackgroundRunTracking) { _, isEnabled in
+                        if isEnabled {
+                            requestAlwaysLocationIfNeeded()
+                        }
+                    }
+
+                    if enableBackgroundRunTracking && locationAuthorizationStatus != .authorizedAlways {
+                        Button("Enable \"Always\" Location Access") {
+                            requestAlwaysLocationIfNeeded()
+                        }
+                        .foregroundStyle(AppTheme.accentColor)
+                    }
+
                     Button {
                         refreshHealthDataNow()
                     } label: {
@@ -235,6 +261,12 @@ struct SettingsView: View {
                     Text("Imports recent runs and weight entries from Apple Health.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+
+                    if enableBackgroundRunTracking {
+                        Text(backgroundLocationStatusDescription)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Section("Backup") {
@@ -420,7 +452,11 @@ struct SettingsView: View {
             }
         }
         .onAppear {
+            refreshLocationAuthorizationStatus()
             loadProfileFromHealthKit()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            refreshLocationAuthorizationStatus()
         }
     }
     
@@ -433,6 +469,39 @@ struct SettingsView: View {
     @State private var showAlert: Bool = false
     @State private var alertMessage: String = ""
     @State private var confirmDeleteAll: Bool = false
+    
+    private var backgroundLocationStatusDescription: String {
+        switch locationAuthorizationStatus {
+        case .authorizedAlways:
+            return "Location access: Always (ready for background tracking)."
+        case .authorizedWhenInUse:
+            return "Location access: While Using App. Switch to Always for background runs."
+        case .denied:
+            return "Location access denied. Enable Location permissions in Settings."
+        case .restricted:
+            return "Location access restricted by system policy."
+        case .notDetermined:
+            return "Location access not requested yet."
+        @unknown default:
+            return "Location access state is unknown."
+        }
+    }
+    
+    private func refreshLocationAuthorizationStatus() {
+        locationAuthorizationStatus = locationManager.authorizationStatus
+    }
+    
+    private func requestAlwaysLocationIfNeeded() {
+        switch locationManager.authorizationStatus {
+        case .notDetermined:
+            locationManager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse:
+            locationManager.requestAlwaysAuthorization()
+        default:
+            break
+        }
+        refreshLocationAuthorizationStatus()
+    }
     
     // MARK: - HealthKit Profile Loading
     private func loadProfileFromHealthKit() {
@@ -492,7 +561,8 @@ struct SettingsView: View {
 
     @MainActor
     private func importRunsFromHealth(limit: Int = 100) async throws -> (inserted: Int, linked: Int, skipped: Int) {
-        let workouts = try await HealthKitManager.shared.fetchRecentRuns(limit: limit)
+        let changes = try await HealthKitManager.shared.fetchCardioWorkoutChanges(resetAnchor: false, limit: limit)
+        let workouts = changes.added
         var allRuns = try modelContext.fetch(FetchDescriptor<RunningSession>())
         var existingUUIDs = Set(allRuns.compactMap(\.healthWorkoutUUID).filter { !$0.isEmpty })
 
@@ -500,6 +570,21 @@ struct SettingsView: View {
         var inserted = 0
         var linked = 0
         var skipped = 0
+        var deletedAny = false
+
+        if !changes.deletedUUIDs.isEmpty {
+            let deletedSet = Set(changes.deletedUUIDs)
+            for run in allRuns where (run.healthWorkoutUUID.map { deletedSet.contains($0) } ?? false) {
+                modelContext.delete(run)
+                skipped += 1
+                deletedAny = true
+            }
+            allRuns.removeAll { run in
+                guard let uuid = run.healthWorkoutUUID else { return false }
+                return deletedSet.contains(uuid)
+            }
+            existingUUIDs = Set(allRuns.compactMap(\.healthWorkoutUUID).filter { !$0.isEmpty })
+        }
 
         for workout in workouts {
             let uuidStr = workout.uuid.uuidString
@@ -552,7 +637,7 @@ struct SettingsView: View {
             existingUUIDs.insert(uuidStr)
         }
 
-        if inserted > 0 || linked > 0 {
+        if inserted > 0 || linked > 0 || deletedAny {
             try modelContext.save()
         }
 

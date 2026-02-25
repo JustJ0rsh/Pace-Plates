@@ -29,6 +29,9 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
     var distance: Double = 0.0 // Meters
     var duration: TimeInterval = 0.0
     var startDate: Date? = nil
+    private var pausedAt: Date? = nil
+    private var pausedDuration: TimeInterval = 0.0
+    private var shouldSkipNextDistanceSample = false
     // UI refresh timer; duration is computed from dates
     var timer: Timer? = nil
     var isRunning: Bool = false
@@ -45,8 +48,15 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
     var smoothedPaceSecondsPerUnit: Double? = nil // seconds per km or per mile based on distanceUnit
     private let smoothingWindowSeconds: TimeInterval = 20
     private let smoothingMinDistance: Double = 25 // meters
+    private var lastLiveActivityUpdateAt: Date? = nil
+    private var lastLiveActivityDistanceMeters: Double = 0
+    private var lastLiveActivityPace: Double? = nil
+    private let liveActivityMinUpdateInterval: TimeInterval = 6
+    private let liveActivityDistanceDeltaMeters: Double = 20
+    private let liveActivityPaceDeltaSeconds: Double = 8
     
     @ObservationIgnored @AppStorage("distanceUnit") var distanceUnit = "mi"
+    @ObservationIgnored @AppStorage("enableBackgroundRunTracking") var enableBackgroundRunTracking = false
     
     override init() {
         authorizationStatus = manager.authorizationStatus
@@ -56,7 +66,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         manager.desiredAccuracy = kCLLocationAccuracyBest
         manager.distanceFilter = 10 // Update every 10 meters
         
-        manager.allowsBackgroundLocationUpdates = true
+        manager.allowsBackgroundLocationUpdates = false
         // Allow the system to pause updates to conserve battery when appropriate
         manager.pausesLocationUpdatesAutomatically = true
         
@@ -72,6 +82,10 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         case .notDetermined:
             pendingStartAfterAuth = startAfterAuth
             manager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse:
+            if enableBackgroundRunTracking {
+                manager.requestAlwaysAuthorization()
+            }
         default:
             break
         }
@@ -87,10 +101,18 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         route.removeAll()
         distance = 0.0
         duration = 0.0
+        pausedDuration = 0.0
+        pausedAt = nil
+        shouldSkipNextDistanceSample = false
         location = nil
         startDate = Date()
         smoothedPaceSecondsPerUnit = nil
         recentSamples.removeAll()
+        lastLiveActivityUpdateAt = nil
+        lastLiveActivityDistanceMeters = 0
+        lastLiveActivityPace = nil
+        maybeRequestAlwaysAuthorizationUpgradeIfNeeded()
+        updateBackgroundLocationMode(isActiveRun: true)
         manager.startUpdatingLocation()
         startTimer()
         isRunning = true
@@ -104,6 +126,10 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
     
     func pauseRun() {
         
+        if isRunning {
+            pausedAt = Date()
+        }
+        updateBackgroundLocationMode(isActiveRun: false)
         manager.stopUpdatingLocation()
         stopTimer()
         isRunning = false
@@ -111,21 +137,34 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
     
     func resumeRun() {
         
-        if startDate == nil {
-            startDate = Date().addingTimeInterval(-duration)
+        if let pausedAt {
+            pausedDuration += Date().timeIntervalSince(pausedAt)
+            self.pausedAt = nil
         }
+        shouldSkipNextDistanceSample = true
+        if startDate == nil {
+            startDate = Date()
+        }
+        maybeRequestAlwaysAuthorizationUpgradeIfNeeded()
+        updateBackgroundLocationMode(isActiveRun: true)
         manager.startUpdatingLocation()
         startTimer()
         isRunning = true
     }
     
     func stopRun() -> RunningSession? {
+        if let pausedAt {
+            pausedDuration += Date().timeIntervalSince(pausedAt)
+            self.pausedAt = nil
+        }
+        updateBackgroundLocationMode(isActiveRun: false)
         manager.stopUpdatingLocation()
         stopTimer()
         isRunning = false
         
         if let s = startDate {
-            duration = max(duration, Date().timeIntervalSince(s))
+            let activeDuration = max(0, Date().timeIntervalSince(s) - pausedDuration)
+            duration = max(duration, activeDuration)
         }
         startDate = nil
         
@@ -189,20 +228,58 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             if self.isRunning, let s = self.startDate {
-                self.duration = Date().timeIntervalSince(s)
-                // Update Live Activity with current stats
-                LiveActivityManager.shared.update(startDate: s,
-                                                  duration: self.duration,
-                                                  distanceMeters: self.distance,
-                                                  paceSecondsPerUnit: self.smoothedPaceSecondsPerUnit,
-                                                  distanceUnit: self.distanceUnit)
+                self.duration = max(0, Date().timeIntervalSince(s) - self.pausedDuration)
+                if self.shouldUpdateLiveActivity(now: Date()) {
+                    LiveActivityManager.shared.update(startDate: s,
+                                                      duration: self.duration,
+                                                      distanceMeters: self.distance,
+                                                      paceSecondsPerUnit: self.smoothedPaceSecondsPerUnit,
+                                                      distanceUnit: self.distanceUnit)
+                }
             }
         }
+    }
+
+    private func shouldUpdateLiveActivity(now: Date) -> Bool {
+        guard LiveActivityManager.shared.isActive else { return false }
+
+        let intervalReached: Bool
+        if let last = lastLiveActivityUpdateAt {
+            intervalReached = now.timeIntervalSince(last) >= liveActivityMinUpdateInterval
+        } else {
+            intervalReached = true
+        }
+
+        let distanceDelta = abs(distance - lastLiveActivityDistanceMeters)
+        let paceDelta: Double = {
+            guard let currentPace = smoothedPaceSecondsPerUnit, let lastPace = lastLiveActivityPace else { return 0 }
+            return abs(currentPace - lastPace)
+        }()
+        let significantChange = distanceDelta >= liveActivityDistanceDeltaMeters || paceDelta >= liveActivityPaceDeltaSeconds
+
+        guard intervalReached || significantChange else { return false }
+
+        lastLiveActivityUpdateAt = now
+        lastLiveActivityDistanceMeters = distance
+        lastLiveActivityPace = smoothedPaceSecondsPerUnit
+        return true
     }
     
     private func stopTimer() {
         timer?.invalidate()
         timer = nil
+    }
+
+    private func maybeRequestAlwaysAuthorizationUpgradeIfNeeded() {
+        guard enableBackgroundRunTracking else { return }
+        if manager.authorizationStatus == .authorizedWhenInUse {
+            manager.requestAlwaysAuthorization()
+        }
+    }
+
+    private func updateBackgroundLocationMode(isActiveRun: Bool) {
+        let hasAlways = manager.authorizationStatus == .authorizedAlways
+        manager.allowsBackgroundLocationUpdates = isActiveRun && enableBackgroundRunTracking && hasAlways
     }
     
     // CLLocationManagerDelegate Methods
@@ -225,6 +302,12 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         // Only track distance/route while running
         guard isRunning else { return }
         
+        if shouldSkipNextDistanceSample {
+            route.append(newLocation)
+            shouldSkipNextDistanceSample = false
+            return
+        }
+
         if let lastLocation = route.last {
             distance += newLocation.distance(from: lastLocation)
         }
@@ -260,11 +343,8 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
     
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         authorizationStatus = manager.authorizationStatus
-        
-        if authorizationStatus == .authorizedAlways || authorizationStatus == .authorizedWhenInUse {
-            manager.allowsBackgroundLocationUpdates = true
-        }
-        
+        updateBackgroundLocationMode(isActiveRun: isRunning)
+        maybeRequestAlwaysAuthorizationUpgradeIfNeeded()
         
         // Handle authorization changes if needed (e.g., start run if granted)
         if authorizationStatus == .authorizedAlways || authorizationStatus == .authorizedWhenInUse {
@@ -687,7 +767,7 @@ struct RunTrackingProView: View {
             let activityType = session.activityType
             Task { @MainActor in
                 do {
-                    try await HealthKitManager.shared.saveRunWorkout(
+                    let workout = try await HealthKitManager.shared.saveRunWorkout(
                         start: startTime,
                         end: endTime,
                         distanceMeters: distanceMeters,
@@ -695,6 +775,8 @@ struct RunTrackingProView: View {
                         route: routeSnapshot,
                         activityType: activityType
                     )
+                    session.healthWorkoutUUID = workout.uuid.uuidString
+                    _ = PersistenceSave.commit(modelContext, action: "link saved run with Health workout UUID")
 
                 } catch {
                     alertMessage = "Run saved locally, but sync to Apple Health failed: \(error.localizedDescription)"

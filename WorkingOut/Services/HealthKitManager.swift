@@ -25,6 +25,16 @@ final class HealthKitManager: ObservableObject {
     static let shared = HealthKitManager()
     private let healthStore = HKHealthStore()
     private var workoutObserverQuery: HKObserverQuery?
+    private let workoutAnchorDefaultsKey = "healthKit.cardioWorkoutAnchor"
+    private let supportedCardioTypes: Set<HKWorkoutActivityType> = [
+        .running,
+        .walking,
+        .hiking,
+        .cycling,
+        .rowing,
+        .elliptical,
+        .stairClimbing
+    ]
 
     // MARK: - Types
     private let readTypes: Set<HKObjectType> = {
@@ -39,6 +49,9 @@ final class HealthKitManager: ObservableObject {
         set.insert(HKObjectType.quantityType(forIdentifier: .vo2Max)!)
         set.insert(HKObjectType.quantityType(forIdentifier: .runningPower)!)
         set.insert(HKObjectType.quantityType(forIdentifier: .runningSpeed)!)
+        if let t = HKObjectType.quantityType(forIdentifier: .runningStrideLength) { set.insert(t) }
+        if let t = HKObjectType.quantityType(forIdentifier: .runningVerticalOscillation) { set.insert(t) }
+        if let t = HKObjectType.quantityType(forIdentifier: .runningGroundContactTime) { set.insert(t) }
         // Read workout routes so we can render maps for Apple Watch runs
         set.insert(HKSeriesType.workoutRoute())
 
@@ -87,6 +100,26 @@ final class HealthKitManager: ObservableObject {
         return workoutStatus == .sharingAuthorized || distanceStatus == .sharingAuthorized
     }
 
+    private func cardioWorkoutsPredicate() -> NSPredicate {
+        let predicates = supportedCardioTypes.map { HKQuery.predicateForWorkouts(with: $0) }
+        return NSCompoundPredicate(orPredicateWithSubpredicates: predicates)
+    }
+
+    private func storedWorkoutAnchor() -> HKQueryAnchor? {
+        guard let data = UserDefaults.standard.data(forKey: workoutAnchorDefaultsKey) else { return nil }
+        return try? NSKeyedUnarchiver.unarchivedObject(ofClass: HKQueryAnchor.self, from: data)
+    }
+
+    private func storeWorkoutAnchor(_ anchor: HKQueryAnchor?) {
+        guard let anchor else {
+            UserDefaults.standard.removeObject(forKey: workoutAnchorDefaultsKey)
+            return
+        }
+        if let data = try? NSKeyedArchiver.archivedData(withRootObject: anchor, requiringSecureCoding: true) {
+            UserDefaults.standard.set(data, forKey: workoutAnchorDefaultsKey)
+        }
+    }
+
     // MARK: - Live Workout Change Observation
     func startWorkoutChangeObservationIfNeeded() {
         guard HKHealthStore.isHealthDataAvailable() else { return }
@@ -115,7 +148,7 @@ final class HealthKitManager: ObservableObject {
     }
 
     // MARK: - Save Workout
-    func saveRunWorkout(start: Date, end: Date, distanceMeters: Double, energyBurned: Double? = nil, route: [CLLocation]? = nil, activityType: String = "running") async throws {
+    func saveRunWorkout(start: Date, end: Date, distanceMeters: Double, energyBurned: Double? = nil, route: [CLLocation]? = nil, activityType: String = "running") async throws -> HKWorkout {
         let store = self.healthStore
 
         // Prepare quantities
@@ -193,6 +226,8 @@ final class HealthKitManager: ObservableObject {
                 }
             }
         }
+
+        return workout
     }
 
     // MARK: - Steps
@@ -215,17 +250,40 @@ final class HealthKitManager: ObservableObject {
 
     // MARK: - Queries
     func fetchRecentRuns(limit: Int = 50) async throws -> [HKWorkout] {
+        let predicate = cardioWorkoutsPredicate()
         let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
         return try await withCheckedThrowingContinuation { continuation in
-            let query = HKSampleQuery(sampleType: .workoutType(), predicate: nil, limit: limit, sortDescriptors: [sort]) { _, samples, error in
+            let query = HKSampleQuery(sampleType: .workoutType(), predicate: predicate, limit: limit, sortDescriptors: [sort]) { _, samples, error in
                 if let error = error { continuation.resume(throwing: error); return }
                 let workouts = (samples as? [HKWorkout]) ?? []
-                // Include all cardio types that importHealthRuns can handle
-                let cardioTypes: Set<HKWorkoutActivityType> = [
-                    .running, .walking, .hiking, .cycling, .rowing, .elliptical, .stairClimbing
-                ]
-                let filtered = workouts.filter { cardioTypes.contains($0.workoutActivityType) }
-                continuation.resume(returning: filtered)
+                continuation.resume(returning: workouts.filter { self.supportedCardioTypes.contains($0.workoutActivityType) })
+            }
+            self.healthStore.execute(query)
+        }
+    }
+
+    func fetchCardioWorkoutChanges(resetAnchor: Bool = false, limit: Int = HKObjectQueryNoLimit) async throws -> (added: [HKWorkout], deletedUUIDs: [String]) {
+        let anchor = resetAnchor ? nil : storedWorkoutAnchor()
+        let predicate = cardioWorkoutsPredicate()
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKAnchoredObjectQuery(
+                type: .workoutType(),
+                predicate: predicate,
+                anchor: anchor,
+                limit: limit
+            ) { _, samples, deleted, newAnchor, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+
+                self.storeWorkoutAnchor(newAnchor)
+
+                let workouts = (samples as? [HKWorkout]) ?? []
+                let added = workouts.filter { self.supportedCardioTypes.contains($0.workoutActivityType) }
+                let deletedUUIDs = (deleted ?? []).map { $0.uuid.uuidString }
+                continuation.resume(returning: (added, deletedUUIDs))
             }
             self.healthStore.execute(query)
         }
@@ -344,47 +402,126 @@ final class HealthKitManager: ObservableObject {
         }
     }
     
-    /// Fetch average cadence (running or walking) for a workout
+    /// Fetch average cadence in steps/minute.
+    /// HealthKit does not provide a dedicated running cadence type, so we derive cadence from step samples.
     func averageCadence(for workout: HKWorkout) async throws -> Double? {
-        // Running cadence is available on Apple Watch Series 6+ and some third-party devices
-        if #available(iOS 16.0, *), let cadenceType = HKQuantityType.quantityType(forIdentifier: .runningStrideLength) {
-            let predicate = HKQuery.predicateForObjects(from: workout)
-            
-            return try await withCheckedThrowingContinuation { continuation in
-                let query = HKStatisticsQuery(quantityType: cadenceType, quantitySamplePredicate: predicate, options: .discreteAverage) { _, stats, error in
-                    if let error = error {
-                        continuation.resume(throwing: error)
-                        return
-                    }
-                    // Convert stride length to cadence if possible
-                    // Cadence = speed / stride length * 60
-                    let value = stats?.averageQuantity()?.doubleValue(for: .meter())
-                    continuation.resume(returning: value)
-                }
-                self.healthStore.execute(query)
-            }
-        }
-        return nil
+        let stats = try await cadenceStats(for: workout)
+        return stats.average
     }
     
-    /// Fetch maximum cadence for a workout
+    /// Fetch maximum cadence in steps/minute.
     func maxCadence(for workout: HKWorkout) async throws -> Double? {
-        if #available(iOS 16.0, *), let cadenceType = HKQuantityType.quantityType(forIdentifier: .runningStrideLength) {
-            let predicate = HKQuery.predicateForObjects(from: workout)
-            
-            return try await withCheckedThrowingContinuation { continuation in
-                let query = HKStatisticsQuery(quantityType: cadenceType, quantitySamplePredicate: predicate, options: .discreteMax) { _, stats, error in
-                    if let error = error {
-                        continuation.resume(throwing: error)
-                        return
-                    }
-                    let value = stats?.maximumQuantity()?.doubleValue(for: .meter())
-                    continuation.resume(returning: value)
-                }
-                self.healthStore.execute(query)
-            }
+        let stats = try await cadenceStats(for: workout)
+        return stats.maximum
+    }
+
+    private func cadenceStats(for workout: HKWorkout) async throws -> (average: Double?, maximum: Double?) {
+        switch workout.workoutActivityType {
+        case .running, .walking, .hiking:
+            break
+        default:
+            return (nil, nil)
         }
-        return nil
+
+        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else {
+            return (nil, nil)
+        }
+        let predicate = HKQuery.predicateForObjects(from: workout)
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: stepType,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [sort]
+            ) { _, samples, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+
+                let stepSamples = (samples as? [HKQuantitySample]) ?? []
+                var totalSteps = 0.0
+                var totalDuration = 0.0
+                var maxCadence = 0.0
+
+                for sample in stepSamples {
+                    let duration = sample.endDate.timeIntervalSince(sample.startDate)
+                    guard duration > 0 else { continue }
+
+                    let steps = sample.quantity.doubleValue(for: .count())
+                    let cadence = (steps / duration) * 60.0
+
+                    totalSteps += steps
+                    totalDuration += duration
+                    maxCadence = max(maxCadence, cadence)
+                }
+
+                guard totalDuration > 0 else {
+                    continuation.resume(returning: (nil, nil))
+                    return
+                }
+
+                let averageCadence = (totalSteps / totalDuration) * 60.0
+                continuation.resume(returning: (averageCadence, maxCadence > 0 ? maxCadence : nil))
+            }
+            self.healthStore.execute(query)
+        }
+    }
+
+    /// Fetch average stride length in meters.
+    func averageStrideLength(for workout: HKWorkout) async throws -> Double? {
+        guard let strideType = HKQuantityType.quantityType(forIdentifier: .runningStrideLength) else { return nil }
+        let predicate = HKQuery.predicateForObjects(from: workout)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKStatisticsQuery(quantityType: strideType, quantitySamplePredicate: predicate, options: .discreteAverage) { _, stats, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                let value = stats?.averageQuantity()?.doubleValue(for: .meter())
+                continuation.resume(returning: value)
+            }
+            self.healthStore.execute(query)
+        }
+    }
+
+    /// Fetch average vertical oscillation in centimeters.
+    func averageVerticalOscillation(for workout: HKWorkout) async throws -> Double? {
+        guard let type = HKQuantityType.quantityType(forIdentifier: .runningVerticalOscillation) else { return nil }
+        let predicate = HKQuery.predicateForObjects(from: workout)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate, options: .discreteAverage) { _, stats, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                let meters = stats?.averageQuantity()?.doubleValue(for: .meter())
+                continuation.resume(returning: meters.map { $0 * 100.0 })
+            }
+            self.healthStore.execute(query)
+        }
+    }
+
+    /// Fetch average ground contact time in milliseconds.
+    func averageGroundContactTime(for workout: HKWorkout) async throws -> Double? {
+        guard let type = HKQuantityType.quantityType(forIdentifier: .runningGroundContactTime) else { return nil }
+        let predicate = HKQuery.predicateForObjects(from: workout)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate, options: .discreteAverage) { _, stats, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                let seconds = stats?.averageQuantity()?.doubleValue(for: .second())
+                continuation.resume(returning: seconds.map { $0 * 1000.0 })
+            }
+            self.healthStore.execute(query)
+        }
     }
     
     /// Fetch average running power for a workout
