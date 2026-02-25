@@ -6,6 +6,8 @@ extension Notification.Name {
     static let healthKitWorkoutsDidChange = Notification.Name("healthKitWorkoutsDidChange")
 }
 
+private let workoutAnchorDefaultsKey = "healthKit.cardioWorkoutAnchor"
+
 @MainActor
 final class HealthKitManager: ObservableObject {
     struct SleepScoreBreakdown {
@@ -25,7 +27,6 @@ final class HealthKitManager: ObservableObject {
     static let shared = HealthKitManager()
     private let healthStore = HKHealthStore()
     private var workoutObserverQuery: HKObserverQuery?
-    private let workoutAnchorDefaultsKey = "healthKit.cardioWorkoutAnchor"
     private let supportedCardioTypes: Set<HKWorkoutActivityType> = [
         .running,
         .walking,
@@ -105,12 +106,12 @@ final class HealthKitManager: ObservableObject {
         return NSCompoundPredicate(orPredicateWithSubpredicates: predicates)
     }
 
-    private func storedWorkoutAnchor() -> HKQueryAnchor? {
+    nonisolated private func storedWorkoutAnchor() -> HKQueryAnchor? {
         guard let data = UserDefaults.standard.data(forKey: workoutAnchorDefaultsKey) else { return nil }
         return try? NSKeyedUnarchiver.unarchivedObject(ofClass: HKQueryAnchor.self, from: data)
     }
 
-    private func storeWorkoutAnchor(_ anchor: HKQueryAnchor?) {
+    nonisolated private func storeWorkoutAnchor(_ anchor: HKQueryAnchor?) {
         guard let anchor else {
             UserDefaults.standard.removeObject(forKey: workoutAnchorDefaultsKey)
             return
