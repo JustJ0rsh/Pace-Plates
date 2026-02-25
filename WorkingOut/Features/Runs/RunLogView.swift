@@ -637,6 +637,14 @@ struct RunLogView: View {
             return "Tracking Walk"
         case "hiking":
             return "Tracking Hike"
+        case "cycling":
+            return "Tracking Ride"
+        case "rowing":
+            return "Tracking Row"
+        case "elliptical":
+            return "Tracking Elliptical"
+        case "stairStepper", "stairClimbing":
+            return "Tracking Stair Climbing"
         default:
             return "Tracking Run"
         }

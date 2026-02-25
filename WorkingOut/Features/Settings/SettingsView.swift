@@ -862,8 +862,20 @@ struct SettingsView: View {
         // Delete children first, then parents
         let logItems = try modelContext.fetch(FetchDescriptor<ExerciseLog>())
         logItems.forEach { modelContext.delete($0) }
+        let runPlanSessions = try modelContext.fetch(FetchDescriptor<RunningPlanSession>())
+        runPlanSessions.forEach { modelContext.delete($0) }
+        let templateExercises = try modelContext.fetch(FetchDescriptor<TemplateExercise>())
+        templateExercises.forEach { modelContext.delete($0) }
+
         let sessions = try modelContext.fetch(FetchDescriptor<WorkoutSession>())
         sessions.forEach { modelContext.delete($0) }
+        let templates = try modelContext.fetch(FetchDescriptor<WorkoutTemplate>())
+        templates.forEach { modelContext.delete($0) }
+        let runPlans = try modelContext.fetch(FetchDescriptor<RunningPlan>())
+        runPlans.forEach { modelContext.delete($0) }
+        let conversations = try modelContext.fetch(FetchDescriptor<AIConversation>())
+        conversations.forEach { modelContext.delete($0) }
+
         // Keep preloaded library exercises; only delete user-defined
         let defs = try modelContext.fetch(FetchDescriptor<ExerciseDefinition>())
         defs.filter { $0.isUserDefined }.forEach { modelContext.delete($0) }

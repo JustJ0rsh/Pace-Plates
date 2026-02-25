@@ -1,0 +1,6 @@
+# Secrets
+AuthKey_*.p8
+*.p8
+
+# macOS
+.DS_Store
