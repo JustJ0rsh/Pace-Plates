@@ -67,10 +67,10 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         }
     }
     
-    func requestAuthorization() {
+    func requestAuthorization(startAfterAuth: Bool = false) {
         switch manager.authorizationStatus {
         case .notDetermined:
-            pendingStartAfterAuth = true
+            pendingStartAfterAuth = startAfterAuth
             manager.requestWhenInUseAuthorization()
         default:
             break
@@ -436,7 +436,7 @@ struct RunTrackingProView: View {
                 }
                 .task {
                     // Ensure we prompt on first appearance if needed and fetch a location
-                    runTracker.requestAuthorization()
+                    runTracker.requestAuthorization(startAfterAuth: false)
                     runTracker.requestCurrentLocation()
                 }
                 .onAppear {
@@ -496,13 +496,12 @@ struct RunTrackingProView: View {
                             recenterOnUser()
                             runTracker.lastFollowUpdate = nil
                         case .notDetermined:
-                            runTracker.pendingStartAfterAuth = true
-                            runTracker.requestAuthorization()
+                            runTracker.requestAuthorization(startAfterAuth: true)
                         case .denied, .restricted:
                             alertMessage = "Location access is required to start a run. Please enable it in Settings > Privacy > Location Services."
                             showingAlert = true
                         @unknown default:
-                            runTracker.requestAuthorization()
+                            runTracker.requestAuthorization(startAfterAuth: false)
                         }
                         #else
                         if runTracker.duration == 0 { runTracker.startRun() } else { runTracker.resumeRun() }
@@ -698,7 +697,8 @@ struct RunTrackingProView: View {
                     )
 
                 } catch {
-
+                    alertMessage = "Run saved locally, but sync to Apple Health failed: \(error.localizedDescription)"
+                    showingAlert = true
                 }
             }
 

@@ -7,7 +7,7 @@ final class WorkoutSession {
     var date: Date = Date()
     var title: String = ""
     var notes: String?
-    @Relationship(deleteRule: .nullify, inverse: \ExerciseLog.workoutSession) var exerciseLogs: [ExerciseLog]?
+    @Relationship(deleteRule: .cascade, inverse: \ExerciseLog.workoutSession) var exerciseLogs: [ExerciseLog]?
     @Relationship(deleteRule: .nullify) var generatedTemplate: WorkoutTemplate?
     
     var shouldSaveAsTemplate: Bool = false
