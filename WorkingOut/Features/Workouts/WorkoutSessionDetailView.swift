@@ -22,6 +22,9 @@ struct WorkoutSessionDetailView: View {
     @State private var titleSaveWorkItem: DispatchWorkItem? = nil
     @State private var showingAddExercise: Bool = false
     @State private var showingDatePicker: Bool = false
+    @State private var shareItems: [Any] = []
+    @State private var showingShareSheet: Bool = false
+    @State private var shareErrorMessage: String? = nil
     @FocusState private var notesFocused: Bool
     @FocusState private var titleFocused: Bool
     @State private var didEditTitle: Bool = false
@@ -97,6 +100,19 @@ struct WorkoutSessionDetailView: View {
             .padding()
             .presentationDetents([.medium])
             .presentationBackground(AppTheme.backgroundColor)
+        }
+        .sheet(isPresented: $showingShareSheet, onDismiss: {
+            shareItems = []
+        }) {
+            ShareSheet(items: shareItems)
+        }
+        .alert("Unable to Share", isPresented: Binding(
+            get: { shareErrorMessage != nil },
+            set: { if !$0 { shareErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(shareErrorMessage ?? "An unknown error occurred.")
         }
 
         .background {
@@ -392,21 +408,45 @@ struct WorkoutSessionDetailView: View {
     
     private var shareMenu: some View {
         Menu {
-            let sharedSession = WorkoutSharingService.shared.convertToShared(session)
-            ShareLink(item: sharedSession, preview: SharePreview(session.title.isEmpty ? "Workout" : session.title)) {
+            Button {
+                shareWorkoutFile()
+            } label: {
                 Label("Share Workout File", systemImage: "square.and.arrow.up")
             }
             
-            ShareLink(item: generateShareText(includeData: true)) {
+            Button {
+                shareTextSummary(includeData: true)
+            } label: {
                 Label("Share Text Summary", systemImage: "doc.text")
             }
             
-            ShareLink(item: generateShareText(includeData: false)) {
+            Button {
+                shareTextSummary(includeData: false)
+            } label: {
                 Label("Share Structure Only", systemImage: "list.bullet")
             }
         } label: {
             Image(systemName: "square.and.arrow.up")
         }
+    }
+
+    private func shareWorkoutFile() {
+        guard let fileURL = WorkoutSharingService.shared.exportWorkout(session: session) else {
+            shareErrorMessage = "Could not prepare the workout file for sharing."
+            return
+        }
+        shareItems = [fileURL]
+        showingShareSheet = true
+    }
+
+    private func shareTextSummary(includeData: Bool) {
+        let text = generateShareText(includeData: includeData)
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            shareErrorMessage = "There is no workout content to share yet."
+            return
+        }
+        shareItems = [text]
+        showingShareSheet = true
     }
 }
 

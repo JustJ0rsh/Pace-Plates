@@ -21,6 +21,7 @@ struct HomeView: View {
     
     @State private var selectedChartTab: ChartTab = .volume
     @State private var quickWorkoutSession: WorkoutSession? = nil
+    @State private var showWorkoutTemplates: Bool = false
     @State private var showQuickRunTracking: Bool = false
     @State private var quickCardioActivityType: String = "running"
     @State private var showQuickWeightLog: Bool = false
@@ -453,6 +454,21 @@ struct HomeView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.borderedProminent)
+            .contextMenu {
+                Button {
+                    Haptics.playImpact(.light)
+                    startQuickWorkout()
+                } label: {
+                    Label("Start Workout", systemImage: "play.fill")
+                }
+
+                Button {
+                    Haptics.playImpact(.light)
+                    showWorkoutTemplates = true
+                } label: {
+                    Label("Choose Template", systemImage: "doc.text")
+                }
+            }
 
             Button {
                 startQuickCardio(activityType: "running")
@@ -613,6 +629,13 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showQuickWeightLog) {
             LogWeightView()
+        }
+        .sheet(isPresented: $showWorkoutTemplates) {
+            NavigationStack {
+                WorkoutTemplateListView { session in
+                    quickWorkoutSession = session
+                }
+            }
         }
         .alert("Save Failed", isPresented: Binding(
             get: { saveErrorMessage != nil },

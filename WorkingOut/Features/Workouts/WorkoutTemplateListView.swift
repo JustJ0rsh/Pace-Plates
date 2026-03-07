@@ -18,6 +18,7 @@ struct WorkoutTemplateListView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Query(sort: [SortDescriptor<WorkoutTemplate>(\.createdDate, order: .reverse)]) private var templates: [WorkoutTemplate]
+    var onWorkoutCreated: ((WorkoutSession) -> Void)? = nil
     @State private var selectedTemplate: WorkoutTemplate?
     @State private var createdSession: WorkoutSession?
     @State private var selectedExperienceLevel: String? = nil
@@ -381,6 +382,7 @@ struct WorkoutTemplateListView: View {
         .background(AppTheme.gradientWorkouts.ignoresSafeArea())
         .foregroundColor(AppTheme.textColor)
         .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
         .sheet(item: $selectedTemplate) { template in
             NavigationStack {
@@ -391,10 +393,9 @@ struct WorkoutTemplateListView: View {
             }
         }
         .onChange(of: createdSession) { oldValue, newValue in
-            if newValue != nil {
-                // Navigate to the created workout session
+            if let session = newValue {
+                onWorkoutCreated?(session)
                 dismiss()
-                // The navigation will be handled by the parent view
             }
         }
         .onAppear {
@@ -723,16 +724,22 @@ struct TemplateDetailView: View {
                 .padding(.top, 8)
             }
             .padding(.horizontal, AppTheme.padding)
+            .padding(.top, 12)
+            .padding(.bottom, 32)
         }
-        .navigationTitle("Template")
-        .navigationBarTitleDisplayMode(.inline)
         .appBackground(AppTheme.gradientWorkouts)
         .foregroundColor(AppTheme.textColor)
+        .navigationTitle("Template")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Close") { dismiss() }
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Close") {
+                    dismiss()
+                }
+                .font(.headline)
             }
         }
         .alert("Delete Template?", isPresented: $showDeleteConfirmation) {

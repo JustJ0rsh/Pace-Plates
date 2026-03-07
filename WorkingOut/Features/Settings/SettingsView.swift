@@ -21,7 +21,7 @@ struct SettingsView: View {
     @AppStorage("useStructuredPlanView") private var useStructuredPlanView: Bool = false
     @AppStorage("enableWeeklyWeightReminder") private var enableWeeklyWeightReminder: Bool = false
     @AppStorage("showVitalsOnHome") private var showVitalsOnHome: Bool = true
-    @AppStorage("enableBackgroundRunTracking") private var enableBackgroundRunTracking: Bool = false
+    @AppStorage("enableBackgroundRunTracking") private var enableBackgroundRunTracking: Bool = true
     @AppStorage("runsLastHealthImportAt") private var runsLastHealthImportAt: Double = 0
     @AppStorage("weightLastHealthImportAt") private var weightLastHealthImportAt: Double = 0
     @FocusState private var ageFocused: Bool
@@ -226,7 +226,7 @@ struct SettingsView: View {
                     Toggle(isOn: $enableBackgroundRunTracking) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Background Run Tracking")
-                            Text("Keep tracking active when Pace & Plates is in the background. Requires \"Always\" location access.")
+                            Text("Keep tracking active when Pace & Plates is in the background for better locked-screen cardio accuracy. Requires \"Always\" location access.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }

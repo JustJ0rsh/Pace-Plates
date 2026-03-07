@@ -128,7 +128,10 @@ class WorkoutSharingService {
             
             // Create a temporary file
             let tempDir = FileManager.default.temporaryDirectory
-            let fileName = "\(session.title.isEmpty ? "Workout" : session.title).paceplate"
+            let safeTitle = session.title
+                .components(separatedBy: .init(charactersIn: "/\\?%*|\"<>:"))
+                .joined(separator: "_")
+            let fileName = "\(safeTitle.isEmpty ? "Workout" : safeTitle).paceplate"
             let fileURL = tempDir.appendingPathComponent(fileName)
             
             try data.write(to: fileURL)

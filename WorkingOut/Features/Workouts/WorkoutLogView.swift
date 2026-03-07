@@ -43,6 +43,7 @@ struct WorkoutLogView: View {
     @State private var pendingDeleteSession: WorkoutSession? = nil
     @State private var showDeleteConfirm: Bool = false
     @State private var saveErrorMessage: String? = nil
+    @State private var quickViewSession: WorkoutSession? = nil
     
     // Dynamic chart domain
     private var last7DaysDomain: ClosedRange<Date> {
@@ -161,6 +162,20 @@ struct WorkoutLogView: View {
                                         }
                                     }
                                     .padding(.vertical, 8)
+                                    .contextMenu {
+                                        Button {
+                                            quickViewSession = session
+                                        } label: {
+                                            Label("Quick View", systemImage: "eye")
+                                        }
+
+                                        Button(role: .destructive) {
+                                            pendingDeleteSession = session
+                                            showDeleteConfirm = true
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
+                                    }
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                         Button(role: .destructive) {
                                             pendingDeleteSession = session
@@ -217,8 +232,20 @@ struct WorkoutLogView: View {
             }
             .sheet(isPresented: $showTemplates) {
                 NavigationStack {
-                    WorkoutTemplateListView()
+                    WorkoutTemplateListView { session in
+                        newlyCreatedSessionID = session.id
+                        pastSessionID = nil
+                        newSessionToOpen = session
+                    }
                 }
+            }
+            .sheet(item: $quickViewSession) { session in
+                WorkoutQuickViewSheet(
+                    session: session,
+                    preferredWeightUnit: preferredWeightUnit
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
             }
             .navigationDestination(item: $newSessionToOpen) { session in
                 WorkoutSessionDetailView(
@@ -379,6 +406,153 @@ private struct WorkoutSessionRowContent: View {
             }
         }
         .contentShape(Rectangle())
+    }
+}
+
+private struct WorkoutQuickViewSheet: View {
+    let session: WorkoutSession
+    let preferredWeightUnit: String
+
+    private struct ExerciseSummary: Identifiable {
+        let id: String
+        let name: String
+        let sets: Int
+        let volume: Double
+    }
+
+    private var logs: [ExerciseLog] {
+        (session.exerciseLogs ?? []).sorted {
+            if $0.exerciseOrder == $1.exerciseOrder {
+                return $0.setNumber < $1.setNumber
+            }
+            return $0.exerciseOrder < $1.exerciseOrder
+        }
+    }
+
+    private var uniqueExerciseCount: Int {
+        Set(logs.map { displayName(for: $0) }).count
+    }
+
+    private var totalVolume: Double {
+        logs.reduce(0) { partialResult, log in
+            let weight = UnitConverter.weight(log.weight, from: log.weightUnit, to: preferredWeightUnit)
+            return partialResult + (Double(log.effectiveReps) * weight)
+        }
+    }
+
+    private var exerciseSummaries: [ExerciseSummary] {
+        let grouped = Dictionary(grouping: logs) { log in
+            displayName(for: log)
+        }
+
+        return grouped.map { name, groupedLogs in
+            let volume = groupedLogs.reduce(0.0) { partialResult, log in
+                let weight = UnitConverter.weight(log.weight, from: log.weightUnit, to: preferredWeightUnit)
+                return partialResult + (Double(log.effectiveReps) * weight)
+            }
+
+            return ExerciseSummary(
+                id: name,
+                name: name,
+                sets: groupedLogs.count,
+                volume: volume
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.sets == rhs.sets {
+                return lhs.name < rhs.name
+            }
+            return lhs.sets > rhs.sets
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(session.title.isEmpty ? "Workout" : session.title)
+                        .font(.title3.weight(.semibold))
+                    Text(session.date.formatted(date: .abbreviated, time: .shortened))
+                        .foregroundStyle(AppTheme.secondaryTextColor)
+                }
+
+                HStack(spacing: 12) {
+                    quickMetric(title: "Sets", value: "\(logs.count)")
+                    quickMetric(title: "Exercises", value: "\(uniqueExerciseCount)")
+                }
+
+                quickMetric(
+                    title: "Total Volume",
+                    value: String(format: "%.0f %@", totalVolume, preferredWeightUnit)
+                )
+
+                if let notes = session.notes, !notes.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Notes")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.secondaryTextColor)
+                        Text(notes)
+                    }
+                }
+
+                if !exerciseSummaries.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Exercise Breakdown")
+                            .font(.headline)
+
+                        ForEach(exerciseSummaries.prefix(6)) { summary in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(summary.name)
+                                        .font(.subheadline.weight(.medium))
+                                    Text("\(summary.sets) set\(summary.sets == 1 ? "" : "s")")
+                                        .font(.caption)
+                                        .foregroundStyle(AppTheme.secondaryTextColor)
+                                }
+
+                                Spacer()
+
+                                Text(String(format: "%.0f %@", summary.volume, preferredWeightUnit))
+                                    .font(.subheadline.monospacedDigit())
+                                    .foregroundStyle(AppTheme.secondaryTextColor)
+                            }
+                            .padding(12)
+                            .background(AppTheme.secondaryBackgroundColor)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                    }
+                }
+            }
+            .padding(AppTheme.padding)
+        }
+        .appBackground(AppTheme.gradientWorkouts)
+        .foregroundStyle(AppTheme.textColor)
+    }
+
+    @ViewBuilder
+    private func quickMetric(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(AppTheme.secondaryTextColor)
+            Text(value)
+                .font(.headline)
+                .monospacedDigit()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(AppTheme.secondaryBackgroundColor)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func displayName(for log: ExerciseLog) -> String {
+        let trimmedSnapshot = (log.exerciseName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedSnapshot.isEmpty {
+            return trimmedSnapshot
+        }
+
+        let trimmedDefinition = (log.exerciseDefinition?.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedDefinition.isEmpty ? "Exercise" : trimmedDefinition
     }
 }
 

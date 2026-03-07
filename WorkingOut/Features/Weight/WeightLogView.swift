@@ -17,6 +17,7 @@ struct WeightLogView: View {
     @State private var showDeleteConfirm: Bool = false
     @State private var hasScheduledInitialImport = false
     @State private var saveErrorMessage: String? = nil
+    @State private var quickViewEntry: WeightEntry? = nil
 
     // Time filter
     private enum TimeRange: String, CaseIterable, Identifiable {
@@ -113,6 +114,20 @@ struct WeightLogView: View {
                                         }
                                     )
                                     .padding(.vertical, 8)
+                                    .contextMenu {
+                                        Button {
+                                            quickViewEntry = entry
+                                        } label: {
+                                            Label("Quick View", systemImage: "eye")
+                                        }
+
+                                        Button(role: .destructive) {
+                                            pendingDeleteEntry = entry
+                                            showDeleteConfirm = true
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
+                                    }
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                         Button(role: .destructive) {
                                             pendingDeleteEntry = entry
@@ -157,6 +172,16 @@ struct WeightLogView: View {
         }
         .sheet(isPresented: $showingLogWeightSheet) {
             LogWeightView()
+        }
+        .sheet(item: $quickViewEntry) { entry in
+            WeightQuickViewSheet(
+                entry: entry,
+                comparisonEntry: comparisonEntry(for: entry),
+                preferredWeightUnit: preferredWeightUnit,
+                weightGoal: weightGoal
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
         .alert("Delete Weight Entry?", isPresented: $showDeleteConfirm) {
             Button("Cancel", role: .cancel) { pendingDeleteEntry = nil }
@@ -288,6 +313,13 @@ struct WeightLogView: View {
 
         return (sorted, convertedWeights, yLower, yUpper, latest, oldest)
     }
+
+    private func comparisonEntry(for entry: WeightEntry) -> WeightEntry? {
+        guard let index = weightEntries.firstIndex(where: { $0.id == entry.id }) else { return nil }
+        let olderIndex = index + 1
+        guard weightEntries.indices.contains(olderIndex) else { return nil }
+        return weightEntries[olderIndex]
+    }
 }
 
 // MARK: - Optimized Weight Entry Row Content
@@ -312,6 +344,82 @@ private struct WeightEntryRowContent: View {
         }
         .foregroundColor(AppTheme.textColor)
         .contentShape(Rectangle())
+    }
+}
+
+private struct WeightQuickViewSheet: View {
+    let entry: WeightEntry
+    let comparisonEntry: WeightEntry?
+    let preferredWeightUnit: String
+    let weightGoal: String
+
+    private var convertedWeight: Double {
+        UnitConverter.weight(entry.weight, from: entry.weightUnit, to: preferredWeightUnit)
+    }
+
+    private var weightChange: Double? {
+        guard let comparisonEntry else { return nil }
+        let previousValue = UnitConverter.weight(comparisonEntry.weight, from: comparisonEntry.weightUnit, to: preferredWeightUnit)
+        return convertedWeight - previousValue
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Weight Entry")
+                        .font(.title3.weight(.semibold))
+                    Text(entry.date.formatted(date: .abbreviated, time: .shortened))
+                        .foregroundStyle(AppTheme.secondaryTextColor)
+                }
+
+                quickMetric(
+                    title: "Recorded Weight",
+                    value: String(format: "%.1f %@", convertedWeight, preferredWeightUnit)
+                )
+
+                if let weightChange {
+                    let isUp = weightChange >= 0
+                    let isGoodChange = (weightGoal == "gain") ? isUp : !isUp
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Change From Previous Entry")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.secondaryTextColor)
+
+                        HStack(spacing: 6) {
+                            Image(systemName: isUp ? "arrow.up" : "arrow.down")
+                            Text(String(format: "%.1f %@", abs(weightChange), preferredWeightUnit))
+                                .font(.headline)
+                                .monospacedDigit()
+                        }
+                        .foregroundStyle(isGoodChange ? .green : .red)
+                    }
+                    .padding(12)
+                    .background(AppTheme.secondaryBackgroundColor)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+            }
+            .padding(AppTheme.padding)
+        }
+        .appBackground(AppTheme.gradientWeight)
+        .foregroundStyle(AppTheme.textColor)
+    }
+
+    @ViewBuilder
+    private func quickMetric(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(AppTheme.secondaryTextColor)
+            Text(value)
+                .font(.headline)
+                .monospacedDigit()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(AppTheme.secondaryBackgroundColor)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 

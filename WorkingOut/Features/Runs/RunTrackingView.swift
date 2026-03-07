@@ -10,6 +10,13 @@ struct Coordinate: Codable, Identifiable {
     var longitude: Double
     var altitude: Double? = nil // meters above sea level
     var timestamp: Date? = nil // When this coordinate was recorded
+
+    private enum CodingKeys: String, CodingKey {
+        case latitude
+        case longitude
+        case altitude
+        case timestamp
+    }
     
     var clCoordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -54,9 +61,16 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
     private let liveActivityMinUpdateInterval: TimeInterval = 6
     private let liveActivityDistanceDeltaMeters: Double = 20
     private let liveActivityPaceDeltaSeconds: Double = 8
+    private let routeAccuracyThresholdMeters: Double = 65
+    private let routeMinDistanceMeters: Double = 8
+    private let routeMinTimeInterval: TimeInterval = 2.0
+    private let routePersistMinDistanceMeters: Double = 5
+    private let routePersistMaxPoints: Int = 1400
+    private let maxDistanceStepMeters: Double = 250
+    private var lastDistanceLocation: CLLocation? = nil
     
     @ObservationIgnored @AppStorage("distanceUnit") var distanceUnit = "mi"
-    @ObservationIgnored @AppStorage("enableBackgroundRunTracking") var enableBackgroundRunTracking = false
+    @ObservationIgnored @AppStorage("enableBackgroundRunTracking") var enableBackgroundRunTracking = true
     
     override init() {
         authorizationStatus = manager.authorizationStatus
@@ -64,11 +78,11 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         manager.delegate = self
         manager.activityType = .fitness
         manager.desiredAccuracy = kCLLocationAccuracyBest
-        manager.distanceFilter = 10 // Update every 10 meters
+        manager.distanceFilter = 10
         
         manager.allowsBackgroundLocationUpdates = false
-        // Allow the system to pause updates to conserve battery when appropriate
-        manager.pausesLocationUpdatesAutomatically = true
+        // Keep updates continuous during active cardio sessions, including when locked.
+        manager.pausesLocationUpdatesAutomatically = false
         
         if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] != "1" {
             #if os(iOS)
@@ -104,6 +118,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         pausedDuration = 0.0
         pausedAt = nil
         shouldSkipNextDistanceSample = false
+        lastDistanceLocation = nil
         location = nil
         startDate = Date()
         smoothedPaceSecondsPerUnit = nil
@@ -142,6 +157,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
             self.pausedAt = nil
         }
         shouldSkipNextDistanceSample = true
+        lastDistanceLocation = nil
         if startDate == nil {
             startDate = Date()
         }
@@ -168,8 +184,14 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         }
         startDate = nil
         
+        // Downsample route for persisted payload size while preserving start/end.
+        let persistedRoute = downsampleRouteForStorage(
+            route,
+            maxPoints: routePersistMaxPoints,
+            minDistance: routePersistMinDistanceMeters
+        )
         // Encode route data with altitude and timestamp
-        let coordinates = route.map { 
+        let coordinates = persistedRoute.map {
             Coordinate(latitude: $0.coordinate.latitude, 
                       longitude: $0.coordinate.longitude,
                       altitude: $0.altitude,
@@ -193,6 +215,50 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
                               totalDescent: elevationMetrics?.descent,
                               minElevation: elevationMetrics?.min,
                               maxElevation: elevationMetrics?.max)
+    }
+
+    private func downsampleRouteForStorage(_ route: [CLLocation], maxPoints: Int, minDistance: Double) -> [CLLocation] {
+        guard route.count > 2 else { return route }
+
+        var filtered: [CLLocation] = []
+        filtered.reserveCapacity(min(route.count, maxPoints))
+        filtered.append(route[0])
+
+        var lastKept = route[0]
+        for loc in route.dropFirst().dropLast() {
+            if loc.distance(from: lastKept) >= minDistance {
+                filtered.append(loc)
+                lastKept = loc
+            }
+        }
+
+        let finalPoint = route[route.count - 1]
+        if filtered.last?.timestamp != finalPoint.timestamp {
+            filtered.append(finalPoint)
+        }
+
+        guard filtered.count > maxPoints, maxPoints > 2 else { return filtered }
+
+        let first = filtered[0]
+        let last = filtered[filtered.count - 1]
+        let interiorLimit = maxPoints - 2
+        let interiorCount = filtered.count - 2
+        if interiorCount <= interiorLimit { return filtered }
+
+        var downsampled: [CLLocation] = [first]
+        downsampled.reserveCapacity(maxPoints)
+        let step = Double(interiorCount) / Double(interiorLimit)
+        var lastIndex = 0
+
+        for i in 1...interiorLimit {
+            let raw = Int((Double(i) * step).rounded(.down))
+            let index = min(max(1, raw), filtered.count - 2)
+            if index == lastIndex { continue }
+            downsampled.append(filtered[index])
+            lastIndex = index
+        }
+        downsampled.append(last)
+        return downsampled
     }
     
     private func calculateElevationMetrics(from locations: [CLLocation]) -> (ascent: Double, descent: Double, min: Double, max: Double)? {
@@ -284,13 +350,20 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
     
     // CLLocationManagerDelegate Methods
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let newLocation = locations.last else { return }
-        
-        // Ignore inaccurate points
-        guard newLocation.horizontalAccuracy >= 0 && newLocation.horizontalAccuracy <= 50 else { return }
-        
+        guard !locations.isEmpty else { return }
+
+        let runStart = startDate
+        let validLocations = locations.filter { point in
+            guard point.horizontalAccuracy >= 0 && point.horizontalAccuracy <= routeAccuracyThresholdMeters else { return false }
+            if let runStart {
+                return point.timestamp >= runStart.addingTimeInterval(-5)
+            }
+            return true
+        }
+        guard let latestLocation = validLocations.last else { return }
+
         // Always update last known location so the UI can center even when not running
-        self.location = newLocation
+        self.location = latestLocation
         
         // Removed clock drift bug: do not mutate startDate from location timestamps
         /*
@@ -301,18 +374,28 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         
         // Only track distance/route while running
         guard isRunning else { return }
-        
+
+        // Balanced sampling: use only the latest valid point per callback to avoid burst over-capture.
+        let newLocation = latestLocation
+
         if shouldSkipNextDistanceSample {
             route.append(newLocation)
+            lastDistanceLocation = newLocation
             shouldSkipNextDistanceSample = false
             return
         }
 
-        if let lastLocation = route.last {
-            distance += newLocation.distance(from: lastLocation)
+        if let lastDistanceLocation {
+            let segmentDistance = newLocation.distance(from: lastDistanceLocation)
+            if segmentDistance.isFinite, segmentDistance >= 0, segmentDistance <= maxDistanceStepMeters {
+                distance += segmentDistance
+            }
         }
-        
-        route.append(newLocation)
+        lastDistanceLocation = newLocation
+
+        if shouldAcceptForRoute(newLocation) {
+            route.append(newLocation)
+        }
 
         // Update smoothing samples
         let now = Date()
@@ -330,6 +413,13 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
                 smoothedPaceSecondsPerUnit = secPerUnit
             }
         }
+    }
+
+    private func shouldAcceptForRoute(_ location: CLLocation) -> Bool {
+        guard let last = route.last else { return true }
+        let distanceDelta = location.distance(from: last)
+        let timeDelta = location.timestamp.timeIntervalSince(last.timestamp)
+        return distanceDelta >= routeMinDistanceMeters || timeDelta >= routeMinTimeInterval
     }
     
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
@@ -433,6 +523,28 @@ struct RunTrackingProView: View {
             runTracker.requestCurrentLocation()
         }
     }
+
+    private var activityDisplayName: String {
+        switch activityType.lowercased() {
+        case "run", "running":
+            return "Run"
+        case "walk", "walking":
+            return "Walk"
+        case "hike", "hiking":
+            return "Hike"
+        case "cycle", "cycling", "bike", "biking":
+            return "Ride"
+        case "swim", "swimming":
+            return "Swim"
+        default:
+            return activityType
+                .replacingOccurrences(of: "_", with: " ")
+                .replacingOccurrences(of: "-", with: " ")
+                .split(separator: " ")
+                .map { $0.capitalized }
+                .joined(separator: " ")
+        }
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -441,7 +553,7 @@ struct RunTrackingProView: View {
                 HStack(spacing: 12) {
                     Image(systemName: "location.fill")
                         .foregroundStyle(.yellow)
-                    Text("We need your location to track runs.")
+                    Text("We need your location to track this \(activityDisplayName.lowercased()).")
                         .font(.callout)
                     Spacer()
                     Button("Allow") {
@@ -456,7 +568,7 @@ struct RunTrackingProView: View {
                 HStack(spacing: 12) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
-                    Text("Location access is off. Enable it in Settings to start a run.")
+                    Text("Location access is off. Enable it in Settings to start this \(activityDisplayName.lowercased()).")
                         .font(.callout)
                     Spacer()
                     Button("Open Settings") {
@@ -578,7 +690,7 @@ struct RunTrackingProView: View {
                         case .notDetermined:
                             runTracker.requestAuthorization(startAfterAuth: true)
                         case .denied, .restricted:
-                            alertMessage = "Location access is required to start a run. Please enable it in Settings > Privacy > Location Services."
+                            alertMessage = "Location access is required to start this \(activityDisplayName.lowercased()). Please enable it in Settings > Privacy > Location Services."
                             showingAlert = true
                         @unknown default:
                             runTracker.requestAuthorization(startAfterAuth: false)
@@ -679,7 +791,7 @@ struct RunTrackingProView: View {
             .padding(.horizontal)
             .padding(.bottom)
         }
-        .navigationTitle("Tracking Run")
+        .navigationTitle("Tracking \(activityDisplayName)")
         .navigationBarBackButtonHidden(runTracker.isRunning)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)

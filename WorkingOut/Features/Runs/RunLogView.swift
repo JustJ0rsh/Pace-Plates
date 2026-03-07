@@ -45,7 +45,11 @@ struct RunLogView: View {
     @State private var visibleRunCount: Int = 30
     @State private var hasInitializedRunPagination: Bool = false
     @State private var healthChangeDebounceTask: Task<Void, Never>? = nil
+    @State private var quickViewSession: RunningSession? = nil
     private let runPageSize: Int = 30
+    private let defaultHealthImportLimit: Int = 10
+    private let forcedHealthImportLimit: Int = 8
+    private let autoEnrichmentLimit: Int = 3
     
     // Filters
     private enum TimeRange: String, CaseIterable, Identifiable {
@@ -124,10 +128,13 @@ struct RunLogView: View {
                                     
                 // Unified Runs tile (header + chart or placeholder)
                 let calendar = Calendar.current
-                // Apply activity filter first if set
+                let domain = last7DaysDomain
+                // Apply activity and date range filters before grouping
                 let filteredSessions: [RunningSession] = runningSessions.filter { s in
-                    if runActivityFilter == "All" { return true }
-                    return s.activityType == keyForActivity(runActivityFilter)
+                    if runActivityFilter != "All", s.activityType != keyForActivity(runActivityFilter) {
+                        return false
+                    }
+                    return s.date >= domain.lowerBound && s.date < domain.upperBound
                 }
                 let grouped: [Date: Double] = Dictionary(grouping: filteredSessions, by: { session in
                     calendar.startOfDay(for: session.date)
@@ -136,21 +143,19 @@ struct RunLogView: View {
                         $0 + UnitConverter.distance($1.distance, from: $1.distanceUnit, to: preferredDistanceUnit)
                     }
                 }
-                let dailyAll: [DailyPoint] = grouped.keys.sorted().map { day in
+                let daily: [DailyPoint] = grouped.keys.sorted().map { day in
                     DailyPoint(date: day, value: grouped[day] ?? 0)
                 }
-                    let daily = dailyAll.filter { $0.date >= last7DaysDomain.lowerBound && $0.date < last7DaysDomain.upperBound }
+                let minV: Double = daily.map { $0.value }.min() ?? 0
+                let maxV: Double = daily.map { $0.value }.max() ?? 0
+                let span: Double = max(1.0, maxV - minV)
+                let pad: Double = max(0.1, span * 0.15)
+                let yLower: Double = max(0, minV - pad)
+                let yUpper: Double = maxV + pad
+                let unitLabel = UnitConverter.canonicalDistanceUnit(preferredDistanceUnit)
 
-                    let minV: Double = daily.map { $0.value }.min() ?? 0
-                    let maxV: Double = daily.map { $0.value }.max() ?? 0
-                    let span: Double = max(1.0, maxV - minV)
-                    let pad: Double = max(0.1, span * 0.15)
-                    let yLower: Double = max(0, minV - pad)
-                    let yUpper: Double = maxV + pad
-                    let unitLabel = UnitConverter.canonicalDistanceUnit(preferredDistanceUnit)
-
-                    // Always show the Runs tile header; render chart or placeholder
-                    VStack(alignment: .leading, spacing: 8) {
+                // Always show the Runs tile header; render chart or placeholder
+                VStack(alignment: .leading, spacing: 8) {
                         // Filters
                         HStack(spacing: 8) {
                             Menu {
@@ -338,27 +343,48 @@ struct RunLogView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             LazyVStack(spacing: 0) {
                                 ForEach(displayedRuns) { session in
-                                    Button {
+                                    RunSessionRowContent(
+                                        session: session,
+                                        preferredDistanceUnit: preferredDistanceUnit,
+                                        locationName: locationCache[session.id],
+                                        isEditing: isEditing,
+                                        onDelete: {
+                                            if let idx = runningSessions.firstIndex(where: { $0.id == session.id }) {
+                                                pendingDeleteIndex = idx
+                                                showDeleteConfirm = true
+                                            }
+                                        }
+                                    )
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        guard !isEditing else { return }
                                         loadingSessionId = session.id
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                                             navigationSessionId = session.id
                                         }
-                                    } label: {
-                                        RunSessionRowContent(
-                                            session: session,
-                                            preferredDistanceUnit: preferredDistanceUnit,
-                                            locationName: locationCache[session.id],
-                                            isEditing: isEditing,
-                                            onDelete: {
-                                                if let idx = runningSessions.firstIndex(where: { $0.id == session.id }) {
-                                                    pendingDeleteIndex = idx
-                                                    showDeleteConfirm = true
-                                                }
-                                            }
-                                        )
                                     }
-                                    .buttonStyle(.plain)
+                                    .onLongPressGesture {
+                                        guard !isEditing else { return }
+                                        Haptics.playImpact(.light)
+                                        quickViewSession = session
+                                    }
                                     .padding(.vertical, 8)
+                                    .contextMenu {
+                                        Button {
+                                            quickViewSession = session
+                                        } label: {
+                                            Label("Quick View", systemImage: "eye")
+                                        }
+
+                                        Button(role: .destructive) {
+                                            if let idx = runningSessions.firstIndex(where: { $0.id == session.id }) {
+                                                pendingDeleteIndex = idx
+                                                showDeleteConfirm = true
+                                            }
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
+                                    }
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                         Button(role: .destructive) {
                                             pendingSwipeDeleteSession = session
@@ -566,7 +592,7 @@ struct RunLogView: View {
                 HealthKitManager.shared.startWorkoutChangeObservationIfNeeded()
                 if UserDefaults.standard.bool(forKey: "runsPendingHealthImport") {
                     UserDefaults.standard.set(false, forKey: "runsPendingHealthImport")
-                    importHealthRuns(limit: 30, force: true)
+                    importHealthRuns(limit: forcedHealthImportLimit, force: true)
                 }
                 // Request location permission only when entering Runs for the first time
                 if !requestedLocationAuthOnce {
@@ -617,6 +643,15 @@ struct RunLogView: View {
                         showRunTracking = true
                     }
                 )
+            }
+            .sheet(item: $quickViewSession) { session in
+                RunQuickViewSheet(
+                    session: session,
+                    preferredDistanceUnit: preferredDistanceUnit,
+                    locationName: locationCache[session.id]
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
             }
             .background {
                 Color.clear.alert("Save Failed", isPresented: Binding(
@@ -820,12 +855,13 @@ struct RunLogView: View {
     }
 
     // MARK: - HealthKit import
-    private func importHealthRuns(limit: Int = 30, force: Bool = false) {
+    private func importHealthRuns(limit: Int? = nil, force: Bool = false) {
         guard shouldImportHealthRuns(force: force) else { return }
+        let effectiveLimit = max(1, limit ?? defaultHealthImportLimit)
 
         Task(priority: .utility) {
             do {
-                let changes = try await HealthKitManager.shared.fetchCardioWorkoutChanges(resetAnchor: false, limit: limit)
+                let changes = try await HealthKitManager.shared.fetchCardioWorkoutChanges(resetAnchor: false, limit: effectiveLimit)
                 let workouts = changes.added
                 let existingRuns = await MainActor.run {
                     runningSessions.map {
@@ -843,7 +879,7 @@ struct RunLogView: View {
                 var existingUUIDs = Set(existingRuns.compactMap(\.healthWorkoutUUID))
                 let runLookup = existingRuns
                 var actions: [RunImportAction] = []
-                var uuidsToEnrich = Set<String>()
+                var uuidsToEnrich: [String] = []
 
                 for deletedUUID in changes.deletedUUIDs {
                     actions.append(.delete(healthWorkoutUUID: deletedUUID))
@@ -888,7 +924,7 @@ struct RunLogView: View {
                             calories: kcal,
                             locations: nil
                         ))
-                        uuidsToEnrich.insert(uuidStr)
+                        uuidsToEnrich.append(uuidStr)
                     } else {
                         let kcal: Double? = nil
                         actions.append(.insert(
@@ -914,14 +950,16 @@ struct RunLogView: View {
                                 maxPower: nil
                             )
                         ))
-                        uuidsToEnrich.insert(uuidStr)
+                        uuidsToEnrich.append(uuidStr)
                     }
                 }
 
                 await MainActor.run {
                     applyImportActions(actions)
                     runsLastHealthImportAt = Date().timeIntervalSince1970
-                    scheduleDeferredEnrichment(for: Array(uuidsToEnrich))
+                    var seenUUIDs = Set<String>()
+                    let uniqueUUIDs = uuidsToEnrich.filter { seenUUIDs.insert($0).inserted }
+                    scheduleDeferredEnrichment(for: Array(uniqueUUIDs.prefix(autoEnrichmentLimit)))
                 }
             } catch {
                 // Ignore errors silently; user may not have granted permission yet
@@ -960,7 +998,7 @@ struct RunLogView: View {
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 UserDefaults.standard.set(false, forKey: "runsPendingHealthImport")
-                importHealthRuns(limit: 30, force: true)
+                importHealthRuns(limit: forcedHealthImportLimit, force: true)
             }
         }
     }
@@ -1059,7 +1097,7 @@ struct RunLogView: View {
             // Let first render/nav settle before detail fetch work starts.
             try? await Task.sleep(nanoseconds: 1_500_000_000)
 
-            let maxPerPass = 4
+            let maxPerPass = 2
             var processed = 0
 
             while processed < maxPerPass {
@@ -1421,13 +1459,189 @@ private struct RunSessionRowContent: View {
     }
 }
 
-private struct RunCoordinate: Codable, Identifiable {
+private struct RunQuickViewSheet: View {
+    let session: RunningSession
+    let preferredDistanceUnit: String
+    let locationName: String?
+
+    private var displayDistance: Double {
+        UnitConverter.distance(session.distance, from: session.distanceUnit, to: preferredDistanceUnit)
+    }
+
+    private var estimatedCalories: Double {
+        if let calories = session.calories, calories > 0 {
+            return calories
+        }
+
+        let hours = max(session.duration / 3600.0, 0.0001)
+        let miles = (session.distanceUnit == "mi") ? session.distance : session.distance / 1.60934
+        let mph = miles / hours
+        let met: Double = {
+            switch session.activityType {
+            case "cycling":
+                switch mph {
+                case ..<10: return 4.0
+                case 10..<12: return 6.0
+                case 12..<14: return 8.0
+                case 14..<16: return 10.0
+                case 16..<19: return 12.0
+                default: return 16.0
+                }
+            case "rowing":
+                switch mph {
+                case ..<3: return 4.0
+                case 3..<4.5: return 7.0
+                default: return 10.0
+                }
+            case "elliptical": return 5.5
+            case "stairStepper", "stairClimbing": return 8.0
+            default:
+                switch mph {
+                case ..<2.5: return 2.5
+                case 2.5..<3.0: return 3.3
+                case 3.0..<3.5: return 3.8
+                case 3.5..<4.0: return 4.3
+                case 4.0..<5.0: return 5.0
+                case 5.0..<5.5: return 8.3
+                case 5.5..<6.0: return 9.0
+                case 6.0..<7.0: return 9.8
+                case 7.0..<8.0: return 11.0
+                case 8.0..<9.0: return 11.8
+                case 9.0..<10.0: return 12.8
+                default: return 14.5
+                }
+            }
+        }()
+
+        let minutes = session.duration / 60.0
+        return max(met * 3.5 * 70.0 / 200.0 * minutes, 0)
+    }
+
+    private var formattedDuration: String {
+        let hours = Int(session.duration) / 3600
+        let minutes = Int(session.duration) / 60 % 60
+        let seconds = Int(session.duration) % 60
+
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        }
+
+        return String(format: "%02d:%02d", minutes, seconds)
+    }
+
+    private var formattedPace: String {
+        guard displayDistance > 0, session.duration > 0 else { return "—" }
+        let minutesPerUnit = (session.duration / 60.0) / displayDistance
+        let mins = Int(minutesPerUnit)
+        let secs = Int((minutesPerUnit - Double(mins)) * 60)
+        return String(format: "%d:%02d/%@", mins, secs, preferredDistanceUnit)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: activityIcon(for: session.activityType))
+                        .font(.title2)
+                        .foregroundStyle(AppTheme.accentColor)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(activityTitle(for: session.activityType))
+                            .font(.title3.weight(.semibold))
+                        Text(session.date.formatted(date: .abbreviated, time: .shortened))
+                            .foregroundStyle(AppTheme.secondaryTextColor)
+                    }
+                }
+
+                HStack(spacing: 12) {
+                    quickMetric(title: "Distance", value: String(format: "%.2f %@", displayDistance, preferredDistanceUnit))
+                    quickMetric(title: "Time", value: formattedDuration)
+                }
+
+                HStack(spacing: 12) {
+                    quickMetric(title: "Pace", value: formattedPace)
+                    quickMetric(title: "Calories", value: "\(Int(estimatedCalories.rounded())) kcal")
+                }
+
+                if let locationName, !locationName.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Location")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.secondaryTextColor)
+                        Text(locationName)
+                    }
+                }
+
+                if let notes = session.notes, !notes.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Notes")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.secondaryTextColor)
+                        Text(notes)
+                    }
+                }
+            }
+            .padding(AppTheme.padding)
+        }
+        .appBackground(AppTheme.gradientRuns)
+        .foregroundStyle(AppTheme.textColor)
+    }
+
+    @ViewBuilder
+    private func quickMetric(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(AppTheme.secondaryTextColor)
+            Text(value)
+                .font(.headline)
+                .monospacedDigit()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(AppTheme.secondaryBackgroundColor)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func activityIcon(for type: String) -> String {
+        switch type {
+        case "walking": return "figure.walk"
+        case "hiking": return "figure.hiking"
+        case "cycling": return "bicycle"
+        case "rowing": return "figure.rower"
+        case "elliptical": return "figure.core.training"
+        case "stairStepper", "stairClimbing": return "figure.stairs"
+        default: return "figure.run"
+        }
+    }
+
+    private func activityTitle(for type: String) -> String {
+        switch type {
+        case "walking": return "Walk"
+        case "hiking": return "Hike"
+        case "cycling": return "Ride"
+        case "rowing": return "Row"
+        case "elliptical": return "Elliptical"
+        case "stairStepper", "stairClimbing": return "Stair Climb"
+        default: return "Run"
+        }
+    }
+}
+
+struct RunCoordinate: Codable, Identifiable {
     var id = UUID()
     var latitude: Double
     var longitude: Double
     var altitude: Double? = nil // meters above sea level
     var timestamp: Date? = nil // When this coordinate was recorded
     var cl: CLLocationCoordinate2D { .init(latitude: latitude, longitude: longitude) }
+
+    private enum CodingKeys: String, CodingKey {
+        case latitude
+        case longitude
+        case altitude
+        case timestamp
+    }
 }
 
 // MARK: - Elevation Calculator
@@ -1467,20 +1681,9 @@ struct RunSessionDetailView: View {
     @State private var selectedTab: Int = 0
 
     private var hasActual: Bool { (session.calories ?? 0) > 0 }
-
-    // Decode stored coordinates
-    private var coordinates: [CLLocationCoordinate2D] {
-        guard !session.locations.isEmpty,
-              let decoded = try? JSONDecoder().decode([RunCoordinate].self, from: session.locations) else { return [] }
-        return decoded.map { $0.cl }
-    }
-    
-    // Decode stored coordinates with full data (altitude, timestamp)
-    private var fullCoordinates: [RunCoordinate] {
-        guard !session.locations.isEmpty,
-              let decoded = try? JSONDecoder().decode([RunCoordinate].self, from: session.locations) else { return [] }
-        return decoded
-    }
+    private let mapSimplifyMaxPoints: Int = 700
+    private let mapSimplifyMinDistanceMeters: Double = 6
+    private let routeDecodePrefix = "⏱️ Run detail"
 
     // Build map region around the route
     @State private var camera: MapCameraPosition = .automatic
@@ -1496,15 +1699,27 @@ struct RunSessionDetailView: View {
         let color: Color
     }
     
+    @State private var decodedCoordinates: [RunCoordinate] = []
+    @State private var simplifiedMapCoordinates: [CLLocationCoordinate2D] = []
     @State private var cachedSegments: [Segment] = []
     @State private var showMap: Bool = false
     @State private var heartRateSamples: [(timestamp: Date, bpm: Double)] = []
     @State private var isLoadingHeartRate: Bool = false
+    @State private var detailAppearStart: Date? = nil
+    @State private var hasLoggedFirstMapRender = false
 
-    private var segments: [Segment] {
-        guard coordinates.count > 1 else { return [] }
+    private var coordinates: [CLLocationCoordinate2D] {
+        decodedCoordinates.map(\.cl)
+    }
+
+    private var fullCoordinates: [RunCoordinate] {
+        decodedCoordinates
+    }
+    
+    private func buildSegments(from points: [CLLocationCoordinate2D]) -> [Segment] {
+        guard points.count > 1 else { return [] }
         // Approximate time between points using session duration evenly (fallback)
-        let total = Double(coordinates.count - 1)
+        let total = Double(points.count - 1)
         let avgDt = max(session.duration / max(total, 1), 1)
         var segs: [Segment] = []
         var currentColor: Color? = nil
@@ -1516,9 +1731,9 @@ struct RunSessionDetailView: View {
             return .red
         }
 
-        for i in 0..<(coordinates.count - 1) {
-            let a = coordinates[i]
-            let b = coordinates[i+1]
+        for i in 0..<(points.count - 1) {
+            let a = points[i]
+            let b = points[i+1]
             let da = MKMapPoint(a).distance(to: MKMapPoint(b)) // meters
             let v = da / max(avgDt, 1) // m/s
             let c = colorForSpeed(v)
@@ -1636,7 +1851,10 @@ struct RunSessionDetailView: View {
                                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
                                     .padding(8)
                                 }
-                                .onAppear { zoomToRoute() }
+                                .onAppear {
+                                    zoomToRoute()
+                                    logFirstMapRenderIfNeeded()
+                                }
                             } else {
                                 ProgressView().frame(height: 260)
                             }
@@ -1652,7 +1870,13 @@ struct RunSessionDetailView: View {
                 }
             } else {
                 // Stats Tab
-                RunStatsView(session: session, coordinates: coordinates, heartRateSamples: heartRateSamples, isLoadingHeartRate: isLoadingHeartRate)
+                RunStatsView(
+                    session: session,
+                    coordinates: coordinates,
+                    fullCoordinates: fullCoordinates,
+                    heartRateSamples: heartRateSamples,
+                    isLoadingHeartRate: isLoadingHeartRate
+                )
             }
         }
         .transition(.opacity)
@@ -1664,7 +1888,9 @@ struct RunSessionDetailView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
         .onAppear {
-            if cachedSegments.isEmpty { cachedSegments = segments }
+            detailAppearStart = Date()
+            hasLoggedFirstMapRender = false
+            refreshDecodedRouteCaches()
             DispatchQueue.main.async { showMap = true }
             // If we have a Health UUID but no stored route yet, fetch on-demand
             if (session.locations.isEmpty), let uuid = session.healthWorkoutUUID, !uuid.isEmpty {
@@ -1675,7 +1901,7 @@ struct RunSessionDetailView: View {
                         if let data = try? JSONEncoder().encode(coords) {
                             session.locations = data
                             _ = PersistenceSave.commit(modelContext, action: "cache run route from Health")
-                            cachedSegments = segments
+                            refreshDecodedRouteCaches()
                         }
                     }
                 }
@@ -1698,6 +1924,9 @@ struct RunSessionDetailView: View {
                 }
             }
         }
+        .onChange(of: session.locations) { _, _ in
+            refreshDecodedRouteCaches()
+        }
     }
 
     // Reduce number of points to speed map rendering/storage. Keep up to ~1200 points and at least 5 m apart
@@ -1712,6 +1941,69 @@ struct RunSessionDetailView: View {
             if reduced.count >= maxPoints { break }
         }
         return reduced
+    }
+
+    private func refreshDecodedRouteCaches() {
+        let startedAt = Date()
+        decodedCoordinates = decodeCoordinates(from: session.locations)
+        simplifiedMapCoordinates = simplifyCoordinatesForMap(decodedCoordinates.map(\.cl))
+        cachedSegments = buildSegments(from: simplifiedMapCoordinates)
+        let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+        print("\(routeDecodePrefix) decode/cache prep: \(elapsedMs)ms (\(decodedCoordinates.count) route pts -> \(simplifiedMapCoordinates.count) map pts)")
+    }
+
+    private func decodeCoordinates(from data: Data) -> [RunCoordinate] {
+        guard !data.isEmpty else { return [] }
+        return (try? JSONDecoder().decode([RunCoordinate].self, from: data)) ?? []
+    }
+
+    private func simplifyCoordinatesForMap(_ points: [CLLocationCoordinate2D]) -> [CLLocationCoordinate2D] {
+        guard points.count > 2 else { return points }
+        var reduced: [CLLocationCoordinate2D] = [points[0]]
+        reduced.reserveCapacity(min(points.count, mapSimplifyMaxPoints))
+        var last = CLLocation(latitude: points[0].latitude, longitude: points[0].longitude)
+
+        for point in points.dropFirst().dropLast() {
+            let current = CLLocation(latitude: point.latitude, longitude: point.longitude)
+            if current.distance(from: last) >= mapSimplifyMinDistanceMeters {
+                reduced.append(point)
+                last = current
+            }
+        }
+        reduced.append(points[points.count - 1])
+        return trimToMaxPoints(reduced, maxPoints: mapSimplifyMaxPoints)
+    }
+
+    private func trimToMaxPoints(_ points: [CLLocationCoordinate2D], maxPoints: Int) -> [CLLocationCoordinate2D] {
+        guard points.count > maxPoints, maxPoints > 2 else { return points }
+        let first = points[0]
+        let last = points[points.count - 1]
+        let interiorLimit = maxPoints - 2
+        let interiorCount = points.count - 2
+        if interiorCount <= interiorLimit { return points }
+
+        var trimmed: [CLLocationCoordinate2D] = [first]
+        trimmed.reserveCapacity(maxPoints)
+        let step = Double(interiorCount) / Double(interiorLimit)
+        var lastIndex = 0
+        for i in 1...interiorLimit {
+            let raw = Int((Double(i) * step).rounded(.down))
+            let index = min(max(1, raw), points.count - 2)
+            if index == lastIndex { continue }
+            trimmed.append(points[index])
+            lastIndex = index
+        }
+        trimmed.append(last)
+        return trimmed
+    }
+
+    private func logFirstMapRenderIfNeeded() {
+        guard !hasLoggedFirstMapRender else { return }
+        hasLoggedFirstMapRender = true
+        if let detailAppearStart {
+            let elapsedMs = Int(Date().timeIntervalSince(detailAppearStart) * 1000)
+            print("\(routeDecodePrefix) first map render: \(elapsedMs)ms")
+        }
     }
     
     private func zoomToRoute() {
@@ -1794,19 +2086,13 @@ struct RunStatsView: View {
     @AppStorage("measurementSystem") private var measurementSystem: String = "imperial"
     let session: RunningSession
     let coordinates: [CLLocationCoordinate2D]
+    let fullCoordinates: [RunCoordinate]
     let heartRateSamples: [(timestamp: Date, bpm: Double)]
     let isLoadingHeartRate: Bool
     
     @State private var loadError: String? = nil
     
     private var usesImperial: Bool { measurementSystem == "imperial" }
-    
-    // Decode stored coordinates with full data (altitude, timestamp)
-    private var fullCoordinates: [RunCoordinate] {
-        guard !session.locations.isEmpty,
-              let decoded = try? JSONDecoder().decode([RunCoordinate].self, from: session.locations) else { return [] }
-        return decoded
-    }
     
     // Calculate splits per mile/km based on actual GPS data
     // Returns: (distance in units, display text, elevation in meters above sea level)
@@ -1829,22 +2115,14 @@ struct RunStatsView: View {
         }
         
         // Check if we have location data
-        guard !session.locations.isEmpty else {
+        guard !fullCoordinates.isEmpty else {
             print("📍 No location data, using fallback splits")
             return fallbackSplits()
         }
-        
-        // Try to decode coordinates
-        guard let coordsData = try? JSONDecoder().decode([RunCoordinate].self, from: session.locations),
-              !coordsData.isEmpty else {
-            print("⚠️ Failed to decode coordinates or empty, using fallback")
-            return fallbackSplits()
-        }
-        
-        print("✅ Decoded \(coordsData.count) coordinates for \(session.distance) \(session.distanceUnit)")
+        print("✅ Decoded \(fullCoordinates.count) coordinates for \(session.distance) \(session.distanceUnit)")
         
         // Calculate splits from actual route with timestamps
-        return calculateSplitsFromRoute(coordsData)
+        return calculateSplitsFromRoute(fullCoordinates)
     }
     
     // Fallback to average pace if no GPS data available
