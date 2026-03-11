@@ -35,22 +35,16 @@ struct PrivacyPolicyView: View {
     }
 
     private func loadMarkdown() {
-        if let url = Bundle.main.url(forResource: "PRIVACY", withExtension: "md") {
-            if let text = try? String(contentsOf: url, encoding: .utf8) {
-                var options = AttributedString.MarkdownParsingOptions()
-                options.interpretedSyntax = .full
-                if var attr = try? AttributedString(markdown: text, options: options) {
-                    // Apply a readable base font and increase paragraph spacing
-                    attr.font = .system(.body)
-                    attr.foregroundColor = nil // keep theme color via Text modifier
+        var options = AttributedString.MarkdownParsingOptions()
+        options.interpretedSyntax = .full
 
-                    // Increase paragraph spacing by adding newlines normalization
-                    // (AttributedString doesn't expose paragraph spacing directly across all runs)
-                    content = attr
-                    return
-                }
-            }
+        if var attr = try? AttributedString(markdown: PrivacyPolicyContent.markdown, options: options) {
+            attr.font = .system(.body)
+            attr.foregroundColor = nil // keep theme color via Text modifier
+            content = attr
+            return
         }
+
         content = AttributedString("Privacy policy unavailable.")
     }
 }

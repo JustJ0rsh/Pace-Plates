@@ -11,7 +11,6 @@
 		420B3EEC2EB3E28400F73922 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 420B3EEB2EB3E28400F73922 /* SwiftUI.framework */; };
 		420B3EFD2EB3E28600F73922 /* RunningWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 420B3EE82EB3E28400F73922 /* RunningWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		420B40FF2EBDA73900F73922 /* GameCenterResources.gamekit in Resources */ = {isa = PBXBuildFile; fileRef = 420B40FE2EBDA73900F73922 /* GameCenterResources.gamekit */; };
-		4226C1812E9DED2A00908453 /* Info 2.plist in Resources */ = {isa = PBXBuildFile; fileRef = 4226C1802E9DED2A00908453 /* Info 2.plist */; };
 		43A0000D2EFF00010000000D /* WorkoutThumbnailExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 43A000022EFF000100000002 /* WorkoutThumbnailExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -45,8 +44,6 @@
 		420B3EE92EB3E28400F73922 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		420B3EEB2EB3E28400F73922 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		420B40FE2EBDA73900F73922 /* GameCenterResources.gamekit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = GameCenterResources.gamekit; sourceTree = "<group>"; };
-		4226C17A2E94A47300908453 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		4226C1802E9DED2A00908453 /* Info 2.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info 2.plist"; sourceTree = "<group>"; };
 		42B50D212D9DE5670082A9FA /* Pace & Plates.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Pace & Plates.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		42FCE1502EA875FA00334FD2 /* WeatherKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WeatherKit.framework; path = System/Library/Frameworks/WeatherKit.framework; sourceTree = SDKROOT; };
 		43A000022EFF000100000002 /* WorkoutThumbnailExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WorkoutThumbnailExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -138,8 +135,6 @@
 				420B3EED2EB3E28400F73922 /* RunningWidget */,
 				42B50D222D9DE5670082A9FA /* Products */,
 				43A000062EFF000100000006 /* WorkoutThumbnailExtension */,
-				4226C17A2E94A47300908453 /* Info.plist */,
-				4226C1802E9DED2A00908453 /* Info 2.plist */,
 					42FCE14F2EA875FA00334FD2 /* Frameworks */,
 				);
 				sourceTree = "<group>";
@@ -282,15 +277,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		42B50D1F2D9DE5670082A9FA /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				420B40FF2EBDA73900F73922 /* GameCenterResources.gamekit in Resources */,
-				4226C1812E9DED2A00908453 /* Info 2.plist in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
+			42B50D1F2D9DE5670082A9FA /* Resources */ = {
+				isa = PBXResourcesBuildPhase;
+				buildActionMask = 2147483647;
+				files = (
+					420B40FF2EBDA73900F73922 /* GameCenterResources.gamekit in Resources */,
+				);
+				runOnlyForDeploymentPostprocessing = 0;
+			};
 		43A000052EFF000100000005 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -531,29 +525,13 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_ASSET_PATHS = "\"WorkingOut/Preview Content\"";
-				DEVELOPMENT_TEAM = JK2CCHMR6P;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = WorkingOut/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Pace & Plates";
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
-				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "We add your training plan to your Calendar and need full access to create events and reminders for workouts.";
-				INFOPLIST_KEY_NSCalendarsUsageDescription = "We add your training plan to your Calendar and set reminders for workouts.";
-				INFOPLIST_KEY_NSCalendarsWriteOnlyAccessUsageDescription = "We add your training plan to your Calendar and set reminders for workouts.";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "We read your workouts, steps, and running routes from Health to display your activity and track progress in the app.";
-				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We save your runs to Health so your fitness data stays in one place.";
-				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "We use your location to track runs even when the app is in the background.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We use your location to track runs, show your route on the map, and fetch local weather.";
-				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
+					DEVELOPMENT_TEAM = JK2CCHMR6P;
+					ENABLE_PREVIEWS = YES;
+					GENERATE_INFOPLIST_FILE = YES;
+					INFOPLIST_FILE = WorkingOut/Info.plist;
+					IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+					LD_RUNPATH_SEARCH_PATHS = (
+						"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 2.0.0;
@@ -578,29 +556,13 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_ASSET_PATHS = "\"WorkingOut/Preview Content\"";
-				DEVELOPMENT_TEAM = JK2CCHMR6P;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = WorkingOut/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Pace & Plates";
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
-				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "We add your training plan to your Calendar and need full access to create events and reminders for workouts.";
-				INFOPLIST_KEY_NSCalendarsUsageDescription = "We add your training plan to your Calendar and set reminders for workouts.";
-				INFOPLIST_KEY_NSCalendarsWriteOnlyAccessUsageDescription = "We add your training plan to your Calendar and set reminders for workouts.";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "We read your workouts, steps, and running routes from Health to display your activity and track progress in the app.";
-				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We save your runs to Health so your fitness data stays in one place.";
-				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "We use your location to track runs even when the app is in the background.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We use your location to track runs, show your route on the map, and fetch local weather.";
-				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
+					DEVELOPMENT_TEAM = JK2CCHMR6P;
+					ENABLE_PREVIEWS = YES;
+					GENERATE_INFOPLIST_FILE = YES;
+					INFOPLIST_FILE = WorkingOut/Info.plist;
+					IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+					LD_RUNPATH_SEARCH_PATHS = (
+						"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 2.0.0;
