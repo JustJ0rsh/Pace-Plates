@@ -4,11 +4,16 @@ import UIKit
 
 final class GameCenterService: NSObject {
     static let shared = GameCenterService()
+    private static let communityAccessKey = "gameCenterCommunityAccessEnabled"
 
     private(set) var isAuthenticated: Bool = GKLocalPlayer.local.isAuthenticated
     private var apObserver: NSKeyValueObservation? = nil
 
     private override init() { }
+
+    var isCommunityAccessEnabled: Bool {
+        UserDefaults.standard.bool(forKey: Self.communityAccessKey)
+    }
 
     // MARK: - Authentication
     func authenticate(presenting viewController: UIViewController? = nil, completion: ((Error?) -> Void)? = nil) {
@@ -22,6 +27,20 @@ final class GameCenterService: NSObject {
                 completion?(error)
             }
         }
+    }
+
+    func enableCommunityAccessAndAuthenticate(
+        presenting viewController: UIViewController? = nil,
+        completion: ((Error?) -> Void)? = nil
+    ) {
+        UserDefaults.standard.set(true, forKey: Self.communityAccessKey)
+
+        if isAuthenticated || GKLocalPlayer.local.isAuthenticated {
+            completion?(nil)
+            return
+        }
+
+        authenticate(presenting: viewController, completion: completion)
     }
 
     // MARK: - UI Presentation (modern: Access Point trigger, no deprecated controllers)
@@ -49,6 +68,8 @@ final class GameCenterService: NSObject {
 
     // MARK: - Score Reporting
     func reportScore(_ value: Int64, to leaderboardID: String, completion: ((Error?) -> Void)? = nil) {
+        guard isCommunityAccessEnabled else { return }
+
         let submit = {
             GKLeaderboard.submitScore(Int(value),
                                       context: 0,

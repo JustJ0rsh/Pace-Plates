@@ -1,6 +1,5 @@
 import SwiftUI
 import GameKit
-import CoreLocation
 import SwiftData
 import HealthKit
 
@@ -125,10 +124,6 @@ struct ContentView: View {
                 if heightUnit != "cm" { heightUnit = "cm" }
             }
 
-            // Authenticate Game Center (presents system sign-in if needed), then refresh streak achievements once.
-            GameCenterService.shared.authenticate { _ in
-                StreakService.refreshAndReport(using: persistenceController.container.mainContext)
-            }
             // Ensure the Game Center access point dot is hidden by default
             GKAccessPoint.shared.isActive = false
         }
@@ -150,20 +145,7 @@ struct ContentView: View {
             didCompleteProfileSetup = true
         }) {
             TutorialView(onFinish: {
-                didShowTutorial = true
-                didCompleteProfileSetup = true
-                showTutorial = false
-                Task { @MainActor in
-                    do {
-                        // Give time for the tutorial sheet to fully dismiss before presenting HK sheet
-                        try await Task.sleep(nanoseconds: 500_000_000)
-                        try await HealthKitManager.shared.requestAuthorization()
-                        // After Health, ask for Location so you're ready to run
-                        await requestLocationAuthorizationIfNeeded()
-                    } catch {
-                        healthAuthError = error.localizedDescription
-                    }
-                }
+                finishOnboarding()
             })
         }
 
@@ -176,11 +158,19 @@ struct ContentView: View {
 
 extension ContentView {
     @MainActor
-    private func requestLocationAuthorizationIfNeeded() async {
-        let manager = CLLocationManager()
-        let status = manager.authorizationStatus
-        if status == .notDetermined {
-            manager.requestWhenInUseAuthorization()
+    private func finishOnboarding() {
+        didShowTutorial = true
+        didCompleteProfileSetup = true
+        showTutorial = false
+
+        Task { @MainActor in
+            do {
+                // Give time for the tutorial sheet to fully dismiss before presenting system permission sheets.
+                try await Task.sleep(nanoseconds: 500_000_000)
+                try await HealthKitManager.shared.requestAuthorization()
+            } catch {
+                healthAuthError = error.localizedDescription
+            }
         }
     }
     
@@ -202,7 +192,6 @@ extension ContentView {
             do {
                 try await Task.sleep(nanoseconds: 500_000_000) // Small delay for smooth UX
                 try await HealthKitManager.shared.requestAuthorization()
-                await requestLocationAuthorizationIfNeeded()
             } catch {
                 healthAuthError = error.localizedDescription
             }
