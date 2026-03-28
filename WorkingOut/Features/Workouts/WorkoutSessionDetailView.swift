@@ -122,7 +122,6 @@ struct WorkoutSessionDetailView: View {
         // Removed .ignoresSafeArea(.keyboard) to allow view to resize
         .scrollDismissesKeyboard(.immediately)
         .gesture(DragGesture().onChanged { _ in dismissKeyboard() })
-        .toolbar(.hidden, for: .tabBar)
         .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
@@ -172,56 +171,8 @@ struct WorkoutSessionDetailView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: work)
         }
         .onDisappear {
-            // Flush any pending notes save work and persist the session when leaving this screen
-            saveWorkItem?.cancel()
-            titleSaveWorkItem?.cancel()
-            titleSaveWorkItem = nil
-            if session.notes != notesBuffer {
-                session.notes = notesBuffer
-            }
-            // Persist latest title text (covers swipe-back while editing)
-            if didEditTitle, session.title != titleText {
-                session.title = titleText
-            }
-            _ = PersistenceSave.commit(modelContext, action: "save changes")
-
-            // Report Game Center leaderboards for strength PRs and session volume
-            GameCenterService.shared.reportStrengthForSession(
-                exerciseLogs: session.exerciseLogs,
-                preferredWeightUnit: weightUnit
-            )
-
-            // Update streak achievements (daily and weekly)
-            StreakService.refreshAndReport(using: modelContext)
-
-            // If this was just created and contains no meaningful data, delete it instead of leaving an empty session behind
-            if isNewSession {
-                let hasExercises = !((session.exerciseLogs ?? []).isEmpty)
-                let hasNotes = !(notesBuffer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                let titleTrim = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
-                // Consider title meaningful only if user edited it and it's non-empty
-                let hasTitle = didEditTitle && !titleTrim.isEmpty
-                if !(hasExercises || hasNotes || hasTitle) {
-                    modelContext.delete(session)
-                    _ = PersistenceSave.commit(modelContext, action: "save changes")
-                }
-            }
-            
-            // Save as template if requested and session is valid
-            if session.shouldSaveAsTemplate && !session.isDeleted {
-                let hasExercises = !((session.exerciseLogs ?? []).isEmpty)
-                if hasExercises {
-                    if let existingTemplate = session.generatedTemplate {
-                        // Update existing template
-                        WorkoutTemplateService.shared.updateTemplate(template: existingTemplate, from: session, context: modelContext)
-                    } else {
-                        // Create new template and link it
-                        let newTemplate = WorkoutTemplateService.shared.createTemplateFromWorkout(session: session, context: modelContext)
-                        session.generatedTemplate = newTemplate
-                        _ = PersistenceSave.commit(modelContext, action: "save changes")
-                    }
-                }
-            }
+            persistDetailChangesBeforeDismiss()
+            schedulePostDismissMaintenance()
         }
     }
     
@@ -237,6 +188,65 @@ struct WorkoutSessionDetailView: View {
         }
         titleSaveWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+    }
+
+    private func persistDetailChangesBeforeDismiss() {
+        saveWorkItem?.cancel()
+        titleSaveWorkItem?.cancel()
+        titleSaveWorkItem = nil
+
+        if session.notes != notesBuffer {
+            session.notes = notesBuffer
+        }
+        if didEditTitle, session.title != titleText {
+            session.title = titleText
+        }
+        _ = PersistenceSave.commit(modelContext, action: "save changes")
+    }
+
+    private func schedulePostDismissMaintenance() {
+        let shouldDeleteEmptyNewSession = isNewSession && isEffectivelyEmptyNewSession
+
+        Task { @MainActor in
+            await Task.yield()
+
+            if shouldDeleteEmptyNewSession {
+                modelContext.delete(session)
+                _ = PersistenceSave.commit(modelContext, action: "save changes")
+                return
+            }
+
+            if session.shouldSaveAsTemplate && !session.isDeleted {
+                updateGeneratedTemplateIfNeeded()
+            }
+
+            GameCenterService.shared.reportStrengthForSession(
+                exerciseLogs: session.exerciseLogs,
+                preferredWeightUnit: weightUnit
+            )
+            StreakService.refreshAndReport(using: modelContext)
+        }
+    }
+
+    private var isEffectivelyEmptyNewSession: Bool {
+        let hasExercises = !((session.exerciseLogs ?? []).isEmpty)
+        let hasNotes = !(notesBuffer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        let titleTrim = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasTitle = didEditTitle && !titleTrim.isEmpty
+        return !(hasExercises || hasNotes || hasTitle)
+    }
+
+    private func updateGeneratedTemplateIfNeeded() {
+        let hasExercises = !((session.exerciseLogs ?? []).isEmpty)
+        guard hasExercises else { return }
+
+        if let existingTemplate = session.generatedTemplate {
+            WorkoutTemplateService.shared.updateTemplate(template: existingTemplate, from: session, context: modelContext)
+        } else {
+            let newTemplate = WorkoutTemplateService.shared.createTemplateFromWorkout(session: session, context: modelContext)
+            session.generatedTemplate = newTemplate
+            _ = PersistenceSave.commit(modelContext, action: "save changes")
+        }
     }
     
     private func deleteExerciseLogs(offsets: IndexSet) {
@@ -408,9 +418,12 @@ struct WorkoutSessionDetailView: View {
     
     private var shareMenu: some View {
         Menu {
-            Button {
-                shareWorkoutFile()
-            } label: {
+            ShareLink(
+                item: sharedWorkoutSession,
+                subject: Text(workoutShareSubject),
+                message: Text(workoutShareMessage),
+                preview: SharePreview(workoutShareSubject)
+            ) {
                 Label("Share Workout File", systemImage: "square.and.arrow.up")
             }
             
@@ -430,15 +443,6 @@ struct WorkoutSessionDetailView: View {
         }
     }
 
-    private func shareWorkoutFile() {
-        guard let fileURL = WorkoutSharingService.shared.exportWorkout(session: session) else {
-            shareErrorMessage = "Could not prepare the workout file for sharing."
-            return
-        }
-        shareItems = [fileURL]
-        showingShareSheet = true
-    }
-
     private func shareTextSummary(includeData: Bool) {
         let text = generateShareText(includeData: includeData)
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -447,6 +451,19 @@ struct WorkoutSessionDetailView: View {
         }
         shareItems = [text]
         showingShareSheet = true
+    }
+
+    private var sharedWorkoutSession: SharedWorkoutSession {
+        WorkoutSharingService.shared.convertToShared(session)
+    }
+
+    private var workoutShareSubject: String {
+        let trimmedTitle = session.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedTitle.isEmpty ? "Workout" : trimmedTitle
+    }
+
+    private var workoutShareMessage: String {
+        "Workout file from Pace & Plates. Open it in Pace & Plates to import."
     }
 }
 

@@ -7,6 +7,11 @@ import Charts
 import Combine
 
 struct RunLogView: View {
+    private struct RunTrackingRequest: Identifiable {
+        let id = UUID()
+        let activityType: String
+    }
+
     @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
     @AppStorage("distanceUnit") private var preferredDistanceUnit: String = "mi"
     @AppStorage("runsLastHealthImportAt") private var runsLastHealthImportAt: Double = 0
@@ -24,8 +29,7 @@ struct RunLogView: View {
     @State private var locationCache: [UUID: String] = [:]
     @State private var pendingLocationTasks: Set<UUID> = [] // Track active location fetch tasks
     @State private var hasPrefetchedLocations = false // Prevent duplicate prefetching
-    @State private var showRunTracking: Bool = false
-    @State private var selectedActivityType: String = "running"
+    @State private var runTrackingRequest: RunTrackingRequest? = nil
     @State private var stepsToday: Int? = nil
     @State private var requestedLocationAuthOnce = false
     @State private var hasScheduledInitialImport = false
@@ -98,8 +102,7 @@ struct RunLogView: View {
                 // Active Run banner
                 if RunTracker.shared.isRunning || (RunTracker.shared.duration > 0 && RunTracker.shared.startDate != nil) {
                     Button {
-                        selectedActivityType = RunTracker.shared.activityType
-                        showRunTracking = true
+                        presentRunTracking(for: RunTracker.shared.activityType)
                     } label: {
                         HStack(spacing: 12) {
                             Image(systemName: activityIcon(for: RunTracker.shared.activityType))
@@ -542,36 +545,31 @@ struct RunLogView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
                         Button {
-                            selectedActivityType = "running"
-                            showRunTracking = true
+                            presentRunTracking(for: "running")
                         } label: {
                             Label("Run", systemImage: "figure.run")
                         }
                         
                         Button {
-                            selectedActivityType = "walking"
-                            showRunTracking = true
+                            presentRunTracking(for: "walking")
                         } label: {
                             Label("Walk", systemImage: "figure.walk")
                         }
                         
                         Button {
-                            selectedActivityType = "hiking"
-                            showRunTracking = true
+                            presentRunTracking(for: "hiking")
                         } label: {
                             Label("Hike", systemImage: "figure.hiking")
                         }
                         
                         Button {
-                            selectedActivityType = "cycling"
-                            showRunTracking = true
+                            presentRunTracking(for: "cycling")
                         } label: {
                             Label("Cycle", systemImage: "bicycle")
                         }
                         
                         Button {
-                            selectedActivityType = "rowing"
-                            showRunTracking = true
+                            presentRunTracking(for: "rowing")
                         } label: {
                             Label("Row", systemImage: "figure.rower")
                         }
@@ -622,16 +620,16 @@ struct RunLogView: View {
                 healthChangeDebounceTask?.cancel()
                 healthChangeDebounceTask = nil
             }
-            .sheet(isPresented: $showRunTracking) {
+            .sheet(item: $runTrackingRequest) { request in
                 NavigationStack {
-                    RunTrackingProView(activityType: selectedActivityType)
-                        .navigationTitle(activityTitle(for: selectedActivityType))
+                    RunTrackingProView(activityType: request.activityType)
+                        .navigationTitle(activityTitle(for: request.activityType))
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
                         .toolbarBackground(.visible, for: .navigationBar)
                         .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
                 }
-                .id(selectedActivityType) // Force refresh when activity type changes
+                .id(request.id)
                 .appBackground(AppTheme.gradientRuns)
                 .foregroundColor(AppTheme.textColor)
                 .tint(AppTheme.accentColor)
@@ -639,8 +637,7 @@ struct RunLogView: View {
             .sheet(isPresented: $showRunAssistant) {
                 RunAssistantContainerView(
                     onStartRun: {
-                        selectedActivityType = "running"
-                        showRunTracking = true
+                        presentRunTracking(for: "running")
                     }
                 )
             }
@@ -687,6 +684,10 @@ struct RunLogView: View {
     
     private func activityFilterOptions() -> [String] {
         ["Running", "Walking", "Hiking", "Cycling", "Rowing", "Elliptical", "Stair Climbing"]
+    }
+
+    private func presentRunTracking(for activityType: String) {
+        runTrackingRequest = RunTrackingRequest(activityType: activityType)
     }
 
     private func keyForActivity(_ label: String) -> String {

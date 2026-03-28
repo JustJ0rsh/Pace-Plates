@@ -5,10 +5,8 @@ struct ShareSheet: UIViewControllerRepresentable {
     let items: [Any]
 
     func makeUIViewController(context: Context) -> UIActivityViewController {
-        let vc = UIActivityViewController(activityItems: items, applicationActivities: nil)
-        return vc
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
-
