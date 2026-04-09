@@ -144,10 +144,12 @@
 			<dict>
 				<key>public.filename-extension</key>
 				<array>
+					<string>paceandplates</string>
 					<string>paceplate</string>
 				</array>
 				<key>public.mime-type</key>
 				<array>
+					<string>application/x-paceandplates</string>
 					<string>application/x-paceplate</string>
 				</array>
 			</dict>

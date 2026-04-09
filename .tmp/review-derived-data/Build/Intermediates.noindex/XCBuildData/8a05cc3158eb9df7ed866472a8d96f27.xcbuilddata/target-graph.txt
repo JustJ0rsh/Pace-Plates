@@ -1,0 +1,6 @@
+Target dependency graph (3 targets)
+Target 'Pace & Plates' in project 'Pace & Plates'
+➜ Explicit dependency on target 'RunningWidgetExtension' in project 'Pace & Plates'
+➜ Implicit dependency on target 'WorkoutThumbnailExtension' in project 'Pace & Plates' via file 'WorkoutThumbnailExtension.appex' in build phase 'Copy Files'
+Target 'WorkoutThumbnailExtension' in project 'Pace & Plates' (no dependencies)
+Target 'RunningWidgetExtension' in project 'Pace & Plates' (no dependencies)

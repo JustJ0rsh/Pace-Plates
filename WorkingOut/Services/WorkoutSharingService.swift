@@ -44,6 +44,12 @@ struct SharedExerciseSet: Codable, Identifiable {
 import UniformTypeIdentifiers
 import CoreTransferable
 
+private enum WorkoutShareFileExtension {
+    static let preferred = "paceandplates"
+    static let legacy = "paceplate"
+    static let olderLegacy = "ppworkout"
+}
+
 extension UTType {
     static var paceAndPlatesWorkout: UTType {
         UTType(exportedAs: "com.justj0rsh.paceandplates.ppworkout", conformingTo: .json)
@@ -55,32 +61,22 @@ extension UTType {
 
 extension SharedWorkoutSession: Transferable {
     static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(contentType: .json) { session in
-            let fileURL = try makeTransferFile(for: session, fileExtension: "json", prettyPrinted: true)
+        FileRepresentation(contentType: .paceplate) { session in
+            let fileURL = try makeTransferFile(
+                for: session,
+                fileExtension: WorkoutShareFileExtension.preferred,
+                prettyPrinted: true
+            )
             return SentTransferredFile(fileURL)
         } importing: { received in
             let data = try Data(contentsOf: received.file)
             return try JSONDecoder().decode(SharedWorkoutSession.self, from: data)
-        }
-
-        DataRepresentation(contentType: .json) { session in
-            try encodedData(for: session, prettyPrinted: true)
-        } importing: { data in
-            try JSONDecoder().decode(SharedWorkoutSession.self, from: data)
         }
 
         DataRepresentation(contentType: .paceplate) { session in
             try encodedData(for: session, prettyPrinted: true)
         } importing: { data in
             try JSONDecoder().decode(SharedWorkoutSession.self, from: data)
-        }
-        
-        FileRepresentation(contentType: .paceplate) { session in
-            let fileURL = try makeTransferFile(for: session, fileExtension: "paceplate", prettyPrinted: true)
-            return SentTransferredFile(fileURL)
-        } importing: { received in
-            let data = try Data(contentsOf: received.file)
-            return try JSONDecoder().decode(SharedWorkoutSession.self, from: data)
         }
 
         // Backward compatibility: also accept legacy .ppworkout
@@ -90,7 +86,7 @@ extension SharedWorkoutSession: Transferable {
             try JSONDecoder().decode(SharedWorkoutSession.self, from: data)
         }
         FileRepresentation(contentType: .paceAndPlatesWorkout) { session in
-            let fileURL = try makeTransferFile(for: session, fileExtension: "ppworkout")
+            let fileURL = try makeTransferFile(for: session, fileExtension: WorkoutShareFileExtension.olderLegacy)
             return SentTransferredFile(fileURL)
         } importing: { received in
             let data = try Data(contentsOf: received.file)
@@ -98,7 +94,7 @@ extension SharedWorkoutSession: Transferable {
         }
     }
 
-    private static func encodedData(for session: SharedWorkoutSession, prettyPrinted: Bool = false) throws -> Data {
+    fileprivate static func encodedData(for session: SharedWorkoutSession, prettyPrinted: Bool = false) throws -> Data {
         let encoder = JSONEncoder()
         if prettyPrinted {
             encoder.outputFormatting = .prettyPrinted
@@ -106,7 +102,7 @@ extension SharedWorkoutSession: Transferable {
         return try encoder.encode(session)
     }
 
-    private static func makeTransferFile(
+    fileprivate static func makeTransferFile(
         for session: SharedWorkoutSession,
         fileExtension: String,
         prettyPrinted: Bool = false
@@ -119,7 +115,7 @@ extension SharedWorkoutSession: Transferable {
         return fileURL
     }
 
-    private static func sanitizedFileStem(for title: String) -> String {
+    fileprivate static func sanitizedFileStem(for title: String) -> String {
         let safeTitle = title
             .components(separatedBy: .init(charactersIn: "/\\?%*|\"<>:"))
             .joined(separator: "_")
@@ -145,20 +141,11 @@ class WorkoutSharingService {
         let sharedSession = convertToShared(session)
         
         do {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = .prettyPrinted
-            let data = try encoder.encode(sharedSession)
-            
-            // Create a temporary file
-            let tempDir = FileManager.default.temporaryDirectory
-            let safeTitle = session.title
-                .components(separatedBy: .init(charactersIn: "/\\?%*|\"<>:"))
-                .joined(separator: "_")
-            let fileName = "\(safeTitle.isEmpty ? "Workout" : safeTitle).paceplate"
-            let fileURL = tempDir.appendingPathComponent(fileName)
-            
-            try data.write(to: fileURL, options: .atomic)
-            return fileURL
+            return try SharedWorkoutSession.makeTransferFile(
+                for: sharedSession,
+                fileExtension: WorkoutShareFileExtension.preferred,
+                prettyPrinted: true
+            )
         } catch {
             print("Error exporting workout: \(error)")
             return nil

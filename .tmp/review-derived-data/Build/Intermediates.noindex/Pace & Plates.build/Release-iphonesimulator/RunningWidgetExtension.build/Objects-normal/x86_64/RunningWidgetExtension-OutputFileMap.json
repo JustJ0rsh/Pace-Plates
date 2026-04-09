@@ -1,0 +1,26 @@
+{
+  "" : {
+    "const-values" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/RunningWidgetExtension.build/Objects-normal/x86_64/RunningWidgetExtension-primary.swiftconstvalues",
+    "dependencies" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/RunningWidgetExtension.build/Objects-normal/x86_64/RunningWidgetExtension-primary.d",
+    "diagnostics" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/RunningWidgetExtension.build/Objects-normal/x86_64/RunningWidgetExtension-primary.dia",
+    "emit-module-dependencies" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/RunningWidgetExtension.build/Objects-normal/x86_64/RunningWidgetExtension-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/RunningWidgetExtension.build/Objects-normal/x86_64/RunningWidgetExtension-primary-emit-module.dia",
+    "pch" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/RunningWidgetExtension.build/Objects-normal/x86_64/RunningWidgetExtension-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/RunningWidgetExtension.build/Objects-normal/x86_64/RunningWidgetExtension-primary.swiftdeps"
+  },
+  "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/RunningWidgetExtension.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/RunningWidgetExtension.build/Objects-normal/x86_64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/RunningWidgetExtension.build/Objects-normal/x86_64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/RunningWidgetExtension.build/Objects-normal/x86_64/GeneratedAssetSymbols.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/RunningWidget/RunningLiveActivityWidget.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/RunningWidgetExtension.build/Objects-normal/x86_64/RunningLiveActivityWidget.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/RunningWidgetExtension.build/Objects-normal/x86_64/RunningLiveActivityWidget.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/RunningWidgetExtension.build/Objects-normal/x86_64/RunningLiveActivityWidget.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/RunningWidget/RunningWidgetBundle.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/RunningWidgetExtension.build/Objects-normal/x86_64/RunningWidgetBundle.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/RunningWidgetExtension.build/Objects-normal/x86_64/RunningWidgetBundle.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/RunningWidgetExtension.build/Objects-normal/x86_64/RunningWidgetBundle.o"
+  }
+}

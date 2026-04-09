@@ -1,0 +1,784 @@
+{
+  "source": "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Runs/RunLogView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Delete Run?",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 435
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete Run?",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 456
+        }
+      },
+      {
+        "comment": "",
+        "key": "Runs",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 523
+        }
+      },
+      {
+        "comment": "",
+        "key": "Active %@ In Progress",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 111
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tap the + button to track your first run.",
+        "location": {
+          "startingColumn": 51,
+          "startingLine": 210
+        }
+      },
+      {
+        "comment": "",
+        "key": "No Runs Logged",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 208
+        }
+      },
+      {
+        "comment": "",
+        "key": "All",
+        "location": {
+          "startingColumn": 40,
+          "startingLine": 165
+        }
+      },
+      {
+        "comment": "",
+        "key": "Total Distance Per Day",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 195
+        }
+      },
+      {
+        "comment": "",
+        "key": "Steps Today %@",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 200
+        }
+      },
+      {
+        "comment": "",
+        "key": "Date",
+        "location": {
+          "startingColumn": 47,
+          "startingLine": 216
+        }
+      },
+      {
+        "comment": "",
+        "key": "Distance (%@)",
+        "location": {
+          "startingColumn": 47,
+          "startingLine": 217
+        }
+      },
+      {
+        "comment": "",
+        "key": "Date",
+        "location": {
+          "startingColumn": 47,
+          "startingLine": 224
+        }
+      },
+      {
+        "comment": "",
+        "key": "Distance (%@)",
+        "location": {
+          "startingColumn": 47,
+          "startingLine": 225
+        }
+      },
+      {
+        "comment": "",
+        "key": "Selected",
+        "location": {
+          "startingColumn": 56,
+          "startingLine": 234
+        }
+      },
+      {
+        "comment": "",
+        "key": "Date",
+        "location": {
+          "startingColumn": 51,
+          "startingLine": 239
+        }
+      },
+      {
+        "comment": "",
+        "key": "Distance (%@)",
+        "location": {
+          "startingColumn": 51,
+          "startingLine": 240
+        }
+      },
+      {
+        "comment": "",
+        "key": "+ %lld more",
+        "location": {
+          "startingColumn": 50,
+          "startingLine": 330
+        }
+      },
+      {
+        "comment": "",
+        "key": "Total Distance",
+        "location": {
+          "startingColumn": 50,
+          "startingLine": 294
+        }
+      },
+      {
+        "comment": "",
+        "key": "Activities",
+        "location": {
+          "startingColumn": 50,
+          "startingLine": 302
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 50,
+          "startingLine": 305
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@ %@",
+        "location": {
+          "startingColumn": 54,
+          "startingLine": 319
+        }
+      },
+      {
+        "comment": "",
+        "key": "•",
+        "location": {
+          "startingColumn": 54,
+          "startingLine": 321
+        }
+      },
+      {
+        "comment": "",
+        "key": "Quick View",
+        "location": {
+          "startingColumn": 51,
+          "startingLine": 379
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete",
+        "location": {
+          "startingColumn": 51,
+          "startingLine": 388
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete",
+        "location": {
+          "startingColumn": 51,
+          "startingLine": 396
+        }
+      },
+      {
+        "comment": "",
+        "key": "Showing %lld of %lld runs",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 406
+        }
+      },
+      {
+        "comment": "",
+        "key": "Load 30 More",
+        "location": {
+          "startingColumn": 44,
+          "startingLine": 412
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 436
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete on Device",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 437
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete on Device + Health",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 441
+        }
+      },
+      {
+        "comment": "",
+        "key": "Also remove this workout from the Health app?",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 454
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 457
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete on Device",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 458
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete on Device + Health",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 469
+        }
+      },
+      {
+        "comment": "",
+        "key": "Also remove this workout from the Health app?",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 485
+        }
+      },
+      {
+        "comment": "",
+        "key": "Loading Run...",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 497
+        }
+      },
+      {
+        "comment": "",
+        "key": "Done",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 532
+        }
+      },
+      {
+        "comment": "",
+        "key": "Edit",
+        "location": {
+          "startingColumn": 51,
+          "startingLine": 532
+        }
+      },
+      {
+        "comment": "",
+        "key": "Running Assistant",
+        "location": {
+          "startingColumn": 49,
+          "startingLine": 542
+        }
+      },
+      {
+        "comment": "",
+        "key": "Run",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 550
+        }
+      },
+      {
+        "comment": "",
+        "key": "Walk",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 556
+        }
+      },
+      {
+        "comment": "",
+        "key": "Hike",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 562
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cycle",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 568
+        }
+      },
+      {
+        "comment": "",
+        "key": "Row",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 574
+        }
+      },
+      {
+        "comment": "",
+        "key": "Track Activity",
+        "location": {
+          "startingColumn": 49,
+          "startingLine": 579
+        }
+      },
+      {
+        "comment": "",
+        "key": "Save Failed",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 654
+        }
+      },
+      {
+        "comment": "",
+        "key": "OK",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 658
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@ %@ • %@ kcal",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 1357
+        }
+      },
+      {
+        "comment": "",
+        "key": "•",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 1361
+        }
+      },
+      {
+        "comment": "",
+        "key": "Location",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1569
+        }
+      },
+      {
+        "comment": "",
+        "key": "Notes",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1578
+        }
+      },
+      {
+        "comment": "",
+        "key": "Run Details",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 1887
+        }
+      },
+      {
+        "comment": "",
+        "key": "View",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 1763
+        }
+      },
+      {
+        "comment": "",
+        "key": "Overview",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 1764
+        }
+      },
+      {
+        "comment": "",
+        "key": "Stats",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 1765
+        }
+      },
+      {
+        "comment": "",
+        "key": "Time",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 1788
+        }
+      },
+      {
+        "comment": "",
+        "key": "Details",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1808
+        }
+      },
+      {
+        "comment": "",
+        "key": "Date: %@",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1810
+        }
+      },
+      {
+        "comment": "",
+        "key": "Calories: %@ kcal",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 1812
+        }
+      },
+      {
+        "comment": "",
+        "key": "Calories (est.): %@ kcal",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 1814
+        }
+      },
+      {
+        "comment": "",
+        "key": "Estimated calories are based on speed and your latest weight. Actual burn varies.",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 1815
+        }
+      },
+      {
+        "comment": "",
+        "key": "Notes: %@",
+        "location": {
+          "startingColumn": 61,
+          "startingLine": 1819
+        }
+      },
+      {
+        "comment": "",
+        "key": "Route",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1826
+        }
+      },
+      {
+        "comment": "",
+        "key": "This run doesn't include route data.",
+        "location": {
+          "startingColumn": 111,
+          "startingLine": 1863
+        }
+      },
+      {
+        "comment": "",
+        "key": "No Route Recorded",
+        "location": {
+          "startingColumn": 52,
+          "startingLine": 1863
+        }
+      },
+      {
+        "comment": "",
+        "key": "Time & Distance",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 2401
+        }
+      },
+      {
+        "comment": "",
+        "key": "Performance",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 2423
+        }
+      },
+      {
+        "comment": "",
+        "key": "Power data from compatible meters (Stryd, Garmin, etc.)",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 2461
+        }
+      },
+      {
+        "comment": "",
+        "key": "Power",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 2445
+        }
+      },
+      {
+        "comment": "",
+        "key": "Heart rate from Apple Watch or compatible chest strap",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 2498
+        }
+      },
+      {
+        "comment": "",
+        "key": "Heart Rate",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 2475
+        }
+      },
+      {
+        "comment": "",
+        "key": "Elevation calculated from GPS altitude data (requires physical device with GPS)",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 2535
+        }
+      },
+      {
+        "comment": "",
+        "key": "Elevation",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 2513
+        }
+      },
+      {
+        "comment": "",
+        "key": "Running dynamics from Apple Watch Series 6+ or compatible devices",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 2575
+        }
+      },
+      {
+        "comment": "",
+        "key": "Running Dynamics",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 2549
+        }
+      },
+      {
+        "comment": "",
+        "key": "Elevation Profile",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 2589
+        }
+      },
+      {
+        "comment": "",
+        "key": "Time",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 2604
+        }
+      },
+      {
+        "comment": "",
+        "key": "Min",
+        "location": {
+          "startingColumn": 48,
+          "startingLine": 2605
+        }
+      },
+      {
+        "comment": "",
+        "key": "Max",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 2606
+        }
+      },
+      {
+        "comment": "",
+        "key": "Time",
+        "location": {
+          "startingColumn": 47,
+          "startingLine": 2596
+        }
+      },
+      {
+        "comment": "",
+        "key": "Elevation",
+        "location": {
+          "startingColumn": 47,
+          "startingLine": 2597
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lldm",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 2615
+        }
+      },
+      {
+        "comment": "",
+        "key": "Heart Rate Profile",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 2636
+        }
+      },
+      {
+        "comment": "",
+        "key": "Avg: %lld bpm",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 2640
+        }
+      },
+      {
+        "comment": "",
+        "key": "Time",
+        "location": {
+          "startingColumn": 47,
+          "startingLine": 2659
+        }
+      },
+      {
+        "comment": "",
+        "key": "Min",
+        "location": {
+          "startingColumn": 52,
+          "startingLine": 2660
+        }
+      },
+      {
+        "comment": "",
+        "key": "Max",
+        "location": {
+          "startingColumn": 50,
+          "startingLine": 2661
+        }
+      },
+      {
+        "comment": "",
+        "key": "Time",
+        "location": {
+          "startingColumn": 47,
+          "startingLine": 2649
+        }
+      },
+      {
+        "comment": "",
+        "key": "BPM",
+        "location": {
+          "startingColumn": 47,
+          "startingLine": 2650
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 2671
+        }
+      },
+      {
+        "comment": "",
+        "key": "Heart Rate Profile",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 2689
+        }
+      },
+      {
+        "comment": "",
+        "key": "Splits",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 2704
+        }
+      },
+      {
+        "comment": "",
+        "key": " ",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 2784
+        }
+      },
+      {
+        "comment": "",
+        "key": "+",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 2877
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 2882
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@ %lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 2898
+        }
+      },
+      {
+        "comment": "",
+        "key": "time",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 2925
+        }
+      }
+    ]
+  },
+  "version": 1
+}

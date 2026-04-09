@@ -1,0 +1,16 @@
+{
+  "" : {
+    "const-values" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/WorkoutThumbnailExtension.build/Objects-normal/x86_64/WorkoutThumbnailExtension-primary.swiftconstvalues",
+    "dependencies" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/WorkoutThumbnailExtension.build/Objects-normal/x86_64/WorkoutThumbnailExtension-primary.d",
+    "diagnostics" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/WorkoutThumbnailExtension.build/Objects-normal/x86_64/WorkoutThumbnailExtension-primary.dia",
+    "emit-module-dependencies" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/WorkoutThumbnailExtension.build/Objects-normal/x86_64/WorkoutThumbnailExtension-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/WorkoutThumbnailExtension.build/Objects-normal/x86_64/WorkoutThumbnailExtension-primary-emit-module.dia",
+    "pch" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/WorkoutThumbnailExtension.build/Objects-normal/x86_64/WorkoutThumbnailExtension-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/WorkoutThumbnailExtension.build/Objects-normal/x86_64/WorkoutThumbnailExtension-primary.swiftdeps"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkoutThumbnailExtension/ThumbnailProvider.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/WorkoutThumbnailExtension.build/Objects-normal/x86_64/ThumbnailProvider.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/WorkoutThumbnailExtension.build/Objects-normal/x86_64/ThumbnailProvider.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/WorkoutThumbnailExtension.build/Objects-normal/x86_64/ThumbnailProvider.o"
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "source": "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Workouts/WorkoutImportView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Error Saving",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 111
+        }
+      },
+      {
+        "comment": "",
+        "key": "Import Workout",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 22
+        }
+      },
+      {
+        "comment": "",
+        "key": "Exercises",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 43
+        }
+      },
+      {
+        "comment": "",
+        "key": "Set %lld",
+        "location": {
+          "startingColumn": 50,
+          "startingLine": 55
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld:%@",
+        "location": {
+          "startingColumn": 58,
+          "startingLine": 61
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@ %@",
+        "location": {
+          "startingColumn": 58,
+          "startingLine": 65
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@ @ %@ %@",
+        "location": {
+          "startingColumn": 54,
+          "startingLine": 69
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 93
+        }
+      },
+      {
+        "comment": "",
+        "key": "Save as Template",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 105
+        }
+      },
+      {
+        "comment": "",
+        "key": "OK",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 112
+        }
+      }
+    ]
+  },
+  "version": 1
+}

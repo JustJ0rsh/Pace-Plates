@@ -1,0 +1,406 @@
+{
+  "" : {
+    "const-values" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/Pace & Plates-primary.swiftconstvalues",
+    "dependencies" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/Pace & Plates-primary.d",
+    "diagnostics" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/Pace & Plates-primary.dia",
+    "emit-module-dependencies" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/Pace & Plates-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/Pace & Plates-primary-emit-module.dia",
+    "pch" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/Pace & Plates-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/Pace & Plates-primary.swiftdeps"
+  },
+  "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/GeneratedAssetSymbols.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/App/ContentView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ContentView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ContentView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ContentView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/App/HealthAuthorizationBanner.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/HealthAuthorizationBanner.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/HealthAuthorizationBanner.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/HealthAuthorizationBanner.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/App/WorkingOutApp.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkingOutApp.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkingOutApp.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkingOutApp.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Components/FloatingTile.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/FloatingTile.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/FloatingTile.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/FloatingTile.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Components/GlassBackground.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/GlassBackground.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/GlassBackground.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/GlassBackground.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Components/MarkdownView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/MarkdownView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/MarkdownView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/MarkdownView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Components/ShareSheet.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ShareSheet.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ShareSheet.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ShareSheet.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Data/BuiltInTemplates.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/BuiltInTemplates.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/BuiltInTemplates.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/BuiltInTemplates.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Data/ExerciseLibrary.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ExerciseLibrary.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ExerciseLibrary.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ExerciseLibrary.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Data/PersistenceController.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/PersistenceController.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/PersistenceController.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/PersistenceController.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Data/RunPlanCatalog.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunPlanCatalog.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunPlanCatalog.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunPlanCatalog.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/AI/AIChatSheet.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIChatSheet.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIChatSheet.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIChatSheet.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/AI/AIConversationSheet.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIConversationSheet.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIConversationSheet.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIConversationSheet.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/AI/AIHistoryView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIHistoryView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIHistoryView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIHistoryView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/AI/AIPlannerView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIPlannerView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIPlannerView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIPlannerView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/AI/PlanSchema.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/PlanSchema.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/PlanSchema.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/PlanSchema.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/AI/StructuredPlanCards.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/StructuredPlanCards.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/StructuredPlanCards.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/StructuredPlanCards.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Community/CommunityView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/CommunityView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/CommunityView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/CommunityView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Home/HomeView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/HomeView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/HomeView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/HomeView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Home/StreakCalendarView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/StreakCalendarView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/StreakCalendarView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/StreakCalendarView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Home/Vitals/VitalsModel.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/VitalsModel.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/VitalsModel.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/VitalsModel.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Home/Vitals/VitalsSnapshotView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/VitalsSnapshotView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/VitalsSnapshotView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/VitalsSnapshotView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Home/WeatherSummaryView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WeatherSummaryView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WeatherSummaryView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WeatherSummaryView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Onboarding/TutorialView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/TutorialView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/TutorialView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/TutorialView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Runs/RunAssistantContainerView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunAssistantContainerView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunAssistantContainerView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunAssistantContainerView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Runs/RunAssistantDashboardView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunAssistantDashboardView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunAssistantDashboardView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunAssistantDashboardView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Runs/RunAssistantOnboardingView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunAssistantOnboardingView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunAssistantOnboardingView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunAssistantOnboardingView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Runs/RunAssistantProfileEditorView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunAssistantProfileEditorView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunAssistantProfileEditorView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunAssistantProfileEditorView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Runs/RunLogView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunLogView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunLogView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunLogView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Runs/RunTrackingView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunTrackingView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunTrackingView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunTrackingView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Settings/PrivacyPolicyContent.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/PrivacyPolicyContent.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/PrivacyPolicyContent.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/PrivacyPolicyContent.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Settings/PrivacyPolicyView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/PrivacyPolicyView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/PrivacyPolicyView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/PrivacyPolicyView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Settings/SettingsView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/SettingsView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/SettingsView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/SettingsView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Settings/ThemePickerView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ThemePickerView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ThemePickerView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ThemePickerView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Weight/LogWeightView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/LogWeightView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/LogWeightView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/LogWeightView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Weight/WeightLogView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WeightLogView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WeightLogView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WeightLogView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Workouts/AddExerciseView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AddExerciseView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AddExerciseView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AddExerciseView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Workouts/EditExerciseLogView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/EditExerciseLogView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/EditExerciseLogView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/EditExerciseLogView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Workouts/WorkoutImportView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutImportView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutImportView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutImportView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Workouts/WorkoutLogView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutLogView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutLogView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutLogView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Workouts/WorkoutSessionDetailView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutSessionDetailView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutSessionDetailView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutSessionDetailView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Workouts/WorkoutSessionSubviews.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutSessionSubviews.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutSessionSubviews.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutSessionSubviews.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Workouts/WorkoutTemplateListView.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutTemplateListView.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutTemplateListView.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutTemplateListView.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Models/AIConversation.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIConversation.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIConversation.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIConversation.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Models/ExerciseDefinition.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ExerciseDefinition.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ExerciseDefinition.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ExerciseDefinition.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Models/ExerciseLog.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ExerciseLog.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ExerciseLog.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ExerciseLog.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Models/Haptics.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/Haptics.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/Haptics.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/Haptics.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Models/KeyboardHelpers.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/KeyboardHelpers.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/KeyboardHelpers.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/KeyboardHelpers.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Models/RunAssistantProfile.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunAssistantProfile.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunAssistantProfile.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunAssistantProfile.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Models/RunningPlan.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunningPlan.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunningPlan.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunningPlan.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Models/RunningPlanSession.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunningPlanSession.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunningPlanSession.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunningPlanSession.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Models/RunningSession.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunningSession.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunningSession.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunningSession.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Models/TemplateExercise.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/TemplateExercise.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/TemplateExercise.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/TemplateExercise.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Models/WeightEntry.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WeightEntry.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WeightEntry.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WeightEntry.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Models/WorkoutSession.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutSession.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutSession.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutSession.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Models/WorkoutTemplate.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutTemplate.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutTemplate.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutTemplate.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/AIPromptBuilder.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIPromptBuilder.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIPromptBuilder.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIPromptBuilder.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/AIStreamSmoothing.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIStreamSmoothing.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIStreamSmoothing.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIStreamSmoothing.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/DataBackupService.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/DataBackupService.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/DataBackupService.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/DataBackupService.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/DebugDataGenerator.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/DebugDataGenerator.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/DebugDataGenerator.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/DebugDataGenerator.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/ExerciseRecommendationService.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ExerciseRecommendationService.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ExerciseRecommendationService.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ExerciseRecommendationService.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/GameCenterService.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/GameCenterService.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/GameCenterService.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/GameCenterService.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/HealthKitManager.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/HealthKitManager.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/HealthKitManager.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/HealthKitManager.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/LiveActivityManager.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/LiveActivityManager.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/LiveActivityManager.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/LiveActivityManager.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/MapSearchService.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/MapSearchService.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/MapSearchService.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/MapSearchService.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/PersistenceSave.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/PersistenceSave.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/PersistenceSave.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/PersistenceSave.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/ReminderService.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ReminderService.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ReminderService.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ReminderService.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/RunAssistantAIService.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunAssistantAIService.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunAssistantAIService.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunAssistantAIService.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/RunAssistantService.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunAssistantService.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunAssistantService.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/RunAssistantService.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/StreakService.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/StreakService.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/StreakService.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/StreakService.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/TemplateSeeder.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/TemplateSeeder.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/TemplateSeeder.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/TemplateSeeder.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/UnitConverter.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/UnitConverter.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/UnitConverter.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/UnitConverter.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/WeatherService.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WeatherService.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WeatherService.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WeatherService.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/WorkoutCalendarService.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutCalendarService.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutCalendarService.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutCalendarService.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/WorkoutPlanGenerator.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutPlanGenerator.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutPlanGenerator.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutPlanGenerator.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/WorkoutSharingService.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutSharingService.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutSharingService.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutSharingService.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/WorkoutTemplateService.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutTemplateService.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutTemplateService.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutTemplateService.o"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Theme/AppTheme.swift" : {
+    "index-unit-output-path" : "/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AppTheme.o",
+    "llvm-bc" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AppTheme.bc",
+    "object" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/Pace & Plates.build/Release-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AppTheme.o"
+  }
+}

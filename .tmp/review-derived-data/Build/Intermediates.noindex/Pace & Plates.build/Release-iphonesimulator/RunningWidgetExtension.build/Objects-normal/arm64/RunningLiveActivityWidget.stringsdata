@@ -1,0 +1,104 @@
+{
+  "source": "/Users/joshua/Developer/Pace & Plates/RunningWidget/RunningLiveActivityWidget.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "%@ %@",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 67
+        }
+      },
+      {
+        "comment": "",
+        "key": "Distance",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 64
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@/%@",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 79
+        }
+      },
+      {
+        "comment": "",
+        "key": "Pace",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 76
+        }
+      },
+      {
+        "comment": "",
+        "key": "Active Run",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 88
+        }
+      },
+      {
+        "comment": "",
+        "key": "Running",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 104
+        }
+      },
+      {
+        "comment": "",
+        "key": "LIVE",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 116
+        }
+      },
+      {
+        "comment": "",
+        "key": "LIVE",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 162
+        }
+      },
+      {
+        "comment": "",
+        "key": "Distance",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 173
+        }
+      },
+      {
+        "comment": "",
+        "key": "Time",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 190
+        }
+      },
+      {
+        "comment": "",
+        "key": "Pace",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 202
+        }
+      },
+      {
+        "comment": "",
+        "key": "/%@",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 210
+        }
+      }
+    ]
+  },
+  "version": 1
+}

@@ -1,0 +1,69 @@
+{
+  "buildCommand" : {
+    "command" : "build",
+    "skipDependencies" : false,
+    "style" : "buildOnly"
+  },
+  "configuredTargets" : [
+    {
+      "guid" : "0ad3c2820613b2603d999f937b0771de6aa194b042e133b0547dca4ed6033695"
+    },
+    {
+      "guid" : "0ad3c2820613b2603d999f937b0771deddd89822722a3e87e052047ab25f2bbc"
+    }
+  ],
+  "containerPath" : "/Users/joshua/Developer/Pace & Plates/Pace & Plates.xcodeproj",
+  "continueBuildingAfterErrors" : false,
+  "dependencyScope" : "workspace",
+  "enableIndexBuildArena" : false,
+  "hideShellScriptEnvironment" : false,
+  "parameters" : {
+    "action" : "build",
+    "activeArchitecture" : "undefined_arch",
+    "activeRunDestination" : {
+      "disableOnlyActiveArch" : true,
+      "platform" : "iphonesimulator",
+      "sdk" : "iphonesimulator26.2",
+      "sdkVariant" : "iphonesimulator",
+      "supportedArchitectures" : [
+        "i386",
+        "x86_64"
+      ],
+      "targetArchitecture" : "undefined_arch"
+    },
+    "arenaInfo" : {
+      "buildIntermediatesPath" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex",
+      "buildProductsPath" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Products",
+      "derivedDataPath" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data",
+      "indexDataStoreFolderPath" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Index.noindex/DataStore",
+      "indexEnableDataStore" : true,
+      "indexPCHPath" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Index.noindex/PrecompiledHeaders",
+      "pchPath" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/Intermediates.noindex/PrecompiledHeaders"
+    },
+    "configurationName" : "Release",
+    "overrides" : {
+      "commandLine" : {
+        "table" : {
+          "CODE_SIGNING_ALLOWED" : "NO",
+          "SDKROOT" : "iphonesimulator26.2"
+        }
+      },
+      "synthesized" : {
+        "table" : {
+          "ACTION" : "build",
+          "CLANG_COVERAGE_MAPPING" : "YES",
+          "CLANG_PROFILE_DATA_DIRECTORY" : "/Users/joshua/Developer/Pace & Plates/.tmp/review-derived-data/Build/ProfileData",
+          "ENABLE_PREVIEWS" : "NO",
+          "ENABLE_XOJIT_PREVIEWS" : "YES",
+          "ONLY_ACTIVE_ARCH" : "YES"
+        }
+      }
+    }
+  },
+  "schemeCommand" : "launch",
+  "showNonLoggedProgress" : true,
+  "useDryRun" : false,
+  "useImplicitDependencies" : true,
+  "useLegacyBuildLocations" : false,
+  "useParallelTargets" : true
+}

@@ -1,0 +1,16 @@
+{
+  "source": "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Settings/PrivacyPolicyView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Privacy Policy",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 31
+        }
+      }
+    ]
+  },
+  "version": 1
+}

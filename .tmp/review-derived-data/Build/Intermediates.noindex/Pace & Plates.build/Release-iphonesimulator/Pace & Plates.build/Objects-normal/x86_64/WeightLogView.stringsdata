@@ -1,0 +1,240 @@
+{
+  "source": "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Weight/WeightLogView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Weight",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 150
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete Weight Entry?",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 186
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tap the + button to add your first weight entry.",
+        "location": {
+          "startingColumn": 51,
+          "startingLine": 94
+        }
+      },
+      {
+        "comment": "",
+        "key": "No Weight Logged",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 92
+        }
+      },
+      {
+        "comment": "",
+        "key": "Body Weight",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 76
+        }
+      },
+      {
+        "comment": "",
+        "key": "History",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 103
+        }
+      },
+      {
+        "comment": "",
+        "key": "Quick View",
+        "location": {
+          "startingColumn": 51,
+          "startingLine": 121
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete",
+        "location": {
+          "startingColumn": 51,
+          "startingLine": 128
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete",
+        "location": {
+          "startingColumn": 51,
+          "startingLine": 136
+        }
+      },
+      {
+        "comment": "",
+        "key": "Done",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 159
+        }
+      },
+      {
+        "comment": "",
+        "key": "Edit",
+        "location": {
+          "startingColumn": 47,
+          "startingLine": 159
+        }
+      },
+      {
+        "comment": "",
+        "key": "Log Weight",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 169
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 187
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 188
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete the weight entry from %@?",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 203
+        }
+      },
+      {
+        "comment": "",
+        "key": "Save Failed",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 210
+        }
+      },
+      {
+        "comment": "",
+        "key": "OK",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 214
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@ %@",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 336
+        }
+      },
+      {
+        "comment": "",
+        "key": "Weight Entry",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 370
+        }
+      },
+      {
+        "comment": "",
+        "key": "Change From Previous Entry",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 386
+        }
+      },
+      {
+        "comment": "",
+        "key": "Date",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 449
+        }
+      },
+      {
+        "comment": "",
+        "key": "Weight",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 450
+        }
+      },
+      {
+        "comment": "",
+        "key": "Selected",
+        "location": {
+          "startingColumn": 40,
+          "startingLine": 461
+        }
+      },
+      {
+        "comment": "",
+        "key": "Date",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 466
+        }
+      },
+      {
+        "comment": "",
+        "key": "Weight",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 467
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld entries this day",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 555
+        }
+      },
+      {
+        "comment": "",
+        "key": "Weight",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 524
+        }
+      },
+      {
+        "comment": "",
+        "key": "Change",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 539
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@ %@",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 586
+        }
+      }
+    ]
+  },
+  "version": 1
+}

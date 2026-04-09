@@ -331,7 +331,7 @@ struct SettingsView: View {
                     Text("Version")
                         .foregroundColor(AppTheme.textColor)
                     Spacer()
-                    Text("2.1")
+                    Text("2.2")
                         .foregroundStyle(.secondary)
                 }
             }

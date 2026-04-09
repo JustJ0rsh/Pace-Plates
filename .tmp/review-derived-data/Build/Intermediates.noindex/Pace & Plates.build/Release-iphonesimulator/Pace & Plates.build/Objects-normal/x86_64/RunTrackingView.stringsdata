@@ -1,0 +1,152 @@
+{
+  "source": "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Runs/RunTrackingView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Tracking %@",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 794
+        }
+      },
+      {
+        "comment": "",
+        "key": "Error",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 844
+        }
+      },
+      {
+        "comment": "",
+        "key": "We need your location to track this %@.",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 556
+        }
+      },
+      {
+        "comment": "",
+        "key": "Allow",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 559
+        }
+      },
+      {
+        "comment": "",
+        "key": "Location access is off. Enable it in Settings to start this %@.",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 571
+        }
+      },
+      {
+        "comment": "",
+        "key": "Open Settings",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 574
+        }
+      },
+      {
+        "comment": "",
+        "key": "Duration",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 655
+        }
+      },
+      {
+        "comment": "",
+        "key": "Distance (%@)",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 663
+        }
+      },
+      {
+        "comment": "",
+        "key": "Pace (/%@)",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 670
+        }
+      },
+      {
+        "comment": "",
+        "key": "Start",
+        "location": {
+          "startingColumn": 58,
+          "startingLine": 705
+        }
+      },
+      {
+        "comment": "",
+        "key": "Resume",
+        "location": {
+          "startingColumn": 68,
+          "startingLine": 705
+        }
+      },
+      {
+        "comment": "",
+        "key": "Stop & Save",
+        "location": {
+          "startingColumn": 39,
+          "startingLine": 721
+        }
+      },
+      {
+        "comment": "",
+        "key": "Stop & Save",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 741
+        }
+      },
+      {
+        "comment": "",
+        "key": "Pause",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 757
+        }
+      },
+      {
+        "comment": "",
+        "key": "Stop & Save",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 772
+        }
+      },
+      {
+        "comment": "",
+        "key": "Center on current location",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 809
+        }
+      },
+      {
+        "comment": "",
+        "key": "Done",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 811
+        }
+      },
+      {
+        "comment": "",
+        "key": "OK",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 845
+        }
+      }
+    ]
+  },
+  "version": 1
+}

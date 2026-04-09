@@ -22,8 +22,7 @@ struct WorkoutSessionDetailView: View {
     @State private var titleSaveWorkItem: DispatchWorkItem? = nil
     @State private var showingAddExercise: Bool = false
     @State private var showingDatePicker: Bool = false
-    @State private var shareItems: [Any] = []
-    @State private var showingShareSheet: Bool = false
+    @State private var sharePayload: ShareSheetPayload? = nil
     @State private var shareErrorMessage: String? = nil
     @FocusState private var notesFocused: Bool
     @FocusState private var titleFocused: Bool
@@ -101,10 +100,8 @@ struct WorkoutSessionDetailView: View {
             .presentationDetents([.medium])
             .presentationBackground(AppTheme.backgroundColor)
         }
-        .sheet(isPresented: $showingShareSheet, onDismiss: {
-            shareItems = []
-        }) {
-            ShareSheet(items: shareItems)
+        .sheet(item: $sharePayload) { payload in
+            ShareSheet(items: payload.items)
         }
         .alert("Unable to Share", isPresented: Binding(
             get: { shareErrorMessage != nil },
@@ -418,12 +415,9 @@ struct WorkoutSessionDetailView: View {
     
     private var shareMenu: some View {
         Menu {
-            ShareLink(
-                item: sharedWorkoutSession,
-                subject: Text(workoutShareSubject),
-                message: Text(workoutShareMessage),
-                preview: SharePreview(workoutShareSubject)
-            ) {
+            Button {
+                shareWorkoutFile()
+            } label: {
                 Label("Share Workout File", systemImage: "square.and.arrow.up")
             }
             
@@ -443,31 +437,35 @@ struct WorkoutSessionDetailView: View {
         }
     }
 
+    private func shareWorkoutFile() {
+        guard let fileURL = WorkoutSharingService.shared.exportWorkout(session: session) else {
+            shareErrorMessage = "Could not create a workout file to share."
+            return
+        }
+
+        presentShareSheet(with: [fileURL])
+    }
+
     private func shareTextSummary(includeData: Bool) {
         let text = generateShareText(includeData: includeData)
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             shareErrorMessage = "There is no workout content to share yet."
             return
         }
-        shareItems = [text]
-        showingShareSheet = true
+        presentShareSheet(with: [text])
     }
 
-    private var sharedWorkoutSession: SharedWorkoutSession {
-        WorkoutSharingService.shared.convertToShared(session)
-    }
-
-    private var workoutShareSubject: String {
-        let trimmedTitle = session.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmedTitle.isEmpty ? "Workout" : trimmedTitle
-    }
-
-    private var workoutShareMessage: String {
-        "Workout file from Pace & Plates. Open it in Pace & Plates to import."
+    private func presentShareSheet(with items: [Any]) {
+        sharePayload = ShareSheetPayload(items: items)
     }
 }
 
 // MARK: - Subviews
+
+private struct ShareSheetPayload: Identifiable {
+    let id = UUID()
+    let items: [Any]
+}
 
 struct ExerciseLogRow: View {
     @Environment(\.modelContext) private var modelContext

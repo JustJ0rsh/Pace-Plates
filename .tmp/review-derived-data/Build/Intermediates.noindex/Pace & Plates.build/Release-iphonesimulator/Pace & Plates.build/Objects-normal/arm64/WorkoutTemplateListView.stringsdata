@@ -1,0 +1,216 @@
+{
+  "source": "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Workouts/WorkoutTemplateListView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Workout Templates",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 380
+        }
+      },
+      {
+        "comment": "",
+        "key": "Built-in templates will appear here. Create custom templates from AI workout plans in the AI History.",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 165
+        }
+      },
+      {
+        "comment": "",
+        "key": "No Templates Yet",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 163
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld days",
+        "location": {
+          "startingColumn": 50,
+          "startingLine": 265
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete",
+        "location": {
+          "startingColumn": 55,
+          "startingLine": 295
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete",
+        "location": {
+          "startingColumn": 55,
+          "startingLine": 324
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld exercises",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 542
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld min",
+        "location": {
+          "startingColumn": 39,
+          "startingLine": 526
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld exercises",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 611
+        }
+      },
+      {
+        "comment": "",
+        "key": "Created %@",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 615
+        }
+      },
+      {
+        "comment": "",
+        "key": "Template",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 732
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete Template?",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 745
+        }
+      },
+      {
+        "comment": "",
+        "key": "Template Details",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 658
+        }
+      },
+      {
+        "comment": "",
+        "key": "Created %@",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 666
+        }
+      },
+      {
+        "comment": "",
+        "key": "Exercises",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 682
+        }
+      },
+      {
+        "comment": "",
+        "key": "No exercises in this template",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 692
+        }
+      },
+      {
+        "comment": "",
+        "key": "Start Workout",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 710
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete Template",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 719
+        }
+      },
+      {
+        "comment": "",
+        "key": "Close",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 739
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 746
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 747
+        }
+      },
+      {
+        "comment": "",
+        "key": "This will permanently delete the template '%@'. This action cannot be undone.",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 754
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 765
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld×%lld",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 779
+        }
+      },
+      {
+        "comment": "",
+        "key": "Activity",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 797
+        }
+      },
+      {
+        "comment": "",
+        "key": "@ %@ %@",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 803
+        }
+      }
+    ]
+  },
+  "version": 1
+}
