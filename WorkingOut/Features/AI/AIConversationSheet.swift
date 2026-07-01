@@ -865,7 +865,7 @@ struct AIConversationSheet: View {
             goal: request.goal,
             prompt: promptText,
             response: content,
-            model: WorkoutPlanGenerator.shared.availability() == .available ? "on-device" : "template",
+            model: WorkoutPlanGenerator.shared.persistenceModelIdentifier(),
             structuredPlanJSON: structuredPlanJSON
         )
         modelContext.insert(convo)
@@ -890,7 +890,7 @@ struct AIConversationSheet: View {
                     goal: request.goal,
                     prompt: promptText,
                     response: content,
-                    model: "on-device"
+                    model: WorkoutPlanGenerator.shared.persistenceModelIdentifier()
                 )
                 
                 do {
@@ -932,7 +932,7 @@ struct AIConversationSheet: View {
             goal: request.goal,
             prompt: promptText,
             response: content,
-            model: WorkoutPlanGenerator.shared.availability() == .available ? "on-device" : "template",
+            model: WorkoutPlanGenerator.shared.persistenceModelIdentifier(),
             structuredPlanJSON: structuredPlanJSON
         )
         

@@ -4,6 +4,7 @@ struct CommunityView: View {
     @State private var showSignInError: String? = nil
     @State private var isAuthenticating = false
     @State private var didRequestGameCenterAccess = false
+    @State private var authTimeoutTask: Task<Void, Never>?
 
     var body: some View {
         List {
@@ -36,10 +37,28 @@ struct CommunityView: View {
         } message: { Text(showSignInError ?? "") }
         .onAppear {
             guard !didRequestGameCenterAccess else { return }
-            didRequestGameCenterAccess = true
-            isAuthenticating = true
+            requestGameCenterAccess()
+        }
+        .onDisappear {
+            authTimeoutTask?.cancel()
+        }
+    }
 
-            GameCenterService.shared.enableCommunityAccessAndAuthenticate { error in
+    private func requestGameCenterAccess() {
+        didRequestGameCenterAccess = true
+        isAuthenticating = true
+
+        authTimeoutTask?.cancel()
+        authTimeoutTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            guard !Task.isCancelled, isAuthenticating else { return }
+            isAuthenticating = false
+            showSignInError = "Game Center is taking longer than expected. You can keep using the app and try again from Leaderboards or Achievements."
+        }
+
+        GameCenterService.shared.enableCommunityAccessAndAuthenticate { error in
+            Task { @MainActor in
+                authTimeoutTask?.cancel()
                 isAuthenticating = false
                 if let error {
                     showSignInError = error.localizedDescription

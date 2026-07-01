@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import HealthKit
 #if canImport(AppleIntelligence)
 import AppleIntelligence
 #endif
@@ -52,15 +53,33 @@ final class WorkoutPlanGenerator {
 
     #if canImport(FoundationModels)
     @available(iOS 26, *)
+    private static func generationOptions(
+        sampling: GenerationOptions.SamplingMode,
+        temperature: Double
+    ) -> GenerationOptions {
+        #if compiler(>=6.4)
+        return GenerationOptions(
+            samplingMode: sampling,
+            temperature: temperature
+        )
+        #else
+        return GenerationOptions(
+            sampling: sampling,
+            temperature: temperature
+        )
+        #endif
+    }
+
+    @available(iOS 26, *)
     private static func generationOptionsForAsk(profile: AskGenerationProfile) -> GenerationOptions {
         switch profile {
         case .conversational:
-            return GenerationOptions(
+            return generationOptions(
                 sampling: .random(probabilityThreshold: 0.96),
                 temperature: 0.9
             )
         case .strictStructuredOutput:
-            return GenerationOptions(
+            return generationOptions(
                 sampling: .random(probabilityThreshold: 0.72),
                 temperature: 0.35
             )
@@ -69,7 +88,7 @@ final class WorkoutPlanGenerator {
 
     @available(iOS 26, *)
     private static func generationOptionsForPlan() -> GenerationOptions {
-        GenerationOptions(
+        generationOptions(
             sampling: .random(probabilityThreshold: 0.9),
             temperature: 0.55
         )
@@ -99,50 +118,36 @@ final class WorkoutPlanGenerator {
     #endif
 
     // Availability check: iOS 26+ devices with Apple Intelligence can run on‑device.
-    // We conservatively return .unavailable unless the build defines AI_FOUNDATION_AVAILABLE.
     func availability() -> Availability {
-        #if AI_FOUNDATION_AVAILABLE
-        if #available(iOS 26, *) {
-            #if canImport(FoundationModels)
-            // Use the real Apple Intelligence API to check availability
-            let model = SystemLanguageModel.default
-            
-            switch model.availability {
-            case .available:
-                // Apple Intelligence is available and enabled
-                return .available
-            case .unavailable(.deviceNotEligible):
-                // Device doesn't support Apple Intelligence
-                return .unavailable
-            case .unavailable(.appleIntelligenceNotEnabled):
-                // Apple Intelligence is supported but not enabled in Settings
-                return .unavailable
-            case .unavailable(.modelNotReady):
-                // Model is downloading or not ready yet
-                return .unavailable
-            case .unavailable:
-                // Any other unavailable reason
-                return .unavailable
-            @unknown default:
-                return .unavailable
+        AIProviderManager.currentStatus().canGenerateNow ? .available : .unavailable
+    }
+
+    func currentProviderStatus() -> AIProviderStatus {
+        AIProviderManager.currentStatus()
+    }
+
+    func persistenceModelIdentifier() -> String {
+        let status = AIProviderManager.currentStatus()
+        switch status.effectiveProvider {
+        case .appleIntelligence:
+            return AIResolvedProvider.appleIntelligence.rawValue
+        case .openRouter:
+            if let modelID = status.openRouterModelID, !modelID.isEmpty {
+                return "openrouter/\(modelID)"
             }
-            #else
-            // Build flag is set but FoundationModels couldn't be imported
-            return .unavailable
-            #endif
-        } else {
-            // iOS version too old (< iOS 26)
-            return .unavailable
+            return AIResolvedProvider.openRouter.rawValue
         }
-        #else
-        // Build flag not set - device doesn't support it or build config excludes it
-        return .unavailable
-        #endif
     }
 
     // Prewarm on AI tab open to reduce first-token latency
     @MainActor
     func prewarmIfPossible() async {
+        let status = AIProviderManager.currentStatus()
+        guard status.effectiveProvider == .appleIntelligence,
+              status.appleIntelligenceStatus.canGenerateNow else {
+            return
+        }
+
         #if AI_FOUNDATION_AVAILABLE
         if #available(iOS 26, *) {
             #if canImport(FoundationModels)
@@ -162,6 +167,9 @@ final class WorkoutPlanGenerator {
     /// Reset/offload the model sessions to clear context and free memory
     @MainActor
     func resetModelContext() {
+        let status = AIProviderManager.currentStatus()
+        guard status.effectiveProvider == .appleIntelligence else { return }
+
         #if AI_FOUNDATION_AVAILABLE
         if #available(iOS 26, *) {
             #if canImport(FoundationModels)
@@ -204,12 +212,18 @@ final class WorkoutPlanGenerator {
         }
         Self.lastStructuredPlanJSON = nil
 
-        let availability = availability()
-        switch availability {
-        case .available:
+        let status = AIProviderManager.currentStatus()
+        switch status.effectiveProvider {
+        case .appleIntelligence:
+            guard status.appleIntelligenceStatus.canGenerateNow else {
+                return unavailableStream(message: status.unavailableDescription)
+            }
             return generatePlanStreamOnDevice(request: request)
-        case .unavailable, .unknown:
-            return generatePlanStreamFromTemplate(request: request)
+        case .openRouter:
+            guard let apiKey = AIProviderManager.loadOpenRouterKey() else {
+                return unavailableStream(message: status.unavailableDescription)
+            }
+            return generatePlanStreamOpenRouter(request: request, apiKey: apiKey)
         }
     }
 
@@ -217,10 +231,31 @@ final class WorkoutPlanGenerator {
     func generateAskStream(request: WorkoutPlanRequest,
                            history: [(String, String)],
                            profile: AskGenerationProfile = .conversational) -> AsyncThrowingStream<String, Error> {
+        let status = AIProviderManager.currentStatus()
+        let conversationContext = Self.conversationContext(
+            for: request.extraContext,
+            history: history
+        )
+        switch status.effectiveProvider {
+        case .appleIntelligence:
+            guard status.appleIntelligenceStatus.canGenerateNow else {
+                return unavailableStream(message: status.unavailableDescription)
+            }
+        case .openRouter:
+            guard let apiKey = AIProviderManager.loadOpenRouterKey() else {
+                return unavailableStream(message: status.unavailableDescription)
+            }
+            return generateAskStreamOpenRouter(
+                request: request,
+                apiKey: apiKey,
+                profile: profile,
+                conversationContext: conversationContext
+            )
+        }
+
         #if AI_FOUNDATION_AVAILABLE
         if #available(iOS 26, *) {
             #if canImport(FoundationModels)
-            // Do not include previous conversation context in Ask to minimize tokens
             return AsyncThrowingStream { continuation in
                 Task {
                     do {
@@ -246,7 +281,8 @@ final class WorkoutPlanGenerator {
                             weightUnit: request.weightUnit,
                             distanceUnit: request.distanceUnit,
                             userStats: userStats,
-                            equipment: equipment
+                            equipment: equipment,
+                            conversationContext: conversationContext
                         )
                         // Extra-safe cap for Ask prompts
                         if prompt.count > 900 { prompt = String(prompt.prefix(900)) }
@@ -312,31 +348,75 @@ final class WorkoutPlanGenerator {
         return generatePlanStreamFromTemplate(request: request)
     }
 
+    private func unavailableStream(message: String) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.yield(message)
+            continuation.finish()
+        }
+    }
+
     // Web search disabled - always false
 
-    private static func compactAssistantContext(history: [(String, String)], maxChars: Int) -> [String] {
-        // Take last few assistant messages only, avoid repeating user's text
-        let assistants = history.reversed().filter { $0.0.lowercased().contains("assistant") }.prefix(3).map { $0.1 }
-        var bullets: [String] = []
-        for text in assistants {
-            // Extract first few lines; strip markdown list markers to keep short
-            let lines = text.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n").prefix(6)
-            for l in lines {
-                let trimmed = l.trimmingCharacters(in: .whitespaces)
-                if trimmed.isEmpty { continue }
-                let clean = trimmed.replacingOccurrences(of: "^- ", with: "", options: .regularExpression)
-                bullets.append(clean)
+    private static func conversationContext(
+        for currentQuestion: String,
+        history: [(String, String)],
+        maxChars: Int = 420
+    ) -> String? {
+        let normalizedQuestion = normalizedConversationText(currentQuestion)
+        var recentTurns = history.compactMap { role, text -> (String, String)? in
+            let cleaned = normalizedConversationText(text)
+            guard !cleaned.isEmpty else { return nil }
+
+            let lower = cleaned.lowercased()
+            guard lower != "generating..."
+                && lower != "generating…"
+                && lower != "no response generated. please try again."
+                && lower != "unable to generate response. please try again." else {
+                return nil
             }
+
+            return (role, cleaned)
         }
-        var out: [String] = []
-        var total = 0
-        for b in bullets {
-            let add = b
-            if total + add.count > maxChars { break }
-            out.append(add)
-            total += add.count
+
+        if let lastTurn = recentTurns.last,
+           lastTurn.0.lowercased().contains("user"),
+           normalizedConversationText(lastTurn.1) == normalizedQuestion {
+            recentTurns.removeLast()
         }
-        return out
+
+        var lines: [String] = []
+        if let summary = lastConversationSummary?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !summary.isEmpty {
+            lines.append("Summary: \(summary)")
+        }
+
+        for (role, text) in recentTurns.suffix(4) {
+            let preview = String(text.prefix(160))
+            lines.append("\(role): \(preview)")
+        }
+
+        guard !lines.isEmpty else { return nil }
+
+        var assembled: [String] = []
+        var totalChars = 0
+        for line in lines {
+            let proposed = totalChars == 0 ? line.count : line.count + 1
+            if totalChars + proposed > maxChars { break }
+            assembled.append(line)
+            totalChars += proposed
+        }
+
+        guard !assembled.isEmpty else { return nil }
+        return assembled.joined(separator: "\n")
+    }
+
+    private static func normalizedConversationText(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: On‑device (Apple Intelligence)
@@ -433,6 +513,121 @@ final class WorkoutPlanGenerator {
         return AsyncThrowingStream { continuation in
             continuation.yield(message)
             continuation.finish()
+        }
+    }
+
+    private func generatePlanStreamOpenRouter(
+        request: WorkoutPlanRequest,
+        apiKey: String
+    ) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            Task {
+                do {
+                    let userStats = await Self.collectRecentStats(
+                        context: request.modelContext,
+                        weightUnit: request.weightUnit,
+                        distanceUnit: request.distanceUnit
+                    )
+                    let prompt = AIPromptBuilder.buildOpenRouterStructuredPlanPrompt(
+                        goal: request.goal,
+                        context: request.extraContext,
+                        weightUnit: request.weightUnit,
+                        distanceUnit: request.distanceUnit,
+                        userStats: userStats
+                    )
+                    let completion = try await OpenRouterAIService.shared.completeStructuredJSON(
+                        systemPrompt: Self.openRouterPlanSystemPrompt,
+                        userPrompt: prompt,
+                        apiKey: apiKey,
+                        temperature: 0.35,
+                        maxTokens: AIUsageBudgetManager.openRouterWorkoutPlanOutputTokenLimit
+                    )
+                    AIProviderManager.setCurrentOpenRouterModelID(completion.modelID)
+
+                    let decodedPlan = try Self.decodeStructuredPlan(from: completion.text)
+                    let normalizedPlan = Self.normalizePlan(decodedPlan)
+                    Self.lastStructuredPlanJSON = Self.encodeStructuredPlanJSON(normalizedPlan)
+
+                    let finalMarkdown = Self.formatMarkdown(
+                        from: normalizedPlan,
+                        weightUnit: request.weightUnit,
+                        distanceUnit: request.distanceUnit
+                    )
+                    for piece in AIStreamSmoothing.wordChunked(finalMarkdown, maxChunkChars: 52) {
+                        if Task.isCancelled { break }
+                        continuation.yield(piece)
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
+    }
+
+    private func generateAskStreamOpenRouter(
+        request: WorkoutPlanRequest,
+        apiKey: String,
+        profile: AskGenerationProfile,
+        conversationContext: String?
+    ) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            Task {
+                do {
+                    let userStats = await Self.collectRecentStats(
+                        context: request.modelContext,
+                        weightUnit: request.weightUnit,
+                        distanceUnit: request.distanceUnit
+                    )
+                    let equipment = UserDefaults.standard.string(forKey: "userEquipment")
+                    var prompt = AIPromptBuilder.buildConversationPrompt(
+                        goal: request.goal,
+                        question: request.extraContext,
+                        weightUnit: request.weightUnit,
+                        distanceUnit: request.distanceUnit,
+                        userStats: userStats,
+                        equipment: equipment,
+                        conversationContext: conversationContext
+                    )
+                    if prompt.count > 900 { prompt = String(prompt.prefix(900)) }
+
+                    let stream = OpenRouterAIService.shared.streamChat(
+                        systemPrompt: "You are a concise fitness and nutrition coach. Keep answers short, practical, and safe.",
+                        messages: [OpenRouterChatMessage(role: "user", content: Self.clampPrompt(prompt))],
+                        apiKey: apiKey,
+                        temperature: Self.profileTemperature(for: profile),
+                        maxTokens: AIUsageBudgetManager.openRouterChatOutputTokenLimit
+                    )
+
+                    for try await chunk in stream {
+                        if Task.isCancelled { break }
+                        continuation.yield(chunk)
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
+    }
+
+    private static var openRouterPlanSystemPrompt: String {
+        """
+        You are a fitness and running coach returning only valid JSON for Pace & Plates.
+        Do not wrap the response in Markdown.
+        Follow the requested schema exactly.
+        Use exactly 1 week with exactly 7 days.
+        Every strength item should include sets, reps, and a suggestedWeight string when possible.
+        Keep guidance concise, practical, and non-medical.
+        """
+    }
+
+    private static func profileTemperature(for profile: AskGenerationProfile) -> Double {
+        switch profile {
+        case .conversational:
+            return 0.75
+        case .strictStructuredOutput:
+            return 0.35
         }
     }
 
@@ -583,7 +778,7 @@ final class WorkoutPlanGenerator {
         var avgRecentPace: String? = nil
         
         let hkManager = HealthKitManager.shared
-        if hkManager.isAuthorized {
+        if HKHealthStore.isHealthDataAvailable() {
             todaySteps = try? await hkManager.todayStepCount()
             if let hkWorkouts = try? await hkManager.fetchRecentRuns(limit: 10) {
                 let recent = hkWorkouts.filter { $0.endDate >= start }
@@ -751,7 +946,7 @@ final class WorkoutPlanGenerator {
             guard let finalRawContent else { return false }
             let finalPlan = try WorkoutPlan(finalRawContent)
             let normalizedPlan = normalizePlan(finalPlan)
-            Self.lastStructuredPlanJSON = normalizedPlan.generatedContent.jsonString
+            Self.lastStructuredPlanJSON = Self.encodeStructuredPlanJSON(normalizedPlan)
 
             let finalMarkdown = formatMarkdown(
                 from: normalizedPlan,
@@ -774,18 +969,26 @@ final class WorkoutPlanGenerator {
     }
 
     static func markdownFromStructuredPlanJSON(_ json: String, weightUnit: String, distanceUnit: String) -> String? {
-        if #available(iOS 26, *) {
-            guard let content = try? GeneratedContent(json: json),
-                  let plan = try? WorkoutPlan(content) else {
-                return nil
-            }
-            return formatMarkdown(
-                from: normalizePlan(plan),
-                weightUnit: weightUnit,
-                distanceUnit: distanceUnit
-            )
+        guard let plan = try? decodeStructuredPlan(from: json) else { return nil }
+        return formatMarkdown(
+            from: normalizePlan(plan),
+            weightUnit: weightUnit,
+            distanceUnit: distanceUnit
+        )
+    }
+
+    private static func decodeStructuredPlan(from json: String) throws -> WorkoutPlan {
+        guard let data = json.data(using: .utf8) else {
+            throw OpenRouterError.invalidStructuredOutput
         }
-        return nil
+        return try JSONDecoder().decode(WorkoutPlan.self, from: data)
+    }
+
+    private static func encodeStructuredPlanJSON(_ plan: WorkoutPlan) -> String? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard let data = try? encoder.encode(plan) else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 
     private static func formatMarkdown(from plan: WorkoutPlan, weightUnit: String, distanceUnit: String) -> String {

@@ -1,8 +1,17 @@
 import SwiftUI
 
 struct WeatherSummaryView: View {
+    private let launchConfiguration = AppLaunchConfiguration.current
     @StateObject private var vm = WeatherViewModel()
     @AppStorage("measurementSystem") private var measurementSystem: String = "imperial"
+
+    private var displayedSummary: WeatherSummary? {
+        launchConfiguration.stubWeatherSummary ?? vm.summary
+    }
+
+    private var displayedErrorText: String? {
+        launchConfiguration.stubWeatherSummary == nil ? vm.errorText : nil
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -19,7 +28,7 @@ struct WeatherSummaryView: View {
                 .buttonStyle(.plain)
             }
 
-            if let s = vm.summary {
+            if let s = displayedSummary {
                 HStack(spacing: 12) {
                     Image(systemName: s.symbolName)
                         .imageScale(.large)
@@ -39,7 +48,7 @@ struct WeatherSummaryView: View {
                     }
                     Spacer()
                 }
-            } else if let err = vm.errorText {
+            } else if let err = displayedErrorText {
                 Text(err)
                     .foregroundStyle(AppTheme.secondaryTextColor)
             } else {
@@ -47,7 +56,7 @@ struct WeatherSummaryView: View {
                     .foregroundStyle(AppTheme.secondaryTextColor)
             }
 
-            if vm.summary != nil {
+            if displayedSummary != nil {
                 HStack {
                     Spacer()
                     Link(destination: URL(string: "https://weatherkit.apple.com/legal-attribution.html")!) {
@@ -63,6 +72,7 @@ struct WeatherSummaryView: View {
         }
         .floatingTile()
         .onAppear {
+            guard launchConfiguration.stubWeatherSummary == nil else { return }
             // Throttle initial fetch slightly to avoid contention with other stores at app startup
             Task { try? await Task.sleep(nanoseconds: 300_000_000); vm.fetch() }
         }

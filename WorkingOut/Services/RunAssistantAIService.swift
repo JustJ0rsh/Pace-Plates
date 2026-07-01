@@ -23,14 +23,14 @@ final class RunAssistantAIService {
     }
 
     enum AIError: Error, LocalizedError {
-        case unavailable
+        case unavailable(String)
         case invalidResponse
         case invalidSchema(String)
 
         var errorDescription: String? {
             switch self {
-            case .unavailable:
-                return "Apple Intelligence is not available on this device."
+            case let .unavailable(message):
+                return message
             case .invalidResponse:
                 return "The generated response could not be parsed as plan JSON."
             case let .invalidSchema(message):
@@ -44,13 +44,37 @@ final class RunAssistantAIService {
     #if canImport(FoundationModels)
     @available(iOS 26, *)
     private var hasPrewarmedSession = false
+
+    @available(iOS 26, *)
+    private static func generationOptions(
+        sampling: GenerationOptions.SamplingMode,
+        temperature: Double
+    ) -> GenerationOptions {
+        #if compiler(>=6.4)
+        return GenerationOptions(
+            samplingMode: sampling,
+            temperature: temperature
+        )
+        #else
+        return GenerationOptions(
+            sampling: sampling,
+            temperature: temperature
+        )
+        #endif
+    }
     #endif
 
     func canGenerate() -> Bool {
-        WorkoutPlanGenerator.shared.availability() == .available
+        AIProviderManager.currentStatus().canGenerateNow
     }
 
     func prewarmIfPossible() {
+        let status = AIProviderManager.currentStatus()
+        guard status.effectiveProvider == .appleIntelligence,
+              status.appleIntelligenceStatus.canGenerateNow else {
+            return
+        }
+
         #if AI_FOUNDATION_AVAILABLE
         if #available(iOS 26, *) {
             #if canImport(FoundationModels)
@@ -75,8 +99,9 @@ final class RunAssistantAIService {
         context: ModelContext,
         onStreamChunk: (@MainActor (String) -> Void)? = nil
     ) async throws -> PlanDraft {
-        guard canGenerate() else {
-            throw AIError.unavailable
+        let status = AIProviderManager.currentStatus()
+        guard status.canGenerateNow else {
+            throw AIError.unavailable(status.unavailableDescription)
         }
 
         let detailedPrompt = await buildPrompt(style: style, profile: profile, context: context, compact: false)
@@ -86,13 +111,21 @@ final class RunAssistantAIService {
 
         let decoded: AIRunPlanPayload
         do {
-            decoded = try await generateGuidedPayload(prompt: detailedPrompt, onStreamChunk: onStreamChunk)
+            decoded = try await generatePayload(
+                prompt: detailedPrompt,
+                providerStatus: status,
+                onStreamChunk: onStreamChunk
+            )
         } catch {
             if isModelContextOverflow(error) {
                 let compactPrompt = await buildPrompt(style: style, profile: profile, context: context, compact: true)
                 promptUsed = compactPrompt
                 do {
-                    decoded = try await generateGuidedPayload(prompt: compactPrompt, onStreamChunk: onStreamChunk)
+                    decoded = try await generatePayload(
+                        prompt: compactPrompt,
+                        providerStatus: status,
+                        onStreamChunk: onStreamChunk
+                    )
                 } catch {
                     if isModelContextOverflow(error) {
                         let fallback = fallbackDraft(style: style, profile: profile, prompt: compactPrompt, context: context)
@@ -210,7 +243,7 @@ final class RunAssistantAIService {
         }()
 
         var hkSummary = "HealthKit unavailable"
-        if HealthKitManager.shared.isAuthorized {
+        if HKHealthStore.isHealthDataAvailable() {
             async let hkRunsTask = (try? await HealthKitManager.shared.fetchRecentRuns(limit: 24)) ?? []
             async let hkWeightTask = try? await HealthKitManager.shared.getBodyWeight()
             let hkRuns = await hkRunsTask
@@ -448,6 +481,52 @@ Rules:
         }
     }
 
+    private func generatePayload(
+        prompt: String,
+        providerStatus: AIProviderStatus,
+        onStreamChunk: (@MainActor (String) -> Void)?
+    ) async throws -> AIRunPlanPayload {
+        switch providerStatus.effectiveProvider {
+        case .appleIntelligence:
+            return try await generateGuidedPayload(prompt: prompt, onStreamChunk: onStreamChunk)
+        case .openRouter:
+            return try await generateOpenRouterPayload(prompt: prompt, onStreamChunk: onStreamChunk)
+        }
+    }
+
+    private func generateOpenRouterPayload(
+        prompt: String,
+        onStreamChunk: (@MainActor (String) -> Void)?
+    ) async throws -> AIRunPlanPayload {
+        guard let apiKey = AIProviderManager.loadOpenRouterKey() else {
+            throw AIError.unavailable("OpenRouter is selected, but no API key is saved in Settings.")
+        }
+
+        let completion = try await OpenRouterAIService.shared.completeStructuredJSON(
+            systemPrompt: openRouterRunPlanSystemPrompt,
+            userPrompt: openRouterRunPlanPrompt(prompt),
+            apiKey: apiKey,
+            temperature: 0.30,
+            maxTokens: AIUsageBudgetManager.openRouterRunPlanOutputTokenLimit
+        )
+        AIProviderManager.setCurrentOpenRouterModelID(completion.modelID)
+
+        guard let data = completion.text.data(using: .utf8) else {
+            throw AIError.invalidResponse
+        }
+
+        let payload = try JSONDecoder().decode(AIRunPlanPayload.self, from: data)
+
+        if let onStreamChunk {
+            let preview = runPlanPreview(from: payload)
+            for piece in AIStreamSmoothing.wordChunked(preview, maxChunkChars: 50) {
+                onStreamChunk(piece)
+            }
+        }
+
+        return payload
+    }
+
     private func generateGuidedPayload(
         prompt: String,
         onStreamChunk: (@MainActor (String) -> Void)?
@@ -469,7 +548,7 @@ Rules:
             let stream = session.streamResponse(
                 to: prompt,
                 generating: AIRunPlanGeneratedPayload.self,
-                options: GenerationOptions(
+                options: Self.generationOptions(
                     sampling: .random(probabilityThreshold: 0.70),
                     temperature: 0.30
                 )
@@ -499,11 +578,11 @@ Rules:
             let generated = try AIRunPlanGeneratedPayload(lastRawContent)
             return payloadFromGenerated(generated)
             #else
-            throw AIError.unavailable
+            throw AIError.unavailable("Apple Intelligence is not available in this build.")
             #endif
         }
         #endif
-        throw AIError.unavailable
+        throw AIError.unavailable("Apple Intelligence is not available on this device.")
     }
 
     #if canImport(FoundationModels)
@@ -578,6 +657,35 @@ Rules:
         return rendered.isEmpty ? fallback : rendered
     }
     #endif
+
+    private func runPlanPreview(from payload: AIRunPlanPayload) -> String {
+        var lines: [String] = []
+        lines.append(payload.planName)
+        lines.append("\(payload.durationWeeks) weeks • \(payload.primaryGoal.capitalized) • \(payload.daysPerWeek) days/week")
+        lines.append("")
+
+        let sortedSessions = payload.sessions.sorted {
+            if $0.weekIndex == $1.weekIndex {
+                return $0.weekday < $1.weekday
+            }
+            return $0.weekIndex < $1.weekIndex
+        }
+
+        for session in sortedSessions.prefix(14) {
+            let week = session.weekIndex + 1
+            let weekday = weekdayAbbreviation(session.weekday)
+            var line = "Week \(week) • \(weekday) • \(session.sessionType.capitalized)"
+            if let miles = session.targetDistanceMiles, miles > 0 {
+                line += " • \(String(format: "%.1f", miles)) mi"
+            }
+            if let minutes = session.targetDurationMinutes, minutes > 0 {
+                line += " • \(Int(minutes.rounded())) min"
+            }
+            lines.append(line)
+        }
+
+        return lines.joined(separator: "\n")
+    }
 
     private func normalizePayload(_ payload: AIRunPlanPayload, profile: RunAssistantProfile) -> AIRunPlanPayload {
         var normalized = payload
@@ -946,6 +1054,51 @@ Rules:
         case "rest": return 5
         default: return 6
         }
+    }
+
+    private var openRouterRunPlanSystemPrompt: String {
+        """
+        You are a running coach returning only valid JSON for Pace & Plates.
+        Do not wrap the response in Markdown.
+        Follow the requested schema exactly.
+        Use concise, safe, non-medical coaching notes.
+        Include every weekday 1 through 7 for every week.
+        """
+    }
+
+    private func openRouterRunPlanPrompt(_ prompt: String) -> String {
+        """
+        \(prompt)
+
+        Return ONLY valid JSON with this exact structure:
+        {
+          "planName": "string",
+          "style": "speed | endurance | hybrid | endurance_beginner | endurance_intermediate | speed_beginner | speed_intermediate",
+          "targetDistanceMiles": 5,
+          "primaryGoal": "speed | endurance | hybrid",
+          "durationWeeks": 8,
+          "daysPerWeek": 4,
+          "sessions": [
+            {
+              "weekIndex": 0,
+              "weekday": 1,
+              "sessionType": "easy | interval | tempo | long | recovery | rest",
+              "targetDistanceMiles": 3.0,
+              "targetDurationMinutes": 32,
+              "targetPaceMinPerMile": 10.5,
+              "intensityLevel": "easy | moderate | hard",
+              "notes": "short coaching note"
+            }
+          ]
+        }
+
+        Rules:
+        - Include weeks 0...(durationWeeks-1).
+        - Include all 7 weekdays for every week.
+        - Non-rest sessions must include positive targetDistanceMiles and targetDurationMinutes values.
+        - Rest sessions can leave targetDistanceMiles, targetDurationMinutes, and targetPaceMinPerMile as null.
+        - Do not include Markdown fences or commentary.
+        """
     }
 
     private func weekdayAbbreviation(_ weekday: Int) -> String {

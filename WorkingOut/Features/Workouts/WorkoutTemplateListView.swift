@@ -384,6 +384,13 @@ struct WorkoutTemplateListView: View {
         .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Close") {
+                    dismiss()
+                }
+            }
+        }
         .sheet(item: $selectedTemplate) { template in
             NavigationStack {
                 TemplateDetailView(template: template) { session in

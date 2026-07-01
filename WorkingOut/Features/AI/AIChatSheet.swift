@@ -536,7 +536,13 @@ struct AIChatSheet: View {
 
     private func save() {
         let full = messages.map { ($0.role == .user ? "You: " : "AI: ") + $0.text }.joined(separator: "\n\n")
-        let convo = AIConversation(mode: "ask", goal: requestBase.goal, prompt: messages.first?.text ?? "", response: full, model: "on-device")
+        let convo = AIConversation(
+            mode: "ask",
+            goal: requestBase.goal,
+            prompt: messages.first?.text ?? "",
+            response: full,
+            model: WorkoutPlanGenerator.shared.persistenceModelIdentifier()
+        )
         modelContext.insert(convo)
         if PersistenceSave.commit(modelContext, action: "save changes") {
             showSaved = true

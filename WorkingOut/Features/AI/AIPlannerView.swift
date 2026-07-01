@@ -1,10 +1,6 @@
 import SwiftUI
 import SwiftData
 
-#if canImport(FoundationModels)
-import FoundationModels
-#endif
-
 struct AIPlannerView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
@@ -12,13 +8,16 @@ struct AIPlannerView: View {
     @AppStorage("weightUnit") private var weightUnit: String = "lbs"
     @AppStorage("distanceUnit") private var distanceUnit: String = "mi"
     @AppStorage("userEquipment") private var userEquipment: String = ""
+    @AppStorage(AIProviderManager.providerPreferenceKey) private var aiProviderPreferenceRaw: String = AIProviderPreference.appleIntelligence.rawValue
+    @AppStorage(AIProviderManager.openRouterKeyConfiguredKey) private var openRouterKeyConfigured: Bool = false
+    @AppStorage(AIProviderManager.openRouterResolvedModelKey) private var openRouterResolvedModel: String = ""
+    @AppStorage(AIUsageBudgetManager.openRouterDailyLimitPreferenceKey) private var openRouterDailyLimit: Int = AIUsageBudgetManager.openRouterFreeUserDailyRequestLimit
 
     // Use Settings-backed goal directly
     // Lose | maintain | gain
     // This keeps the AI view in sync with Settings
     @State private var prompt: String = ""
     @State private var isGenerating: Bool = false
-    @State private var availability: WorkoutPlanGenerator.Availability = .unavailable
     @FocusState private var promptFocused: Bool
     @State private var showConversation: Bool = false
     @State private var showChat: Bool = false
@@ -26,12 +25,21 @@ struct AIPlannerView: View {
     @State private var mode: WorkoutPlanGenerator.Mode = .plan
     @State private var showResetConfirmation: Bool = false
     @State private var showResetSuccess: Bool = false
+    @State private var statusRefreshTick: Int = 0
+
+    private var providerStatus: AIProviderStatus {
+        _ = aiProviderPreferenceRaw
+        _ = openRouterKeyConfigured
+        _ = openRouterResolvedModel
+        _ = statusRefreshTick
+        return AIProviderManager.currentStatus()
+    }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
                 // Show availability-specific content
-                if availability == .available {
+                if providerStatus.canGenerateNow {
                     // AI is ready - show normal UI
                     availableContent
                 } else {
@@ -57,8 +65,11 @@ struct AIPlannerView: View {
             }
         }
         .onAppear {
-            availability = WorkoutPlanGenerator.shared.availability()
+            AIProviderManager.bootstrapOpenRouterKeyIfAvailable()
             Task { await WorkoutPlanGenerator.shared.prewarmIfPossible() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            statusRefreshTick += 1
         }
         .sheet(isPresented: $showConversation, onDismiss: { isGenerating = false }) {
             if let req = lastRequest {
@@ -170,25 +181,37 @@ struct AIPlannerView: View {
                 }
             }
 
-            GroupBox("Apple Intelligence (On‑device)") {
+            GroupBox(providerStatus.providerGroupTitle) {
                 VStack(spacing: 12) {
                     HStack(spacing: 8) {
                         Circle()
-                            .fill(Color.green)
+                            .fill(providerStatus.effectiveProvider == .appleIntelligence ? Color.green : AppTheme.accentColor)
                             .frame(width: 10, height: 10)
-                        Text("On‑device model ready")
+                        Text(providerStatus.providerReadyDescription)
                             .foregroundStyle(AppTheme.secondaryTextColor)
                         Spacer()
                     }
-                    
-                    HStack {
-                        Spacer()
-                        Button(action: { showResetConfirmation = true }) {
-                            Label("Reset Model Context", systemImage: "arrow.counterclockwise.circle")
-                                .font(.footnote)
+
+                    if providerStatus.effectiveProvider == .appleIntelligence {
+                        HStack {
+                            Spacer()
+                            Button(action: { showResetConfirmation = true }) {
+                                Label("Reset Model Context", systemImage: "arrow.counterclockwise.circle")
+                                    .font(.footnote)
+                            }
+                            .buttonStyle(.bordered)
+                            Spacer()
                         }
-                        .buttonStyle(.bordered)
-                        Spacer()
+                    } else {
+                        Text("Cloud requests are sent through OpenRouter only while this provider is selected.")
+                            .font(.footnote)
+                            .foregroundStyle(AppTheme.secondaryTextColor)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        Text(openRouterBudgetSummary)
+                            .font(.footnote)
+                            .foregroundStyle(AppTheme.secondaryTextColor)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }
@@ -224,27 +247,33 @@ struct AIPlannerView: View {
             Spacer()
             
             // Icon
-            Image(systemName: getUnavailableIcon())
+            Image(systemName: unavailableIconName)
                 .font(.system(size: 60))
                 .foregroundColor(.orange)
             
             // Title
-            Text(getUnavailableTitle())
+            Text(providerStatus.unavailableTitle)
                 .font(.title2)
                 .fontWeight(.bold)
                 .multilineTextAlignment(.center)
             
             // Description
-            Text(getUnavailableDescription())
+            Text(providerStatus.unavailableDescription)
                 .font(.body)
                 .foregroundStyle(AppTheme.secondaryTextColor)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
             
-            // Action button if applicable
-            if shouldShowSettingsButton() {
+            NavigationLink(destination: SettingsView()) {
+                Label(providerStatus.needsAppConfiguration ? "Configure OpenRouter" : "AI Provider Settings", systemImage: "slider.horizontal.3")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .padding(.horizontal, 32)
+
+            if providerStatus.needsSystemSettings {
                 Button(action: openSettings) {
-                    Label("Open Settings", systemImage: "gear")
+                    Label("Open iPhone Settings", systemImage: "gear")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
@@ -257,88 +286,35 @@ struct AIPlannerView: View {
     }
     
     // MARK: - Unavailable State Helpers
-    
-    private func getUnavailableIcon() -> String {
-        #if AI_FOUNDATION_AVAILABLE
-        if #available(iOS 26, *) {
-            #if canImport(FoundationModels)
-            let model = SystemLanguageModel.default
-            switch model.availability {
-            case .unavailable(.appleIntelligenceNotEnabled):
+
+    private var unavailableIconName: String {
+        switch providerStatus.effectiveProvider {
+        case .appleIntelligence:
+            switch providerStatus.appleIntelligenceStatus {
+            case .notEnabled:
                 return "sparkles.rectangle.stack"
-            case .unavailable(.modelNotReady):
+            case .modelNotReady:
                 return "arrow.down.circle"
-            case .unavailable(.deviceNotEligible):
+            case .unsupported, .unavailable:
                 return "exclamationmark.triangle"
-            default:
-                return "sparkles.rectangle.stack"
+            case .available:
+                return "checkmark.circle"
             }
-            #endif
+        case .openRouter:
+            return providerStatus.hasOpenRouterKey ? "wifi.exclamationmark" : "key.slash"
         }
-        #endif
-        return "exclamationmark.triangle"
     }
-    
-    private func getUnavailableTitle() -> String {
-        #if AI_FOUNDATION_AVAILABLE
-        if #available(iOS 26, *) {
-            #if canImport(FoundationModels)
-            let model = SystemLanguageModel.default
-            switch model.availability {
-            case .unavailable(.appleIntelligenceNotEnabled):
-                return "Apple Intelligence Not Enabled"
-            case .unavailable(.modelNotReady):
-                return "AI Model Not Ready"
-            case .unavailable(.deviceNotEligible):
-                return "Device Not Supported"
-            default:
-                return "Apple Intelligence Unavailable"
-            }
-            #endif
-        }
-        #endif
-        return "Apple Intelligence Unavailable"
-    }
-    
-    private func getUnavailableDescription() -> String {
-        #if AI_FOUNDATION_AVAILABLE
-        if #available(iOS 26, *) {
-            #if canImport(FoundationModels)
-            let model = SystemLanguageModel.default
-            switch model.availability {
-            case .unavailable(.appleIntelligenceNotEnabled):
-                return "Apple Intelligence is not enabled on this device. To use AI-powered workout planning, please enable Apple Intelligence in Settings > Apple Intelligence & Siri."
-            case .unavailable(.modelNotReady):
-                return "The AI model is currently downloading or preparing. This may take a few minutes. Please check back shortly or restart the app once the download completes."
-            case .unavailable(.deviceNotEligible):
-                return "This device does not support Apple Intelligence. AI-powered features require a compatible device with Apple Intelligence capabilities."
-            default:
-                return "Apple Intelligence is currently unavailable. Please try again later."
-            }
-            #endif
-        }
-        #endif
-        return "Apple Intelligence is not available on this device. This feature requires specific hardware and software support."
-    }
-    
-    private func shouldShowSettingsButton() -> Bool {
-        #if AI_FOUNDATION_AVAILABLE
-        if #available(iOS 26, *) {
-            #if canImport(FoundationModels)
-            let model = SystemLanguageModel.default
-            if case .unavailable(.appleIntelligenceNotEnabled) = model.availability {
-                return true
-            }
-            #endif
-        }
-        #endif
-        return false
-    }
-    
+
     private func openSettings() {
         if let url = URL(string: UIApplication.openSettingsURLString) {
             UIApplication.shared.open(url)
         }
+    }
+
+    private var openRouterBudgetSummary: String {
+        _ = openRouterDailyLimit
+        let budget = AIUsageBudgetManager.currentOpenRouterStatus()
+        return "\(budget.dailyRemaining)/\(budget.dailyLimit) free-model requests left today, \(budget.minuteRemaining)/\(budget.minuteLimit) left this minute. One AI action may use up to \(AIUsageBudgetManager.maxModelAttemptsPerRequest) attempts if free providers are busy."
     }
 }
 
@@ -346,9 +322,9 @@ private extension WorkoutPlanGenerator.Availability {
     var description: String {
         switch self {
         case .available:
-            return "On‑device model ready"
+            return "AI ready"
         case .unavailable:
-            return "Using template fallback"
+            return "AI unavailable"
         case .unknown:
             return "Checking availability…"
         }

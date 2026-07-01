@@ -3,16 +3,15 @@ import GameKit
 import SwiftData
 import HealthKit
 
-#if canImport(FoundationModels)
-import FoundationModels
-#endif
-
 struct ContentView: View {
     let persistenceController = PersistenceController.shared // Need access to this
+    private let launchConfiguration = AppLaunchConfiguration.current
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("didShowTutorial") private var didShowTutorial: Bool = false
     @AppStorage("didCompleteProfileSetup") private var didCompleteProfileSetup: Bool = false
     @AppStorage("age") private var age: Int = 0
     @AppStorage("heightValue") private var heightValue: Double = 0
+    @AppStorage("didShowHealthAccessIssueAlert") private var didShowHealthAccessIssueAlert: Bool = false
     @State private var showTutorial: Bool = false
     @State private var healthAuthError: String? = nil
     @AppStorage("measurementSystem") private var measurementSystem: String = "imperial"
@@ -20,7 +19,7 @@ struct ContentView: View {
     @AppStorage("distanceUnit") private var distanceUnit: String = "mi"
     @AppStorage("heightUnit") private var heightUnit: String = "in"
     @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
-    @State private var aiAvailability: WorkoutPlanGenerator.Availability = .unknown
+    @State private var selectedTab = AppLaunchConfiguration.current.initialTabSelection
     @Binding var importedWorkout: SharedWorkoutSession?
     
     // Error handling moved to App level
@@ -28,7 +27,7 @@ struct ContentView: View {
     // @State private var importErrorMessage: String = ""
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             // Left side - Use Group to prevent unnecessary NavigationStack recreation
             NavigationStack { HomeView() }
                 .tabItem { Label("Home", systemImage: "house.fill") }
@@ -38,12 +37,9 @@ struct ContentView: View {
                 .tabItem { Label("Workouts", systemImage: "figure.strengthtraining.traditional") }
                 .tag(1)
             
-            // Middle tab: AI (show if supported, hide if device is not eligible)
-            if shouldShowAITab() {
-                NavigationStack { AIPlannerView() }
-                    .tabItem { Label("AI", systemImage: "sparkles") }
-                    .tag(2)
-            }
+            NavigationStack { AIPlannerView() }
+                .tabItem { Label("AI", systemImage: "sparkles") }
+                .tag(2)
             
             // Right side
             NavigationStack { RunLogView() }
@@ -63,9 +59,14 @@ struct ContentView: View {
         .modelContainer(persistenceController.container)
         .onAppear {
             AppTheme.applyGlobalTheme()
-            HealthKitManager.shared.startWorkoutChangeObservationIfNeeded()
-            // Check Apple Intelligence availability
-            aiAvailability = WorkoutPlanGenerator.shared.availability()
+            reconcileLiveActivities()
+            if !launchConfiguration.shouldSkipAutomationSideEffects {
+                Task { @MainActor in
+                    await HealthKitManager.shared.refreshAuthorizationState()
+                }
+                HealthKitManager.shared.startWorkoutChangeObservationIfNeeded()
+                AIProviderManager.bootstrapOpenRouterKeyIfAvailable()
+            }
             // Seed + cleanup the exercise library safely (idempotent)
             ExerciseLibrary.populateInitialExercises(context: persistenceController.container.mainContext)
             persistenceController.deduplicateExerciseDefinitions()
@@ -77,6 +78,12 @@ struct ContentView: View {
 
             #if DEBUG
             DebugDataGenerator.hideLegacySampleMarkers(context: persistenceController.container.mainContext)
+            if launchConfiguration.usesCoreTabsFixture {
+                DebugDataGenerator.generateUITestFixture(
+                    named: "core_tabs",
+                    context: persistenceController.container.mainContext
+                )
+            }
             #endif
             
             
@@ -95,22 +102,30 @@ struct ContentView: View {
             // Show onboarding if: 
             // 1. They haven't completed profile setup AND
             // 2. They haven't filled out basic profile info (age, height)
-            let hasProfileData = age > 0 && heightValue > 0
-            if !didCompleteProfileSetup && !hasProfileData {
-                showTutorial = true
-            } else {
-                // If onboarding was completed or profile data exists, mark as complete
+            if launchConfiguration.shouldSkipAutomationSideEffects {
                 didCompleteProfileSetup = true
                 didShowTutorial = true
-                
-                // Check health authorization and prompt if not granted
-                Task { @MainActor in
-                    await checkAndRequestHealthAuthorizationIfNeeded()
+                showTutorial = false
+            } else {
+                let hasProfileData = age > 0 && heightValue > 0
+                if !didCompleteProfileSetup && !hasProfileData {
+                    showTutorial = true
+                } else {
+                    // If onboarding was completed or profile data exists, mark as complete
+                    didCompleteProfileSetup = true
+                    didShowTutorial = true
+
+                    // Check health authorization and prompt if not granted
+                    Task { @MainActor in
+                        await checkAndRequestHealthAuthorizationIfNeeded()
+                    }
                 }
             }
             
             // Schedule weekly reminders if enabled
-            ReminderService.scheduleIfEnabled()
+            if !launchConfiguration.shouldSkipAutomationSideEffects {
+                ReminderService.scheduleIfEnabled()
+            }
 
             // No banner; we'll prompt for HK when appropriate
             // Align unit preferences to the global measurement selection
@@ -129,6 +144,13 @@ struct ContentView: View {
         }
         .onChange(of: appTheme) { _, _ in
             AppTheme.applyGlobalTheme()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            reconcileLiveActivities()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willTerminateNotification)) { _ in
+            LiveActivityManager.shared.end()
         }
         .alert("Health Access Issue", isPresented: Binding(get: { healthAuthError != nil }, set: { if !$0 { healthAuthError = nil } })) {
             Button("OK", role: .cancel) { healthAuthError = nil }
@@ -157,19 +179,36 @@ struct ContentView: View {
 }
 
 extension ContentView {
+    private var hasRecoverableRun: Bool {
+        let tracker = RunTracker.shared
+        return tracker.isRunning || (tracker.duration > 0 && tracker.startDate != nil)
+    }
+
+    private func reconcileLiveActivities() {
+        guard !launchConfiguration.shouldSkipAutomationSideEffects else { return }
+        LiveActivityManager.shared.reconcileActivities(hasRecoverableRun: hasRecoverableRun)
+    }
+
     @MainActor
     private func finishOnboarding() {
         didShowTutorial = true
         didCompleteProfileSetup = true
         showTutorial = false
 
+        guard !launchConfiguration.shouldSkipAutomationSideEffects else { return }
+
         Task { @MainActor in
             do {
                 // Give time for the tutorial sheet to fully dismiss before presenting system permission sheets.
                 try await Task.sleep(nanoseconds: 500_000_000)
                 try await HealthKitManager.shared.requestAuthorization()
+                if !HealthKitManager.shared.isAuthorized {
+                    presentHealthAuthorizationIssue(incompleteHealthAuthorizationMessage)
+                } else {
+                    clearHealthAuthorizationIssue(resetSuppression: true)
+                }
             } catch {
-                healthAuthError = error.localizedDescription
+                presentHealthAuthorizationIssue(error.localizedDescription)
             }
         }
     }
@@ -178,68 +217,55 @@ extension ContentView {
     /// This ensures users get prompted after reinstalling the app
     @MainActor
     private func checkAndRequestHealthAuthorizationIfNeeded() async {
+        guard !launchConfiguration.shouldSkipAutomationSideEffects else { return }
         guard HKHealthStore.isHealthDataAvailable() else { return }
-        
-        // Check if we have any authorization status
-        let healthStore = HKHealthStore()
-        let workoutType = HKObjectType.workoutType()
-        let status = healthStore.authorizationStatus(for: workoutType)
-        
-        // If not determined or sharing denied, request authorization
-        // Note: HealthKit doesn't allow checking read authorization status,
-        // so we also request if the user hasn't granted sharing yet
-        if status == .notDetermined {
+
+        await HealthKitManager.shared.refreshAuthorizationState()
+        if HealthKitManager.shared.isAuthorized {
+            clearHealthAuthorizationIssue(resetSuppression: true)
+            return
+        }
+
+        let shouldRequestAuthorization = await HealthKitManager.shared.authorizationRequiresRequest()
+        if shouldRequestAuthorization {
             do {
                 try await Task.sleep(nanoseconds: 500_000_000) // Small delay for smooth UX
                 try await HealthKitManager.shared.requestAuthorization()
+                if !HealthKitManager.shared.isAuthorized {
+                    presentHealthAuthorizationIssue(incompleteHealthAuthorizationMessage)
+                } else {
+                    clearHealthAuthorizationIssue(resetSuppression: true)
+                }
             } catch {
-                healthAuthError = error.localizedDescription
+                presentHealthAuthorizationIssue(error.localizedDescription)
             }
-        }
-    }
-    
-    /// Determines if the AI tab should be shown
-    /// Returns true if device supports Apple Intelligence (even if not enabled)
-    /// Returns false if device doesn't support it at all
-    private func shouldShowAITab() -> Bool {
-        #if AI_FOUNDATION_AVAILABLE
-        if #available(iOS 26, *) {
-            #if canImport(FoundationModels)
-            let model = SystemLanguageModel.default
-            
-            switch model.availability {
-            case .available:
-                // AI is ready - show tab
-                return true
-            case .unavailable(.appleIntelligenceNotEnabled):
-                // Device supports it but user hasn't enabled - show tab with message
-                return true
-            case .unavailable(.modelNotReady):
-                // Model is downloading - show tab with waiting message
-                return true
-            case .unavailable(.deviceNotEligible):
-                // Device doesn't support Apple Intelligence - hide tab completely
-                return false
-            case .unavailable:
-                // Other unavailable reason - hide tab
-                return false
-            @unknown default:
-                return false
-            }
-            #else
-            // FoundationModels couldn't be imported - hide tab
-            return false
-            #endif
         } else {
-            // iOS too old - hide tab
-            return false
+            presentHealthAuthorizationIssue(incompleteHealthAuthorizationMessage)
         }
-        #else
-        // Build flag not set - hide tab
-        return false
-        #endif
     }
-    
+
+    @MainActor
+    private func presentHealthAuthorizationIssue(_ message: String) {
+        if message == incompleteHealthAuthorizationMessage {
+            guard !didShowHealthAccessIssueAlert else { return }
+            didShowHealthAccessIssueAlert = true
+        }
+
+        healthAuthError = message
+    }
+
+    @MainActor
+    private func clearHealthAuthorizationIssue(resetSuppression: Bool = false) {
+        healthAuthError = nil
+        if resetSuppression {
+            didShowHealthAccessIssueAlert = false
+        }
+    }
+
+    private var incompleteHealthAuthorizationMessage: String {
+        "Health permissions are incomplete. Enable workout, workout route, and distance write access in Settings > Health > Data Access & Devices."
+    }
+
     // Removed debug-only sample run feature and top banner
 }
 

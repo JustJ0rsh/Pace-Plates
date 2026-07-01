@@ -11,6 +11,128 @@ enum DebugDataGenerator {
     private static let legacyRunUUIDPrefix = "DEBUG_SAMPLE_"
     // Legacy marker previously written into notes (keep for cleanup only)
     private static let legacyDebugMarker = "[SAMPLE_DATA]"
+    private static var didSeedUITestFixture = false
+
+    // MARK: - UI Test Fixtures
+
+    static func generateUITestFixture(named fixtureName: String, context: ModelContext) {
+        guard fixtureName == "core_tabs", !didSeedUITestFixture else { return }
+
+        didSeedUITestFixture = true
+        generateCoreTabsFixture(context: context)
+    }
+
+    private static func generateCoreTabsFixture(context: ModelContext) {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+
+        let weightFixtures: [(dayOffset: Int, weight: Double)] = [
+            (6, 184.6),
+            (5, 184.1),
+            (4, 183.8),
+            (3, 183.5),
+            (2, 183.2),
+            (1, 182.9),
+            (0, 182.6),
+        ]
+
+        let runFixtures: [(dayOffset: Int, miles: Double, durationMinutes: Double, activityType: String)] = [
+            (5, 3.2, 29, "running"),
+            (3, 4.1, 36, "running"),
+            (1, 2.4, 43, "walking"),
+        ]
+
+        let workoutFixtures: [(dayOffset: Int, title: String, exercises: [(name: String, muscleGroup: String, sets: [(reps: Int, weight: Double)])])] = [
+            (
+                4,
+                "Upper Body Focus",
+                [
+                    ("Bench Press", "Chest", [(8, 185), (8, 185), (6, 195)]),
+                    ("Barbell Row", "Back", [(10, 155), (10, 155), (8, 165)]),
+                    ("Overhead Press", "Shoulders", [(8, 115), (8, 115), (6, 120)]),
+                ]
+            ),
+            (
+                2,
+                "Leg Day",
+                [
+                    ("Squat", "Legs", [(8, 225), (8, 225), (6, 245)]),
+                    ("Romanian Deadlift", "Back", [(10, 185), (10, 185), (8, 205)]),
+                    ("Leg Press", "Legs", [(12, 360), (12, 360), (10, 410)]),
+                ]
+            ),
+            (
+                0,
+                "Push Day",
+                [
+                    ("Incline Dumbbell Press", "Chest", [(10, 65), (10, 65), (8, 70)]),
+                    ("Tricep Pushdown", "Triceps", [(12, 50), (12, 55), (10, 60)]),
+                    ("Lateral Raise", "Shoulders", [(15, 20), (15, 20), (12, 25)]),
+                ]
+            ),
+        ]
+
+        for entry in weightFixtures {
+            guard let date = calendar.date(byAdding: .day, value: -entry.dayOffset, to: today) else { continue }
+            let weightEntry = WeightEntry(date: calendar.date(byAdding: .hour, value: 7, to: date) ?? date, weight: entry.weight, weightUnit: "lbs")
+            context.insert(weightEntry)
+        }
+
+        for fixture in runFixtures {
+            guard let date = calendar.date(byAdding: .day, value: -fixture.dayOffset, to: today) else { continue }
+            let sessionDate = calendar.date(byAdding: .hour, value: 6, to: date) ?? date
+            let run = RunningSession(
+                date: sessionDate,
+                distance: fixture.miles,
+                distanceUnit: "mi",
+                duration: fixture.durationMinutes * 60,
+                calories: fixture.miles * 105,
+                locations: Data(),
+                activityType: fixture.activityType,
+                avgHeartRate: fixture.activityType == "running" ? 148 : 112,
+                maxHeartRate: fixture.activityType == "running" ? 172 : 128,
+                minHeartRate: 82,
+                avgCadence: fixture.activityType == "running" ? 170 : 108,
+                totalAscent: fixture.activityType == "running" ? 145 : 40,
+                totalDescent: fixture.activityType == "running" ? 145 : 40
+            )
+            run.isSampleData = true
+            context.insert(run)
+        }
+
+        for fixture in workoutFixtures {
+            guard let date = calendar.date(byAdding: .day, value: -fixture.dayOffset, to: today) else { continue }
+            let sessionDate = calendar.date(byAdding: .hour, value: 18, to: date) ?? date
+            let session = WorkoutSession(date: sessionDate, notes: nil, title: fixture.title)
+            session.isSampleData = true
+            context.insert(session)
+
+            for (exerciseOrder, exerciseFixture) in fixture.exercises.enumerated() {
+                let definition = findOrCreateExercise(
+                    name: exerciseFixture.name,
+                    muscleGroup: exerciseFixture.muscleGroup,
+                    context: context
+                )
+
+                for (setIndex, setFixture) in exerciseFixture.sets.enumerated() {
+                    let log = ExerciseLog(
+                        reps: setFixture.reps,
+                        weight: setFixture.weight,
+                        weightUnit: "lbs",
+                        setNumber: setIndex + 1,
+                        exerciseName: exerciseFixture.name,
+                        exerciseOrder: exerciseOrder,
+                        isCompleted: true
+                    )
+                    log.exerciseDefinition = definition
+                    log.workoutSession = session
+                    context.insert(log)
+                }
+            }
+        }
+
+        _ = PersistenceSave.commit(context, action: "save changes")
+    }
 
     // MARK: - Sample Data Generation
 

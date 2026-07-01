@@ -8,33 +8,47 @@ struct AIHistoryView: View {
     @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
 
     var body: some View {
-        List {
-            ForEach(conversations) { convo in
-                NavigationLink(destination: AIHistoryDetailView(convo: convo)) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Image(systemName: convo.mode == "plan" ? "calendar" : "bubble.left.fill")
-                                .font(.caption)
-                                .foregroundStyle(AppTheme.secondaryTextColor)
-                            Text(convo.mode == "plan" ? "Workout Plan" : "Question")
-                                .font(.subheadline).bold()
-                                .foregroundStyle(AppTheme.secondaryTextColor)
-                            Spacer()
-                            Text(convo.date, style: .date)
-                                .foregroundStyle(AppTheme.secondaryTextColor)
-                                .font(.caption)
+        Group {
+            if conversations.isEmpty {
+                ContentUnavailableView(
+                    "No AI History Yet",
+                    systemImage: "clock.arrow.circlepath",
+                    description: Text("Generated plans and saved AI questions will appear here.")
+                )
+            } else {
+                List {
+                    ForEach(conversations) { convo in
+                        NavigationLink(destination: AIHistoryDetailView(convo: convo)) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Image(systemName: convo.mode == "plan" ? "calendar" : "bubble.left.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(AppTheme.secondaryTextColor)
+                                    Text(convo.mode == "plan" ? "Workout Plan" : "Question")
+                                        .font(.subheadline).bold()
+                                        .foregroundStyle(AppTheme.secondaryTextColor)
+                                    Spacer()
+                                    Text(convo.date, style: .date)
+                                        .foregroundStyle(AppTheme.secondaryTextColor)
+                                        .font(.caption)
+                                }
+                                Text(displayTitle(for: convo))
+                                    .lineLimit(2)
+                                    .foregroundStyle(AppTheme.textColor)
+                                    .font(.body)
+                            }
                         }
-                        Text(displayTitle(for: convo))
-                            .lineLimit(2)
-                            .foregroundStyle(AppTheme.textColor)
-                            .font(.body)
                     }
+                    .onDelete(perform: delete)
                 }
             }
-            .onDelete(perform: delete)
         }
         .navigationTitle("AI History")
-        .toolbar { EditButton() }
+        .toolbar {
+            if !conversations.isEmpty {
+                EditButton()
+            }
+        }
         .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)

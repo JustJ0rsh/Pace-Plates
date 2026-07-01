@@ -6,8 +6,10 @@ struct WeightLogView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
     @AppStorage("weightLastHealthImportAt") private var weightLastHealthImportAt: Double = 0
+    private let launchConfiguration = AppLaunchConfiguration.current
     @Query(sort: [SortDescriptor<WeightEntry>(\.date, order: .reverse)]) private var weightEntries: [WeightEntry] // Added sort
     @State private var showingLogWeightSheet = false // State to control sheet presentation
+    @State private var showWeightActions = false
     @State private var isEditing: Bool = false
     @AppStorage("weightGoal") private var weightGoal: String = "lose" // "gain" or "lose"
     @AppStorage("weightUnit") private var preferredWeightUnit = "lbs"
@@ -79,6 +81,9 @@ struct WeightLogView: View {
                             }
                             // Compute and render the chart section in a smaller subview
                             let filtered = chartPrep(entries: weightEntries, preferredWeightUnit: preferredWeightUnit, xDomain: last7DaysDomain).sorted
+                            Text(weightTrendSummary(entries: filtered))
+                                .font(.subheadline)
+                                .foregroundStyle(AppTheme.secondaryTextColor)
                             WeightChartSection(
                                 entries: filtered,
                                 preferredWeightUnit: preferredWeightUnit,
@@ -91,8 +96,24 @@ struct WeightLogView: View {
                             ContentUnavailableView(
                                 "No Weight Logged",
                                 systemImage: "scalemass.fill",
-                                description: Text("Tap the + button to add your first weight entry.")
+                                description: Text("Log your current weight or import recent entries from Apple Health.")
                             )
+
+                            Button {
+                                showingLogWeightSheet = true
+                            } label: {
+                                Label("Log Weight", systemImage: "scalemass")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+
+                            Button {
+                                importHealthWeightsSilently(force: true)
+                            } label: {
+                                Label("Import from Health", systemImage: "heart.text.square")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
                         }
                     }
                     .floatingTile()
@@ -145,6 +166,7 @@ struct WeightLogView: View {
                 .padding(.horizontal, AppTheme.padding)
                 .padding(.top)
         }
+        .accessibilityIdentifier("weight.ready")
         .appBackground(AppTheme.gradientWeight)
         .foregroundColor(AppTheme.textColor)
         .navigationTitle("Weight")
@@ -162,7 +184,7 @@ struct WeightLogView: View {
             }
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
-                    showingLogWeightSheet = true
+                    showWeightActions = true
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 18, weight: .semibold))
@@ -172,6 +194,29 @@ struct WeightLogView: View {
         }
         .sheet(isPresented: $showingLogWeightSheet) {
             LogWeightView()
+        }
+        .sheet(isPresented: $showWeightActions) {
+            QuickActionSheet(
+                title: "Weight Actions",
+                actions: [
+                    QuickActionSheetAction(
+                        id: "weight.start-now",
+                        title: "Start now",
+                        subtitle: "Log your current weight.",
+                        systemImage: "scalemass",
+                        accessibilityIdentifier: "weight.action.start_now",
+                        handler: { showingLogWeightSheet = true }
+                    ),
+                    QuickActionSheetAction(
+                        id: "weight.import-health",
+                        title: "Import from Health",
+                        subtitle: "Pull recent weight entries from Apple Health.",
+                        systemImage: "heart.text.square",
+                        accessibilityIdentifier: "weight.action.import_health",
+                        handler: { importHealthWeightsSilently(force: true) }
+                    )
+                ]
+            )
         }
         .sheet(item: $quickViewEntry) { entry in
             WeightQuickViewSheet(
@@ -204,7 +249,9 @@ struct WeightLogView: View {
             }
         }
         .onAppear {
-            scheduleInitialHealthImportIfNeeded()
+            if !launchConfiguration.shouldSkipAutomationSideEffects {
+                scheduleInitialHealthImportIfNeeded()
+            }
         }
         .background {
             Color.clear.alert("Save Failed", isPresented: Binding(
@@ -319,6 +366,36 @@ struct WeightLogView: View {
         let olderIndex = index + 1
         guard weightEntries.indices.contains(olderIndex) else { return nil }
         return weightEntries[olderIndex]
+    }
+
+    private func weightTrendSummary(entries: [WeightEntry]) -> String {
+        guard let latest = entries.last else {
+            return "Log a weight to see your trend."
+        }
+
+        let latestValue = UnitConverter.weight(latest.weight, from: latest.weightUnit, to: preferredWeightUnit)
+        guard let oldest = entries.first, entries.count >= 2 else {
+            return "Latest: \(latestValue.formatted(.number.precision(.fractionLength(1)))) \(preferredWeightUnit)."
+        }
+
+        let oldestValue = UnitConverter.weight(oldest.weight, from: oldest.weightUnit, to: preferredWeightUnit)
+        let delta = latestValue - oldestValue
+        guard abs(delta) >= 0.05 else {
+            return "No change in \(rangeDescription)."
+        }
+
+        let direction = delta < 0 ? "Down" : "Up"
+        let formatted = abs(delta).formatted(.number.precision(.fractionLength(1)))
+        return "\(direction) \(formatted) \(preferredWeightUnit) over \(rangeDescription)."
+    }
+
+    private var rangeDescription: String {
+        switch selectedRange {
+        case .days7: return "7 days"
+        case .month1: return "1 month"
+        case .months6: return "6 months"
+        case .year1: return "1 year"
+        }
     }
 }
 

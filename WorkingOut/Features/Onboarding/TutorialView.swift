@@ -95,8 +95,7 @@ struct TutorialView: View {
 
                     HStack {
                         Button("Skip") {
-                            didCompleteProfileSetup = true
-                            onFinish?()
+                            completeOnboarding()
                         }
                         .foregroundStyle(.secondary)
                         Spacer()
@@ -105,8 +104,7 @@ struct TutorialView: View {
                                 .buttonStyle(.borderedProminent)
                         } else {
                             Button("Get Started") {
-                                didCompleteProfileSetup = true
-                                onFinish?()
+                                completeOnboarding()
                             }
                             .buttonStyle(.borderedProminent)
                         }
@@ -182,6 +180,33 @@ struct TutorialView: View {
             }
         }
         return out
+    }
+
+    private func completeOnboarding() {
+        applyProfileDefaultsIfNeeded()
+        didCompleteProfileSetup = true
+        onFinish?()
+    }
+
+    private func applyProfileDefaultsIfNeeded() {
+        if age <= 0 {
+            let sanitized = sanitizeDigits(ageText)
+            age = Int(sanitized) ?? 25
+            ageText = String(age)
+        }
+
+        if heightValue <= 0 {
+            heightValue = heightUnit == "cm" ? 175.0 : 68.0
+        }
+
+        if targetWeight <= 0 {
+            let sanitized = sanitizeDecimal(goalWeightText)
+            targetWeight = Double(sanitized) ?? (weightUnit == "kg" ? 80.0 : 180.0)
+            goalWeightText = String(
+                format: targetWeight.truncatingRemainder(dividingBy: 1) == 0 ? "%.0f" : "%.1f",
+                targetWeight
+            )
+        }
     }
 
     @ViewBuilder
@@ -440,8 +465,9 @@ private struct HeightPickerSheet: View {
     }
     
     private func loadImperial() {
-        let f = Int(floor(heightValue / 12.0))
-        let i = Int(round(heightValue - Double(f) * 12.0))
+        let storedHeight = heightValue > 0 ? heightValue : 68.0
+        let f = Int(floor(storedHeight / 12.0))
+        let i = Int(round(storedHeight - Double(f) * 12.0))
         feet = max(3, min(8, f))
         inches = max(0, min(11, i))
     }
@@ -451,7 +477,7 @@ private struct HeightPickerSheet: View {
     }
     
     private func loadMetric() {
-        let v = max(0, heightValue)
+        let v = heightValue > 0 ? heightValue : 175.0
         cmInt = Int(floor(v))
         cmDec = min(9, max(0, Int(round((v - floor(v)) * 10))))
     }

@@ -17,7 +17,7 @@ struct Coordinate: Codable, Identifiable {
         case altitude
         case timestamp
     }
-    
+
     var clCoordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
@@ -58,7 +58,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
     private var lastLiveActivityUpdateAt: Date? = nil
     private var lastLiveActivityDistanceMeters: Double = 0
     private var lastLiveActivityPace: Double? = nil
-    private let liveActivityMinUpdateInterval: TimeInterval = 6
+    private let liveActivityMinUpdateInterval: TimeInterval = 1
     private let liveActivityDistanceDeltaMeters: Double = 20
     private let liveActivityPaceDeltaSeconds: Double = 8
     private let routeAccuracyThresholdMeters: Double = 65
@@ -109,23 +109,32 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         // One-time location request to populate last known location without continuous updates
         manager.requestLocation()
     }
-    
-    func startRun() {
-        
+
+    func clearCurrentRun(resetActivityType: Bool = false) {
         route.removeAll()
         distance = 0.0
         duration = 0.0
-        pausedDuration = 0.0
+        startDate = nil
         pausedAt = nil
+        pausedDuration = 0.0
         shouldSkipNextDistanceSample = false
         lastDistanceLocation = nil
         location = nil
-        startDate = Date()
+        isRunning = false
         smoothedPaceSecondsPerUnit = nil
         recentSamples.removeAll()
         lastLiveActivityUpdateAt = nil
         lastLiveActivityDistanceMeters = 0
         lastLiveActivityPace = nil
+
+        if resetActivityType {
+            activityType = "running"
+        }
+    }
+
+    func startRun() {
+        clearCurrentRun()
+        startDate = Date()
         maybeRequestAlwaysAuthorizationUpgradeIfNeeded()
         updateBackgroundLocationMode(isActiveRun: true)
         manager.startUpdatingLocation()
@@ -140,7 +149,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
     }
     
     func pauseRun() {
-        
+
         if isRunning {
             pausedAt = Date()
         }
@@ -148,10 +157,22 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         manager.stopUpdatingLocation()
         stopTimer()
         isRunning = false
+
+        // Push immediate update so the widget freezes the timer
+        if let s = startDate {
+            let currentDuration = max(0, Date().timeIntervalSince(s) - pausedDuration)
+            lastLiveActivityUpdateAt = nil
+            LiveActivityManager.shared.update(startDate: s,
+                                              duration: currentDuration,
+                                              distanceMeters: distance,
+                                              paceSecondsPerUnit: smoothedPaceSecondsPerUnit,
+                                              distanceUnit: distanceUnit,
+                                              isPaused: true)
+        }
     }
     
     func resumeRun() {
-        
+
         if let pausedAt {
             pausedDuration += Date().timeIntervalSince(pausedAt)
             self.pausedAt = nil
@@ -166,6 +187,17 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         manager.startUpdatingLocation()
         startTimer()
         isRunning = true
+
+        // Push immediate update so the widget resumes the live timer
+        if let s = startDate {
+            lastLiveActivityUpdateAt = nil
+            LiveActivityManager.shared.update(startDate: s,
+                                              duration: duration,
+                                              distanceMeters: distance,
+                                              paceSecondsPerUnit: smoothedPaceSecondsPerUnit,
+                                              distanceUnit: distanceUnit,
+                                              isPaused: false)
+        }
     }
     
     func stopRun() -> RunningSession? {
@@ -492,11 +524,12 @@ struct RunTrackingProView: View {
     
     // Calculate pace (time per unit distance)
     private var pace: String {
-        // Prefer smoothed pace when available; otherwise fall back to overall average
+        guard runTracker.distance > 0, runTracker.duration > 0 else { return "--:--" }
+
+        // Prefer smoothed pace when available while active metrics are non-zero.
         if let smoothed = runTracker.smoothedPaceSecondsPerUnit, smoothed.isFinite {
             return formatDuration(smoothed)
         }
-        guard runTracker.distance > 0, runTracker.duration > 0 else { return "--:--" }
         let distanceInUnit = runTracker.distance / (runTracker.distanceUnit == "km" ? 1000 : 1609.34)
         let paceSeconds = runTracker.duration / max(distanceInUnit, 0.0001)
         return formatDuration(paceSeconds)
@@ -884,12 +917,21 @@ struct RunTrackingProView: View {
                         end: endTime,
                         distanceMeters: distanceMeters,
                         energyBurned: nil,
-                        route: routeSnapshot,
                         activityType: activityType
                     )
                     session.healthWorkoutUUID = workout.uuid.uuidString
-                    _ = PersistenceSave.commit(modelContext, action: "link saved run with Health workout UUID")
+                    if !PersistenceSave.commit(modelContext, action: "link saved run with Health workout UUID") {
+                        alertMessage = "Run saved locally, but the Apple Health link could not be persisted. The run may import again later as a duplicate."
+                        showingAlert = true
+                        return
+                    }
 
+                    do {
+                        try await HealthKitManager.shared.saveRunRoute(routeSnapshot, for: workout)
+                    } catch {
+                        alertMessage = "Run saved and linked to Apple Health, but route sync failed: \(error.localizedDescription)"
+                        showingAlert = true
+                    }
                 } catch {
                     alertMessage = "Run saved locally, but sync to Apple Health failed: \(error.localizedDescription)"
                     showingAlert = true
@@ -910,13 +952,7 @@ struct RunTrackingProView: View {
             LiveActivityManager.shared.end()
 
             // Reset tracker so the next start is a brand-new run (not resume)
-            runTracker.route.removeAll()
-            runTracker.distance = 0
-            runTracker.duration = 0
-            runTracker.location = nil
-            runTracker.startDate = nil
-            runTracker.isRunning = false
-            runTracker.activityType = "running" // Reset to default
+            runTracker.clearCurrentRun(resetActivityType: true)
 
             shouldFollowUser = false
             isSavingRun = false

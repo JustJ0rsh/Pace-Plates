@@ -25,6 +25,11 @@ A comprehensive iOS app for tracking workouts, runs, and body weight, built with
   - Weight trend chart
   - Quick access to all features
 
+- **AI Coaching**
+  - Apple Intelligence support on compatible devices
+  - OpenRouter fallback for older devices or cloud-based generation
+  - Workout-plan generation, AI chat, and running-plan assistance
+
 ## Technical Details
 
 - Built with SwiftUI for modern iOS UI
@@ -44,6 +49,15 @@ A comprehensive iOS app for tracking workouts, runs, and body weight, built with
 1. Clone the repository
 2. Open `WorkingOut.xcodeproj` in Xcode
 3. Build and run the project
+
+## AI Provider Setup
+
+- Pace & Plates now supports two AI providers: `Apple Intelligence` and `OpenRouter`.
+- On Apple Intelligence-capable iPhones, users can choose either provider in Settings.
+- On Apple Intelligence-ineligible devices, the app automatically uses OpenRouter.
+- OpenRouter keys are stored in the iOS Keychain, not in `UserDefaults`.
+- For local development, `.env.example` documents the `OPENROUTER_API_KEY` variable. If you launch from Xcode, pass that value into the app process as an environment variable or enter it in the in-app Settings screen.
+- The app intentionally targets OpenRouter `:free` text models to avoid paid model usage by default.
 
 ## Development
 

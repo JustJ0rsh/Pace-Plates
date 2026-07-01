@@ -19,7 +19,8 @@ enum AIPromptBuilder {
         weightUnit: String,
         distanceUnit: String,
         userStats: WorkoutPlanGenerator.UserStats,
-        equipment: String? = nil
+        equipment: String? = nil,
+        conversationContext: String? = nil
     ) -> String {
         var lines: [String] = []
         
@@ -42,7 +43,11 @@ enum AIPromptBuilder {
             lines.append("Long run target this week: ~\(String(format: "%.1f", longTarget)) \(distanceUnit)")
         }
         lines.append("For strength suggestions: list 5–6 distinct exercises with 'sets x reps @ weight \(weightUnit)'. Use last working weight when available; otherwise use conservative e1RM-derived loads. Round to \(weightUnit == "kg" ? "2.5 kg" : "5 lb") and keep first-week increases ≤5%.")
-        // No conversation history for Ask to minimize tokens
+        if let conversationContext, !conversationContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append("Conversation context:")
+            lines.append(conversationContext)
+            lines.append("Stay consistent with that prior context. Avoid repeating the entire history unless it changes the answer.")
+        }
         
         lines.append("\nQuestion: \(question)")
         
@@ -178,6 +183,67 @@ enum AIPromptBuilder {
             lines.append("Use \(baseStr) \(distanceUnit) for easy runs; set long run ~10–15% above that. Round run distances to 0.5 \(incrUnit) increments.")
         }
         
+        return clamp(lines.joined(separator: "\n"))
+    }
+
+    static func buildOpenRouterStructuredPlanPrompt(
+        goal: String,
+        context: String,
+        weightUnit: String,
+        distanceUnit: String,
+        userStats: WorkoutPlanGenerator.UserStats
+    ) -> String {
+        var lines: [String] = []
+        lines.append(buildPlanPrompt(
+            goal: goal,
+            context: context,
+            weightUnit: weightUnit,
+            distanceUnit: distanceUnit,
+            userStats: userStats
+        ))
+        lines.append("")
+        lines.append("Return ONLY valid JSON with this exact structure:")
+        lines.append("""
+        {
+          "title": "string",
+          "overview": "string",
+          "unit": "\(weightUnit)",
+          "weeks": [
+            {
+              "title": "Week 1",
+              "days": [
+                {
+                  "title": "string",
+                  "type": "strengthUpper | strengthLower | fullBodyStrength | runEasy | runTempo | runIntervals | longRun | cyclingEndurance | rowing | swimming | activeRecovery | rest",
+                  "items": [
+                    {
+                      "name": "string",
+                      "sets": 3,
+                      "reps": 8,
+                      "suggestedWeight": "135 \(weightUnit)",
+                      "notes": "short technique cue",
+                      "distance": null,
+                      "distanceUnit": null,
+                      "pace": null,
+                      "durationMinutes": null,
+                      "effort": null
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "guidance": "string"
+        }
+        """)
+        lines.append("Rules:")
+        lines.append("- Include exactly 1 week and exactly 7 days.")
+        lines.append("- Rest and active recovery days should have an empty items array.")
+        lines.append("- Strength items should use sets/reps and suggestedWeight fields.")
+        lines.append("- Running items should use distance, distanceUnit, pace, durationMinutes, and effort when relevant.")
+        lines.append("- Non-running cardio should avoid running pace math and can use durationMinutes plus effort.")
+        lines.append("- Use null for fields that do not apply.")
+        lines.append("- Do not include Markdown fences or commentary.")
         return clamp(lines.joined(separator: "\n"))
     }
     

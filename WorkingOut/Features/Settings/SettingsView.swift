@@ -7,6 +7,7 @@ import UIKit
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
+    private let launchConfiguration = AppLaunchConfiguration.current
     @AppStorage("measurementSystem") private var measurementSystem: String = "imperial" // "metric" or "imperial"
     @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
     @AppStorage("weightUnit") private var weightUnit = "lbs"
@@ -22,6 +23,10 @@ struct SettingsView: View {
     @AppStorage("enableWeeklyWeightReminder") private var enableWeeklyWeightReminder: Bool = false
     @AppStorage("showVitalsOnHome") private var showVitalsOnHome: Bool = true
     @AppStorage("enableBackgroundRunTracking") private var enableBackgroundRunTracking: Bool = true
+    @AppStorage(AIProviderManager.providerPreferenceKey) private var aiProviderPreferenceRaw: String = AIProviderPreference.appleIntelligence.rawValue
+    @AppStorage(AIProviderManager.openRouterKeyConfiguredKey) private var openRouterKeyConfigured: Bool = false
+    @AppStorage(AIProviderManager.openRouterResolvedModelKey) private var openRouterResolvedModel: String = ""
+    @AppStorage(AIUsageBudgetManager.openRouterDailyLimitPreferenceKey) private var openRouterDailyLimit: Int = AIUsageBudgetManager.openRouterFreeUserDailyRequestLimit
     @AppStorage("runsLastHealthImportAt") private var runsLastHealthImportAt: Double = 0
     @AppStorage("weightLastHealthImportAt") private var weightLastHealthImportAt: Double = 0
     @FocusState private var ageFocused: Bool
@@ -40,6 +45,7 @@ struct SettingsView: View {
     @State private var showHealthSyncResult: Bool = false
     @State private var healthSyncResultMessage: String = ""
     @State private var locationAuthorizationStatus: CLAuthorizationStatus = CLLocationManager().authorizationStatus
+    @State private var openRouterAPIKeyInput: String = ""
     private let locationManager = CLLocationManager()
     #if DEBUG
     @State private var confirmAddSampleData: Bool = false
@@ -47,295 +53,8 @@ struct SettingsView: View {
     #endif
 
     var body: some View {
-        List {
-            Section("Units") {
-                    Picker("Measurement System", selection: $measurementSystem) {
-                        Text("Metric").tag("metric")
-                        Text("Imperial").tag("imperial")
-                    }
-                    .pickerStyle(.segmented)
-                    .onChange(of: measurementSystem) { _, newValue in
-                        if newValue == "imperial" {
-                            weightUnit = "lbs"
-                            distanceUnit = "mi"
-                            heightUnit = "in"
-                        } else {
-                            weightUnit = "kg"
-                            distanceUnit = "km"
-                            heightUnit = "cm"
-                        }
-                        applyMeasurementSystemChange(newValue)
-                    }
-                }
-
-                Section("Appearance") {
-                    NavigationLink {
-                        ThemePickerView(appTheme: $appTheme)
-                    } label: {
-                        HStack {
-                            Text("Theme")
-                            Spacer()
-                            Text(appTheme.displayName)
-                                .foregroundStyle(AppTheme.secondaryTextColor)
-                        }
-                    }
-                }
-
-                Section("Profile") {
-                    Picker("Sex", selection: $sex) {
-                        Text("Male").tag("male")
-                        Text("Female").tag("female")
-                    }
-                    .pickerStyle(.segmented)
-                    
-                    Picker("Experience Level", selection: $experienceLevel) {
-                        Text("New to Working Out").tag("beginner")
-                        Text("Experienced").tag("experienced")
-                    }
-                    .pickerStyle(.segmented)
-
-                    HStack {
-                        Text("Age")
-                        Spacer()
-                        TextField("0", value: $age, format: .number)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(maxWidth: 100)
-                            .focused($ageFocused)
-                    }
-
-                    Button {
-                        showHeightPicker = true
-                    } label: {
-                        HStack {
-                            Text("Height")
-                            Spacer()
-                            if heightUnit == "in" {
-                                let totalInches = Int(round(heightValue))
-                                let feet = max(0, totalInches / 12)
-                                let inches = max(0, min(11, totalInches % 12))
-                                Text("\(feet)′ \(inches)″").foregroundStyle(.secondary)
-                            } else {
-                                Text(String(format: "%.1f", heightValue)).foregroundStyle(.secondary)
-                                Text("cm").foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .sheet(isPresented: $showHeightPicker) {
-                        HeightPickerSheet(heightUnit: $heightUnit, heightValue: $heightValue)
-                            .presentationDetents([.height(340), .medium])
-                            .presentationDragIndicator(.visible)
-                    }
-
-                    HStack {
-                        Text("Goal Weight")
-                        Spacer()
-                        TextField("0", value: $targetWeight, format: .number.precision(.fractionLength(0...1)))
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(maxWidth: 100)
-                            .focused($goalWeightFocused)
-                        Text(weightUnit)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Section("Goals") {
-                    Picker("Weight Goal", selection: $weightGoal) {
-                        Text("Lose").tag("lose")
-                        Text("Maintain").tag("maintain")
-                        Text("Gain").tag("gain")
-                    }
-                    .pickerStyle(.segmented)
-                }
-                
-
-
-                Section("Home Screen") {
-                    Toggle(isOn: $showVitalsOnHome) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Show Vitals Section")
-                            Text("Display health vitals like heart rate, steps, and sleep on the home screen.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                
-                Section("AI & Plans") {
-                    Toggle(isOn: $useStructuredPlanView) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Structured Plan View")
-                            Text("Display saved plans as interactive cards when structured data is available. Note: New plan generation uses proven Markdown format for reliability.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-
-                Section("Reminders") {
-                    Toggle(isOn: $enableWeeklyWeightReminder) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Weekly Weight Reminder")
-                            Text("Reminds you to log your weight weekly.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .onChange(of: enableWeeklyWeightReminder) { _, newValue in
-                        if newValue {
-                            ReminderService.scheduleIfEnabled()
-                        } else {
-                            ReminderService.cancelWeeklyWeightReminder()
-                        }
-                    }
-
-                    if enableWeeklyWeightReminder {
-                        // Day and time pickers
-                        Picker("Day", selection: $reminderWeekday) {
-                            Text("Sun").tag(1)
-                            Text("Mon").tag(2)
-                            Text("Tue").tag(3)
-                            Text("Wed").tag(4)
-                            Text("Thu").tag(5)
-                            Text("Fri").tag(6)
-                            Text("Sat").tag(7)
-                        }
-                        .onChange(of: reminderWeekday) { _, _ in
-                            ReminderService.scheduleWeeklyWeightReminder(weekday: reminderWeekday, hour: reminderHour, minute: reminderMinute)
-                        }
-
-                        DatePicker("Time", selection: $reminderTime, displayedComponents: .hourAndMinute)
-                            .onChange(of: reminderTime) { _, newTime in
-                                let comps = Calendar.current.dateComponents([.hour, .minute], from: newTime)
-                                reminderHour = comps.hour ?? 9
-                                reminderMinute = comps.minute ?? 0
-                                ReminderService.scheduleWeeklyWeightReminder(weekday: reminderWeekday, hour: reminderHour, minute: reminderMinute)
-                            }
-                            .onAppear {
-                                // Initialize the time picker with the saved values
-                                if let date = Calendar.current.date(bySettingHour: reminderHour, minute: reminderMinute, second: 0, of: Date()) {
-                                    reminderTime = date
-                                }
-                            }
-                    }
-                }
-
-                Section("Health & Sync") {
-                    Toggle(isOn: $enableBackgroundRunTracking) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Background Run Tracking")
-                            Text("Keep tracking active when Pace & Plates is in the background for better locked-screen cardio accuracy. Requires \"Always\" location access.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .onChange(of: enableBackgroundRunTracking) { _, isEnabled in
-                        if isEnabled {
-                            requestAlwaysLocationIfNeeded()
-                        }
-                    }
-
-                    if enableBackgroundRunTracking && locationAuthorizationStatus != .authorizedAlways {
-                        Button("Enable \"Always\" Location Access") {
-                            requestAlwaysLocationIfNeeded()
-                        }
-                        .foregroundStyle(AppTheme.accentColor)
-                    }
-
-                    Button {
-                        refreshHealthDataNow()
-                    } label: {
-                        HStack(spacing: 10) {
-                            if isRefreshingHealthData {
-                                ProgressView()
-                            } else {
-                                Image(systemName: "arrow.triangle.2.circlepath")
-                            }
-                            Text(isRefreshingHealthData ? "Refreshing Health Data..." : "Refresh Health Data Now")
-                        }
-                    }
-                    .disabled(isRefreshingHealthData)
-
-                    Text("Imports recent runs and weight entries from Apple Health.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-
-                    if enableBackgroundRunTracking {
-                        Text(backgroundLocationStatusDescription)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Section("Backup") {
-                    Button {
-                        confirmExport = true
-                    } label: {
-                        Label("Export Data", systemImage: "square.and.arrow.up")
-                    }
-                    Button {
-                        confirmImport = true
-                    } label: {
-                        Label("Import Data", systemImage: "square.and.arrow.down")
-                    }
-                    .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
-                        switch result {
-                        case .success(let url):
-                            importFrom(url: url)
-                        case .failure(let err):
-                            alertMessage = "Import failed: \(err.localizedDescription)"
-                            showAlert = true
-                        }
-                    }
-                    
-                    Button {
-                        confirmDedup = true
-                    } label: {
-                        Label("Remove All Duplicates", systemImage: "sparkles")
-                            .foregroundStyle(AppTheme.accentColor)
-                    }
-                }
-
-                // Move Privacy & Data to the bottom
-                Section("Privacy & Data") {
-                    Button(role: .destructive) {
-                        confirmDeleteAll = true
-                    } label: {
-                        Label("Delete All Data", systemImage: "trash.slash")
-                    }
-                    Link(destination: URL(string: "https://github.com/JustJ0rsh/Pace-Plates/blob/main/Privacy%20Policy.md")!) {
-                        Label("Privacy Policy", systemImage: "doc.text")
-                    }
-                }
-
-                #if DEBUG
-                Section("Debug") {
-                    Button {
-                        confirmAddSampleData = true
-                    } label: {
-                        Label("Add Sample Data (1 Month)", systemImage: "plus.rectangle.on.folder")
-                    }
-
-                    Button(role: .destructive) {
-                        confirmRemoveSampleData = true
-                    } label: {
-                        Label("Remove Sample Data", systemImage: "trash")
-                    }
-                }
-                #endif
-
-            Section("About") {
-                HStack {
-                    Text("Version")
-                        .foregroundColor(AppTheme.textColor)
-                    Spacer()
-                    Text("2.2")
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
+        settingsList
+        .accessibilityIdentifier("settings.ready")
         // Force the insetGrouped table to rebuild when the theme changes.
         // This prevents the "Theme" row from briefly showing stale system row colors during transitions.
         .id(appTheme)
@@ -354,6 +73,7 @@ struct SettingsView: View {
         .sheet(item: $exportURL, onDismiss: {
             exportURL = nil
             if pendingExportConfirmation {
+                alertTitle = "Backup"
                 alertMessage = "Export complete"
                 Haptics.playImpact(.light)
                 showAlert = true
@@ -362,7 +82,7 @@ struct SettingsView: View {
         }) { item in
             ShareSheet(items: [item.url])
         }
-        .alert("Backup", isPresented: $showAlert) {
+        .alert(alertTitle, isPresented: $showAlert) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(alertMessage)
@@ -452,12 +172,636 @@ struct SettingsView: View {
             }
         }
         .onAppear {
+            if !launchConfiguration.shouldSkipAutomationSideEffects {
+                AIProviderManager.bootstrapOpenRouterKeyIfAvailable()
+                openRouterAPIKeyInput = ""
+                loadProfileFromHealthKit()
+            }
             refreshLocationAuthorizationStatus()
-            loadProfileFromHealthKit()
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             refreshLocationAuthorizationStatus()
         }
+    }
+
+    private var settingsList: some View {
+        List {
+            unitsSection
+            appearanceSection
+            profileSection
+            goalsSection
+            homeScreenSection
+            remindersSection
+            advancedSection
+            aboutSection
+        }
+    }
+
+    private var unitsSection: some View {
+        Section("Units") {
+            Picker("Measurement System", selection: $measurementSystem) {
+                Text("Metric").tag("metric")
+                Text("Imperial").tag("imperial")
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: measurementSystem) { _, newValue in
+                updateMeasurementSystem(to: newValue)
+            }
+        }
+    }
+
+    private var appearanceSection: some View {
+        Section("Appearance") {
+            NavigationLink {
+                ThemePickerView(appTheme: $appTheme)
+            } label: {
+                HStack {
+                    Text("Theme")
+                    Spacer()
+                    Text(appTheme.displayName)
+                        .foregroundStyle(AppTheme.secondaryTextColor)
+                }
+            }
+        }
+    }
+
+    private var profileSection: some View {
+        Section("Profile") {
+            Picker("Sex", selection: $sex) {
+                Text("Male").tag("male")
+                Text("Female").tag("female")
+            }
+            .pickerStyle(.segmented)
+
+            Picker("Experience Level", selection: $experienceLevel) {
+                Text("New to Working Out").tag("beginner")
+                Text("Experienced").tag("experienced")
+            }
+            .pickerStyle(.segmented)
+
+            ageRow
+            heightRow
+            goalWeightRow
+        }
+    }
+
+    private var ageRow: some View {
+        HStack {
+            Text("Age")
+            Spacer()
+            TextField("0", value: $age, format: .number)
+                .keyboardType(.numberPad)
+                .multilineTextAlignment(.trailing)
+                .frame(maxWidth: 100)
+                .focused($ageFocused)
+        }
+    }
+
+    private var heightRow: some View {
+        Button {
+            showHeightPicker = true
+        } label: {
+            HStack {
+                Text("Height")
+                Spacer()
+                Text(heightDisplayValue)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: $showHeightPicker) {
+            HeightPickerSheet(heightUnit: $heightUnit, heightValue: $heightValue)
+                .presentationDetents([.height(340), .medium])
+                .presentationDragIndicator(.visible)
+        }
+    }
+
+    private var goalWeightRow: some View {
+        HStack {
+            Text("Goal Weight")
+            Spacer()
+            TextField("0", value: $targetWeight, format: .number.precision(.fractionLength(0...1)))
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.trailing)
+                .frame(maxWidth: 100)
+                .focused($goalWeightFocused)
+            Text(weightUnit)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var goalsSection: some View {
+        Section("Goals") {
+            Picker("Weight Goal", selection: $weightGoal) {
+                Text("Lose").tag("lose")
+                Text("Maintain").tag("maintain")
+                Text("Gain").tag("gain")
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
+    private var homeScreenSection: some View {
+        Section("Home Screen") {
+            Toggle(isOn: $showVitalsOnHome) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Show Vitals Section")
+                    Text("Display health vitals like heart rate, steps, and sleep on the home screen.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private var remindersSection: some View {
+        Section("Reminders") {
+            Toggle(isOn: $enableWeeklyWeightReminder) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Weekly Weight Reminder")
+                    Text("Reminds you to log your weight weekly.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .onChange(of: enableWeeklyWeightReminder) { _, newValue in
+                updateWeeklyWeightReminder(isEnabled: newValue)
+            }
+
+            if enableWeeklyWeightReminder {
+                reminderScheduleControls
+            }
+        }
+    }
+
+    private var reminderScheduleControls: some View {
+        Group {
+            Picker("Day", selection: $reminderWeekday) {
+                Text("Sun").tag(1)
+                Text("Mon").tag(2)
+                Text("Tue").tag(3)
+                Text("Wed").tag(4)
+                Text("Thu").tag(5)
+                Text("Fri").tag(6)
+                Text("Sat").tag(7)
+            }
+            .onChange(of: reminderWeekday) { _, _ in
+                scheduleWeeklyWeightReminder()
+            }
+
+            DatePicker("Time", selection: $reminderTime, displayedComponents: .hourAndMinute)
+                .onChange(of: reminderTime) { _, newTime in
+                    updateReminderTime(to: newTime)
+                }
+                .onAppear(perform: initializeReminderTimePicker)
+        }
+    }
+
+    private var advancedSection: some View {
+        Section("Advanced") {
+            NavigationLink {
+                healthSyncSettingsPage
+            } label: {
+                Label("Health & Sync", systemImage: "heart.text.square")
+            }
+
+            NavigationLink {
+                aiProviderSettingsPage
+            } label: {
+                Label("AI Provider", systemImage: "sparkles")
+            }
+
+            NavigationLink {
+                backupDataSettingsPage
+            } label: {
+                Label("Backup & Data", systemImage: "externaldrive")
+            }
+
+            #if DEBUG
+            NavigationLink {
+                developerSettingsPage
+            } label: {
+                Label("Developer", systemImage: "hammer")
+            }
+            #endif
+        }
+    }
+
+    private var aboutSection: some View {
+        Section("About") {
+            HStack {
+                Text("Version")
+                .foregroundColor(AppTheme.textColor)
+                Spacer()
+                Text("2.4")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func updateMeasurementSystem(to newValue: String) {
+        if newValue == "imperial" {
+            weightUnit = "lbs"
+            distanceUnit = "mi"
+            heightUnit = "in"
+        } else {
+            weightUnit = "kg"
+            distanceUnit = "km"
+            heightUnit = "cm"
+        }
+
+        applyMeasurementSystemChange(newValue)
+    }
+
+    private func updateWeeklyWeightReminder(isEnabled: Bool) {
+        if isEnabled {
+            ReminderService.scheduleIfEnabled()
+        } else {
+            ReminderService.cancelWeeklyWeightReminder()
+        }
+    }
+
+    private func scheduleWeeklyWeightReminder() {
+        ReminderService.scheduleWeeklyWeightReminder(
+            weekday: reminderWeekday,
+            hour: reminderHour,
+            minute: reminderMinute
+        )
+    }
+
+    private func updateReminderTime(to newTime: Date) {
+        let comps = Calendar.current.dateComponents([.hour, .minute], from: newTime)
+        reminderHour = comps.hour ?? 9
+        reminderMinute = comps.minute ?? 0
+        scheduleWeeklyWeightReminder()
+    }
+
+    private func initializeReminderTimePicker() {
+        guard let date = Calendar.current.date(
+            bySettingHour: reminderHour,
+            minute: reminderMinute,
+            second: 0,
+            of: Date()
+        ) else {
+            return
+        }
+
+        reminderTime = date
+    }
+
+    private func settingsSubpage<Content: View>(
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        List {
+            content()
+
+            Color.clear
+                .frame(height: 72)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+        }
+        .id(appTheme)
+        .transaction { tx in
+            tx.animation = nil
+        }
+        .listStyle(.insetGrouped)
+        .appBackground(AppTheme.gradientSettings)
+        .scrollContentBackground(.hidden)
+        .scrollDismissesKeyboard(.immediately)
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
+    }
+
+    private var healthSyncSettingsPage: some View {
+        settingsSubpage(title: "Health & Sync") {
+            Section("Tracking") {
+                Toggle(isOn: $enableBackgroundRunTracking) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Background Run Tracking")
+                        Text("Keep tracking active when Pace & Plates is in the background for better locked-screen cardio accuracy. Requires \"Always\" location access.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .onChange(of: enableBackgroundRunTracking) { _, isEnabled in
+                    if isEnabled {
+                        requestAlwaysLocationIfNeeded()
+                    }
+                }
+
+                if enableBackgroundRunTracking && locationAuthorizationStatus != .authorizedAlways {
+                    Button("Enable \"Always\" Location Access") {
+                        requestAlwaysLocationIfNeeded()
+                    }
+                    .foregroundStyle(AppTheme.accentColor)
+                }
+
+                if enableBackgroundRunTracking {
+                    Text(backgroundLocationStatusDescription)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section("Apple Health") {
+                Button {
+                    refreshHealthDataNow()
+                } label: {
+                    HStack(spacing: 10) {
+                        if isRefreshingHealthData {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                        }
+                        Text(isRefreshingHealthData ? "Refreshing Health Data..." : "Refresh Health Data Now")
+                    }
+                }
+                .disabled(isRefreshingHealthData)
+
+                Text("Imports recent runs and weight entries from Apple Health.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var aiProviderSettingsPage: some View {
+        settingsSubpage(title: "AI Provider") {
+            Section("Plans") {
+                Toggle(isOn: $useStructuredPlanView) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Structured Plan View")
+                        Text("Display saved plans as interactive cards when structured data is available. Note: New plan generation uses proven Markdown format for reliability.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Section("Provider") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Current AI Provider")
+                    Text(currentAIProviderSummary)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                if currentAIProviderStatus.appleIntelligenceStatus.isCapable {
+                    Picker("AI Provider", selection: aiProviderPreferenceBinding) {
+                        ForEach(AIProviderPreference.allCases) { provider in
+                            Text(provider.displayName).tag(provider)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    Text(selectedAIProviderSubtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("This device does not support Apple Intelligence, so Pace & Plates uses OpenRouter here.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section("OpenRouter") {
+                SecureField(openRouterKeyConfigured ? "Enter a new key to replace saved key" : "OpenRouter API Key", text: $openRouterAPIKeyInput)
+                    .textContentType(.password)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+
+                if openRouterKeyConfigured {
+                    Label("API key saved in this device's Keychain.", systemImage: "lock.shield")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack(spacing: 10) {
+                    Button(openRouterKeyConfigured ? "Update Key" : "Save Key") {
+                        saveOpenRouterKey()
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Button("Remove Key", role: .destructive) {
+                        removeOpenRouterKey()
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(!openRouterKeyConfigured)
+                }
+
+                Text(openRouterStatusSummary)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("OpenRouter Limits") {
+                Picker("Free Model Daily Cap", selection: $openRouterDailyLimit) {
+                    Text("50/day").tag(AIUsageBudgetManager.openRouterFreeUserDailyRequestLimit)
+                    Text("1000/day").tag(AIUsageBudgetManager.openRouterCreditedDailyRequestLimit)
+                }
+                .onChange(of: openRouterDailyLimit) { _, newValue in
+                    AIUsageBudgetManager.setOpenRouterDailyLimit(newValue)
+                }
+
+                Button {
+                    AIUsageBudgetManager.resetOpenRouterUsage()
+                    alertTitle = "AI Provider"
+                    alertMessage = "OpenRouter usage counters reset on this device."
+                    showAlert = true
+                } label: {
+                    Label("Reset Local Usage Counter", systemImage: "arrow.counterclockwise")
+                }
+
+                Text("OpenRouter currently limits free-model usage to 20 requests per minute. Accounts with less than 10 credits purchased are limited to 50 free-model requests per UTC day; accounts with at least 10 credits purchased may use 1000 per UTC day. The app enforces the selected cap locally before sending requests.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var backupDataSettingsPage: some View {
+        settingsSubpage(title: "Backup & Data") {
+            Section("Backup") {
+                Button {
+                    confirmExport = true
+                } label: {
+                    Label("Export Data", systemImage: "square.and.arrow.up")
+                }
+
+                Button {
+                    confirmImport = true
+                } label: {
+                    Label("Import Data", systemImage: "square.and.arrow.down")
+                }
+                .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
+                    switch result {
+                    case .success(let url):
+                        importFrom(url: url)
+                    case .failure(let err):
+                        alertMessage = "Import failed: \(err.localizedDescription)"
+                        showAlert = true
+                    }
+                }
+            }
+
+            Section("Data") {
+                Button {
+                    confirmDedup = true
+                } label: {
+                    Label("Remove All Duplicates", systemImage: "sparkles")
+                        .foregroundStyle(AppTheme.accentColor)
+                }
+
+                Button(role: .destructive) {
+                    confirmDeleteAll = true
+                } label: {
+                    Label("Delete All Data", systemImage: "trash.slash")
+                }
+            }
+
+            Section("Privacy") {
+                Link(destination: URL(string: "https://github.com/JustJ0rsh/Pace-Plates/blob/main/Privacy%20Policy.md")!) {
+                    Label("Privacy Policy", systemImage: "doc.text")
+                }
+            }
+        }
+    }
+
+    #if DEBUG
+    private var developerSettingsPage: some View {
+        settingsSubpage(title: "Developer") {
+            Section("Debug") {
+                Button {
+                    confirmAddSampleData = true
+                } label: {
+                    Label("Add Sample Data (1 Month)", systemImage: "plus.rectangle.on.folder")
+                }
+
+                Button(role: .destructive) {
+                    confirmRemoveSampleData = true
+                } label: {
+                    Label("Remove Sample Data", systemImage: "trash")
+                }
+            }
+        }
+    }
+    #endif
+
+    private var currentAIProviderStatus: AIProviderStatus {
+        _ = aiProviderPreferenceRaw
+        _ = openRouterKeyConfigured
+        _ = openRouterResolvedModel
+        return AIProviderManager.currentStatus()
+    }
+
+    private var aiProviderPreferenceBinding: Binding<AIProviderPreference> {
+        Binding(
+            get: { AIProviderManager.providerPreference() },
+            set: { AIProviderManager.setProviderPreference($0) }
+        )
+    }
+
+    private var currentAIProviderSummary: String {
+        let status = currentAIProviderStatus
+        switch status.effectiveProvider {
+        case .appleIntelligence:
+            return status.canGenerateNow
+                ? "Apple Intelligence is active and ready on this device."
+                : status.unavailableDescription
+        case .openRouter:
+            let modelText = status.openRouterModelID.map { " Current free-tier model: \($0)." } ?? ""
+            let readiness = status.hasOpenRouterKey
+                ? "OpenRouter is active with your saved API key."
+                : "OpenRouter is selected, but no API key is saved yet."
+            return readiness + modelText
+        }
+    }
+
+    private var selectedAIProviderSubtitle: String {
+        aiProviderPreferenceBinding.wrappedValue.subtitle
+    }
+
+    private var openRouterStatusSummary: String {
+        let status = currentAIProviderStatus
+        let budget = AIUsageBudgetManager.currentOpenRouterStatus()
+        var lines: [String] = []
+
+        if openRouterKeyConfigured {
+            lines.append("Stored securely in Keychain.")
+        } else {
+            lines.append("No OpenRouter key saved yet.")
+        }
+
+        if let modelID = status.openRouterModelID, !modelID.isEmpty {
+            lines.append("Free-tier model: \(modelID).")
+        } else {
+            lines.append("A compatible `:free` text model will be chosen automatically.")
+        }
+
+        lines.append("Device guardrails: \(budget.dailyRemaining)/\(budget.dailyLimit) free-model requests left for the current UTC day, \(budget.minuteRemaining)/\(budget.minuteLimit) left this minute, and up to \(AIUsageBudgetManager.maxModelAttemptsPerRequest) free-model attempts per AI action.")
+        lines.append("Response caps: chat \(AIUsageBudgetManager.openRouterChatOutputTokenLimit) tokens, workout plans \(AIUsageBudgetManager.openRouterWorkoutPlanOutputTokenLimit), running plans \(AIUsageBudgetManager.openRouterRunPlanOutputTokenLimit).")
+
+        if let cooldownUntil = budget.cooldownUntil, cooldownUntil > Date() {
+            let formatter = RelativeDateTimeFormatter()
+            formatter.unitsStyle = .short
+            lines.append("Provider cooldown active until \(formatter.localizedString(for: cooldownUntil, relativeTo: Date())).")
+        }
+
+        lines.append("`OPENROUTER_API_KEY` can also bootstrap the key for local development.")
+        return lines.joined(separator: " ")
+    }
+
+    private var heightDisplayValue: String {
+        if heightUnit == "in" {
+            let totalInches = Int(round(heightValue))
+            let feet = max(0, totalInches / 12)
+            let inches = max(0, min(11, totalInches % 12))
+            return "\(feet)′ \(inches)″"
+        }
+
+        return String(format: "%.1f cm", heightValue)
+    }
+
+    private func saveOpenRouterKey() {
+        let trimmed = openRouterAPIKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        alertTitle = "AI Provider"
+        guard !trimmed.isEmpty else {
+            alertMessage = openRouterKeyConfigured
+                ? "Enter a new OpenRouter API key to replace the saved Keychain item."
+                : "Enter an OpenRouter API key first."
+            showAlert = true
+            return
+        }
+
+        guard AIProviderManager.isUsableOpenRouterKeyCandidate(trimmed) else {
+            alertMessage = "That does not look like a usable OpenRouter API key. Paste the full key with no spaces or line breaks."
+            showAlert = true
+            return
+        }
+
+        if AIProviderManager.saveOpenRouterKey(trimmed) {
+            openRouterAPIKeyInput = ""
+            AIProviderManager.setProviderPreference(.openRouter)
+            alertMessage = "OpenRouter API key saved securely in Keychain. OpenRouter is now selected for AI."
+        } else {
+            alertMessage = "Could not save the OpenRouter API key."
+        }
+        showAlert = true
+    }
+
+    private func removeOpenRouterKey() {
+        alertTitle = "AI Provider"
+        if AIProviderManager.deleteOpenRouterKey() {
+            openRouterAPIKeyInput = ""
+            alertMessage = "OpenRouter API key removed."
+        } else {
+            alertMessage = "Could not remove the OpenRouter API key."
+        }
+        showAlert = true
     }
     
     // MARK: - Backup actions
@@ -467,6 +811,7 @@ struct SettingsView: View {
     @State private var pendingExportConfirmation: Bool = false
     // Use URL-bound sheet to avoid blank first presentation
     @State private var showAlert: Bool = false
+    @State private var alertTitle: String = "Settings"
     @State private var alertMessage: String = ""
     @State private var confirmDeleteAll: Bool = false
     
@@ -640,6 +985,8 @@ struct SettingsView: View {
         if inserted > 0 || linked > 0 || deletedAny {
             try modelContext.save()
         }
+
+        HealthKitManager.shared.persistCardioWorkoutAnchor(changes.newAnchor)
 
         return (inserted, linked, skipped)
     }
@@ -985,12 +1332,16 @@ extension SettingsView {
             }
         }
         private func loadImperial() {
-            let f = Int(floor(heightValue / 12.0))
-            let i = Int(round(heightValue - Double(f) * 12.0))
+            let storedHeight = heightValue > 0 ? heightValue : 68.0
+            let f = Int(floor(storedHeight / 12.0))
+            let i = Int(round(storedHeight - Double(f) * 12.0))
             feet = max(3, min(8, f)); inches = max(0, min(11, i))
         }
         private func applyImperial() { heightValue = Double(max(0, feet)) * 12.0 + Double(max(0, min(11, inches))) }
-        private func loadMetric() { let v = max(0, heightValue); cmInt = Int(floor(v)); cmDec = min(9, max(0, Int(round((v - floor(v)) * 10)))) }
+        private func loadMetric() {
+            let v = heightValue > 0 ? heightValue : 175.0
+            cmInt = Int(floor(v)); cmDec = min(9, max(0, Int(round((v - floor(v)) * 10))))
+        }
         private func applyMetric() { heightValue = Double(cmInt) + Double(cmDec) / 10.0 }
     }
 }

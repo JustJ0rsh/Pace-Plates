@@ -12,6 +12,8 @@ struct RunningActivityAttributes: ActivityAttributes {
         var distanceMeters: Double
         var paceSecondsPerUnit: Double?
         var distanceUnit: String // "km" or "mi"
+        var isPaused: Bool
+        var timerReferenceDate: Date // Date() - duration; used by Text(date, style: .timer)
         
         // Computed properties for display
         var distanceInUnits: Double {
@@ -54,6 +56,19 @@ final class LiveActivityManager {
 
     private init() {}
 
+    private var activeActivities: [Activity<RunningActivityAttributes>] {
+        var activities = Activity<RunningActivityAttributes>.activities
+        if let activity, !activities.contains(where: { $0.id == activity.id }) {
+            activities.append(activity)
+        }
+        return activities
+    }
+
+    private func adoptSystemActivityIfNeeded() {
+        guard activity == nil else { return }
+        activity = Activity<RunningActivityAttributes>.activities.first
+    }
+
     func start(startDate: Date, distanceMeters: Double, paceSecondsPerUnit: Double?, distanceUnit: String, activityType: String = "running") {
         // End any existing activity first
         end()
@@ -80,7 +95,9 @@ final class LiveActivityManager {
             duration: 0,
             distanceMeters: distanceMeters,
             paceSecondsPerUnit: paceSecondsPerUnit,
-            distanceUnit: distanceUnit
+            distanceUnit: distanceUnit,
+            isPaused: false,
+            timerReferenceDate: startDate
         )
         
         do {
@@ -93,18 +110,21 @@ final class LiveActivityManager {
         }
     }
 
-    func update(startDate: Date, duration: TimeInterval, distanceMeters: Double, paceSecondsPerUnit: Double?, distanceUnit: String) {
+    func update(startDate: Date, duration: TimeInterval, distanceMeters: Double, paceSecondsPerUnit: Double?, distanceUnit: String, isPaused: Bool = false) {
+        adoptSystemActivityIfNeeded()
         guard let activity else {
             print("⚠️ No active Live Activity to update")
             return
         }
-        
+
         let content = RunningActivityAttributes.ContentState(
             startDate: startDate,
             duration: duration,
             distanceMeters: distanceMeters,
             paceSecondsPerUnit: paceSecondsPerUnit,
-            distanceUnit: distanceUnit
+            distanceUnit: distanceUnit,
+            isPaused: isPaused,
+            timerReferenceDate: Date().addingTimeInterval(-duration)
         )
         
         Task {
@@ -114,18 +134,34 @@ final class LiveActivityManager {
     }
 
     func end() {
-        guard let activity else { return }
-        
+        let activitiesToEnd = activeActivities
+        guard !activitiesToEnd.isEmpty else {
+            activity = nil
+            return
+        }
+
         Task {
-            await activity.end(nil, dismissalPolicy: .immediate)
+            for activity in activitiesToEnd {
+                await activity.end(nil, dismissalPolicy: .immediate)
+            }
             print("✅ Live Activity ended immediately")
         }
         
         self.activity = nil
     }
+
+    func reconcileActivities(hasRecoverableRun: Bool) {
+        if hasRecoverableRun {
+            adoptSystemActivityIfNeeded()
+            return
+        }
+
+        end()
+    }
     
     var isActive: Bool {
-        activity != nil
+        adoptSystemActivityIfNeeded()
+        return activity != nil
     }
 }
 #else
@@ -133,12 +169,12 @@ final class LiveActivityManager {
     static let shared = LiveActivityManager()
     private init() {}
     func start(startDate: Date, distanceMeters: Double, paceSecondsPerUnit: Double?, distanceUnit: String, activityType: String = "running") {}
-    func update(startDate: Date, duration: TimeInterval, distanceMeters: Double, paceSecondsPerUnit: Double?, distanceUnit: String) {}
+    func update(startDate: Date, duration: TimeInterval, distanceMeters: Double, paceSecondsPerUnit: Double?, distanceUnit: String, isPaused: Bool = false) {}
     func end() {}
+    func reconcileActivities(hasRecoverableRun: Bool) {}
     var isActive: Bool { false }
 }
 #endif
-
 
 
 

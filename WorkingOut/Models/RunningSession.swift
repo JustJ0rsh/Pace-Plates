@@ -13,7 +13,7 @@ final class RunningSession {
     // Calories (kcal) if known (e.g., imported from Health)
     var calories: Double? = nil
     var notes: String?
-    var locations: Data = Data() // Stores encoded [CLLocationCoordinate2D]
+    @Attribute(.externalStorage) var locations: Data = Data() // Stores encoded route coordinates outside the main row
     
     // If imported from Health, store the HKWorkout UUID to prevent duplicates and allow deletions
     var healthWorkoutUUID: String? = nil

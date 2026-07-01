@@ -143,6 +143,41 @@ struct HomeView: View {
         formatter.dateFormat = "MMM d"
         return formatter.string(from: date)
     }
+
+    private func formattedWholeNumber(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(0)).grouping(.automatic))
+    }
+
+    private func formattedOneDecimal(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(1)))
+    }
+
+    private var selectedChartSummary: String {
+        switch selectedChartTab {
+        case .volume:
+            let total = workoutVolumePerDayLast7.reduce(0) { $0 + $1.volume }
+            guard total > 0 else { return "Log a workout to see your volume trend." }
+            return "You lifted \(formattedWholeNumber(total)) \(preferredWeightUnit) this week."
+        case .runs:
+            let startOfWindow = last7DaysDomain.lowerBound
+            let recentActivities = runningSessions.prefix { $0.date >= startOfWindow }
+            let longest = recentActivities
+                .map { UnitConverter.distance($0.distance, from: $0.distanceUnit, to: distanceUnit) }
+                .max() ?? 0
+            guard longest > 0 else { return "Start a run to see your distance trend." }
+            return "Longest activity: \(formattedOneDecimal(longest)) \(distanceUnit)."
+        case .weight:
+            let data = weightDailySeriesLast7
+            guard let latest = data.last else { return "Log a weight to see your trend." }
+            guard let oldest = data.first, data.count >= 2 else {
+                return "Latest: \(formattedOneDecimal(latest.weight)) \(preferredWeightUnit)."
+            }
+            let delta = latest.weight - oldest.weight
+            guard abs(delta) >= 0.05 else { return "No change over 7 days." }
+            let direction = delta < 0 ? "Down" : "Up"
+            return "\(direction) \(formattedOneDecimal(abs(delta))) \(preferredWeightUnit) over 7 days."
+        }
+    }
     
     // MARK: Chart Builders
 
@@ -437,14 +472,9 @@ struct HomeView: View {
     @ViewBuilder
     private var quickActionsCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("Quick Log")
-                    .font(.headline)
-                    .foregroundStyle(AppTheme.textColor)
-                Text("Press and hold for more options")
-                    .font(.caption2)
-                    .foregroundStyle(AppTheme.secondaryTextColor)
-            }
+            Text("Quick Log")
+                .font(.headline)
+                .foregroundStyle(AppTheme.textColor)
 
             Button {
                 Haptics.playImpact(.light)
@@ -454,6 +484,8 @@ struct HomeView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("home.quickActions.startWorkout")
+            .id("home.quickActions.startWorkout")
             .contextMenu {
                 Button {
                     Haptics.playImpact(.light)
@@ -477,6 +509,8 @@ struct HomeView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("home.quickActions.startRun")
+            .id("home.quickActions.startRun")
             .contextMenu {
                 ForEach(quickCardioOptions, id: \.activityType) { option in
                     Button {
@@ -567,6 +601,11 @@ struct HomeView: View {
                     }
                     .pickerStyle(.segmented)
 
+                    Text(selectedChartSummary)
+                        .font(.subheadline)
+                        .foregroundStyle(AppTheme.secondaryTextColor)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
                     // Chart content swaps based on selected tab
                     Group {
                         switch selectedChartTab {
@@ -605,6 +644,7 @@ struct HomeView: View {
                     Image(systemName: "gear")
                 }
                 .accessibilityLabel("Settings")
+                .accessibilityIdentifier("home.settings.button")
             }
         }
         .appBackground(AppTheme.gradientHome)

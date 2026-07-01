@@ -4,11 +4,22 @@ import SwiftData
 @MainActor
 @Observable
 class PersistenceController {
-    static let shared = PersistenceController()
+    enum CloudKitMode {
+        case automatic
+        case none
+    }
+
+    static let shared: PersistenceController = {
+        let launchConfiguration = AppLaunchConfiguration.current
+        if launchConfiguration.usesIsolatedStore {
+            return PersistenceController(inMemory: true, cloudKitMode: .none)
+        }
+        return PersistenceController()
+    }()
     
     // Add a static instance for previews using an in-memory store
     static var preview: PersistenceController = {
-        let controller = PersistenceController(inMemory: true)
+        let controller = PersistenceController(inMemory: true, cloudKitMode: .none)
         let context = controller.container.mainContext
         
         // Populate initial exercises
@@ -44,7 +55,7 @@ class PersistenceController {
     private(set) var isCloudBacked: Bool = false
     
     // Modify init to accept inMemory flag
-    init(inMemory: Bool = false) {
+    init(inMemory: Bool = false, cloudKitMode: CloudKitMode = .automatic) {
         let schema = Schema([
             ExerciseDefinition.self,
             WorkoutSession.self,
@@ -61,7 +72,12 @@ class PersistenceController {
         // Build a configuration; enable CloudKit (will fall back to local if not available)
         var config: ModelConfiguration
         if #available(iOS 17.0, *) {
-            config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory, cloudKitDatabase: .automatic)
+            let cloudKitDatabase: ModelConfiguration.CloudKitDatabase = (cloudKitMode == .automatic) ? .automatic : .none
+            config = ModelConfiguration(
+                schema: schema,
+                isStoredInMemoryOnly: inMemory,
+                cloudKitDatabase: cloudKitDatabase
+            )
         } else {
             config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
         }
@@ -70,7 +86,7 @@ class PersistenceController {
         do {
             container = try ModelContainer(for: schema, configurations: [config])
             #if canImport(CloudKit)
-            if #available(iOS 17.0, *), !inMemory {
+            if #available(iOS 17.0, *), !inMemory, cloudKitMode == .automatic {
                 isCloudBacked = true
             } else {
                 isCloudBacked = false

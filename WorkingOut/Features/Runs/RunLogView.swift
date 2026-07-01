@@ -15,6 +15,7 @@ struct RunLogView: View {
     @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
     @AppStorage("distanceUnit") private var preferredDistanceUnit: String = "mi"
     @AppStorage("runsLastHealthImportAt") private var runsLastHealthImportAt: Double = 0
+    private let launchConfiguration = AppLaunchConfiguration.current
     // Helper type for chart points
     private struct DailyPoint: Identifiable {
         let date: Date
@@ -45,6 +46,8 @@ struct RunLogView: View {
     @State private var showSwipeDeleteConfirm: Bool = false
     @State private var lockedChartDate: Date? = nil // Keeps summary open until X is clicked
     @State private var showRunAssistant: Bool = false
+    @State private var showRunActions: Bool = false
+    @State private var showPastRunLog: Bool = false
     @State private var saveErrorMessage: String? = nil
     @State private var visibleRunCount: Int = 30
     @State private var hasInitializedRunPagination: Bool = false
@@ -203,13 +206,43 @@ struct RunLogView: View {
                             .foregroundStyle(AppTheme.textColor)
                         }
 
+                        Text(runDistanceSummary(filteredSessions: filteredSessions, unitLabel: unitLabel))
+                            .font(.subheadline)
+                            .foregroundStyle(AppTheme.secondaryTextColor)
+
                         if daily.isEmpty {
-                            ContentUnavailableView(
-                                "No Runs Logged",
-                                systemImage: "figure.run",
-                                description: Text("Tap the + button to track your first run.")
-                            )
-                            .frame(maxWidth: .infinity, minHeight: 160)
+                            VStack(spacing: 10) {
+                                ContentUnavailableView(
+                                    "No Runs Logged",
+                                    systemImage: "figure.run",
+                                    description: Text("Start tracking now, log a past activity, or import from Apple Health.")
+                                )
+                                .frame(maxWidth: .infinity, minHeight: 150)
+
+                                Button {
+                                    presentRunTracking(for: "running")
+                                } label: {
+                                    Label("Start First Run", systemImage: "play.fill")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.borderedProminent)
+
+                                Button {
+                                    showPastRunLog = true
+                                } label: {
+                                    Label("Log Past Run", systemImage: "calendar")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+
+                                Button {
+                                    importHealthRuns(limit: forcedHealthImportLimit, force: true)
+                                } label: {
+                                    Label("Import from Health", systemImage: "heart.text.square")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+                            }
                         } else {
                             Chart(daily, id: \.id) { item in
                                 LineMark(
@@ -507,6 +540,7 @@ struct RunLogView: View {
                     .animation(.easeInOut(duration: 0.2), value: loadingSessionId)
                 }
             }
+            .accessibilityIdentifier("runs.ready")
             .navigationDestination(item: $navigationSessionId) { sessionId in
                 if let session = runningSessions.first(where: { $0.id == sessionId }) {
                     RunSessionDetailView(session: session)
@@ -543,36 +577,8 @@ struct RunLogView: View {
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        Button {
-                            presentRunTracking(for: "running")
-                        } label: {
-                            Label("Run", systemImage: "figure.run")
-                        }
-                        
-                        Button {
-                            presentRunTracking(for: "walking")
-                        } label: {
-                            Label("Walk", systemImage: "figure.walk")
-                        }
-                        
-                        Button {
-                            presentRunTracking(for: "hiking")
-                        } label: {
-                            Label("Hike", systemImage: "figure.hiking")
-                        }
-                        
-                        Button {
-                            presentRunTracking(for: "cycling")
-                        } label: {
-                            Label("Cycle", systemImage: "bicycle")
-                        }
-                        
-                        Button {
-                            presentRunTracking(for: "rowing")
-                        } label: {
-                            Label("Row", systemImage: "figure.rower")
-                        }
+                    Button {
+                        showRunActions = true
                     } label: {
                         Image(systemName: "plus")
                             .font(.system(size: 18, weight: .semibold))
@@ -587,23 +593,25 @@ struct RunLogView: View {
                     hasInitializedRunPagination = true
                     visibleRunCount = min(runPageSize, runningSessions.count)
                 }
-                HealthKitManager.shared.startWorkoutChangeObservationIfNeeded()
-                if UserDefaults.standard.bool(forKey: "runsPendingHealthImport") {
-                    UserDefaults.standard.set(false, forKey: "runsPendingHealthImport")
-                    importHealthRuns(limit: forcedHealthImportLimit, force: true)
-                }
-                // Request location permission only when entering Runs for the first time
-                if !requestedLocationAuthOnce {
-                    requestedLocationAuthOnce = true
-                    let manager = CLLocationManager()
-                    if manager.authorizationStatus == .notDetermined {
-                        manager.requestWhenInUseAuthorization()
+                if !launchConfiguration.shouldSkipAutomationSideEffects {
+                    HealthKitManager.shared.startWorkoutChangeObservationIfNeeded()
+                    if UserDefaults.standard.bool(forKey: "runsPendingHealthImport") {
+                        UserDefaults.standard.set(false, forKey: "runsPendingHealthImport")
+                        importHealthRuns(limit: forcedHealthImportLimit, force: true)
                     }
+                    // Request location permission only when entering Runs for the first time
+                    if !requestedLocationAuthOnce {
+                        requestedLocationAuthOnce = true
+                        let manager = CLLocationManager()
+                        if manager.authorizationStatus == .notDetermined {
+                            manager.requestWhenInUseAuthorization()
+                        }
+                    }
+                    // Load data (HealthKit should already be authorized from tutorial)
+                    fetchTodaySteps()
+                    scheduleInitialHealthImportIfNeeded()
+                    reconcileAssistantPlanCompletions()
                 }
-                // Load data (HealthKit should already be authorized from tutorial)
-                fetchTodaySteps()
-                scheduleInitialHealthImportIfNeeded()
-                reconcileAssistantPlanCompletions()
             }
             .onChange(of: runningSessions.count) { oldCount, newCount in
                 if oldCount == 0 && visibleRunCount == 0 && newCount > 0 {
@@ -633,6 +641,40 @@ struct RunLogView: View {
                 .appBackground(AppTheme.gradientRuns)
                 .foregroundColor(AppTheme.textColor)
                 .tint(AppTheme.accentColor)
+            }
+            .sheet(isPresented: $showPastRunLog) {
+                PastRunLogView()
+            }
+            .sheet(isPresented: $showRunActions) {
+                QuickActionSheet(
+                    title: "Activity Actions",
+                    actions: [
+                        QuickActionSheetAction(
+                            id: "run.start-now",
+                            title: "Start now",
+                            subtitle: "Track a run with GPS.",
+                            systemImage: "play.fill",
+                            accessibilityIdentifier: "runs.action.start_now",
+                            handler: { presentRunTracking(for: "running") }
+                        ),
+                        QuickActionSheetAction(
+                            id: "run.log-past",
+                            title: "Log past activity",
+                            subtitle: "Enter distance, duration, and date manually.",
+                            systemImage: "calendar",
+                            accessibilityIdentifier: "runs.action.log_past",
+                            handler: { showPastRunLog = true }
+                        ),
+                        QuickActionSheetAction(
+                            id: "run.import-health",
+                            title: "Import from Health",
+                            subtitle: "Pull recent cardio workouts from Apple Health.",
+                            systemImage: "heart.text.square",
+                            accessibilityIdentifier: "runs.action.import_health",
+                            handler: { importHealthRuns(limit: forcedHealthImportLimit, force: true) }
+                        )
+                    ]
+                )
             }
             .sheet(isPresented: $showRunAssistant) {
                 RunAssistantContainerView(
@@ -688,6 +730,23 @@ struct RunLogView: View {
 
     private func presentRunTracking(for activityType: String) {
         runTrackingRequest = RunTrackingRequest(activityType: activityType)
+    }
+
+    private func runDistanceSummary(filteredSessions: [RunningSession], unitLabel: String) -> String {
+        guard !filteredSessions.isEmpty else {
+            return "Start a run or import from Health to see your distance trend."
+        }
+
+        let longest = filteredSessions
+            .map { UnitConverter.distance($0.distance, from: $0.distanceUnit, to: unitLabel) }
+            .max() ?? 0
+
+        guard longest > 0 else {
+            return "Activities logged, but no distance recorded yet."
+        }
+
+        let formatted = longest.formatted(.number.precision(.fractionLength(1)))
+        return "Longest activity: \(formatted) \(unitLabel)."
     }
 
     private func keyForActivity(_ label: String) -> String {
@@ -956,8 +1015,12 @@ struct RunLogView: View {
                 }
 
                 await MainActor.run {
-                    applyImportActions(actions)
+                    let didCommit = applyImportActions(actions)
+                    guard didCommit else { return }
+
+                    HealthKitManager.shared.persistCardioWorkoutAnchor(changes.newAnchor)
                     runsLastHealthImportAt = Date().timeIntervalSince1970
+
                     var seenUUIDs = Set<String>()
                     let uniqueUUIDs = uuidsToEnrich.filter { seenUUIDs.insert($0).inserted }
                     scheduleDeferredEnrichment(for: Array(uniqueUUIDs.prefix(autoEnrichmentLimit)))
@@ -1013,8 +1076,8 @@ struct RunLogView: View {
     }
 
     @MainActor
-    private func applyImportActions(_ actions: [RunImportAction]) {
-        guard !actions.isEmpty else { return }
+    private func applyImportActions(_ actions: [RunImportAction]) -> Bool {
+        guard !actions.isEmpty else { return true }
 
         let sessionsById = Dictionary(uniqueKeysWithValues: runningSessions.map { ($0.id, $0) })
 
@@ -1060,7 +1123,7 @@ struct RunLogView: View {
             }
         }
 
-        _ = PersistenceSave.commit(
+        return PersistenceSave.commit(
             modelContext,
             action: "import Health runs",
             onFailure: { message in saveErrorMessage = message }

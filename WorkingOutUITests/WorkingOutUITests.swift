@@ -1,0 +1,204 @@
+import XCTest
+
+@MainActor
+final class WorkingOutUITests: XCTestCase {
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+    }
+
+    func testHomeScreenshot() {
+        let app = launchApp(startTab: "home")
+
+        waitForElement(app.buttons["home.settings.button"])
+        XCTAssertTrue(app.navigationBars["Home"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Start Workout"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Start Run"].exists)
+        XCTAssertTrue(app.buttons["Log Weight"].exists)
+        XCTAssertFalse(app.buttons["Choose Template"].exists)
+        XCTAssertFalse(app.buttons["Walk"].exists)
+        XCTAssertFalse(app.buttons["Hike"].exists)
+        XCTAssertFalse(app.buttons["Cycle"].exists)
+        XCTAssertFalse(app.buttons["Row"].exists)
+
+        snapshot("01_home", waitForLoadingIndicator: false)
+    }
+
+    func testHomeQuickActionContextMenusStayScopedToPressedButton() {
+        let app = launchApp(startTab: "home")
+
+        let startWorkout = app.buttons["home.quickActions.startWorkout"]
+        let startRun = app.buttons["home.quickActions.startRun"]
+        waitForElement(startWorkout)
+        waitForElement(startRun)
+
+        startWorkout.press(forDuration: 1.1)
+        XCTAssertTrue(app.buttons["Choose Template"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["Walk"].exists)
+
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
+        XCTAssertTrue(startRun.waitForExistence(timeout: 3))
+
+        startRun.press(forDuration: 1.1)
+        XCTAssertTrue(app.buttons["Walk"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Hike"].exists)
+        XCTAssertTrue(app.buttons["Cycle"].exists)
+        XCTAssertFalse(app.buttons["Choose Template"].exists)
+    }
+
+    func testWorkoutsScreenshot() {
+        let app = launchApp(startTab: "workouts")
+        waitForAnchor("workouts.ready", in: app)
+        XCTAssertTrue(app.navigationBars["Workouts"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["You lifted 38,880 lbs in the last 7 days."].waitForExistence(timeout: 5))
+
+        snapshot("02_workouts", waitForLoadingIndicator: false)
+    }
+
+    func testRunsScreenshot() {
+        let app = launchApp(startTab: "runs")
+        waitForAnchor("runs.ready", in: app)
+        XCTAssertTrue(app.navigationBars["Runs"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Longest activity: 4.1 mi."].waitForExistence(timeout: 5))
+
+        snapshot("03_runs", waitForLoadingIndicator: false)
+    }
+
+    func testWeightScreenshot() {
+        let app = launchApp(startTab: "weight")
+        waitForAnchor("weight.ready", in: app)
+        XCTAssertTrue(app.navigationBars["Weight"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Down 2.0 lbs over 7 days."].waitForExistence(timeout: 5))
+
+        snapshot("04_weight", waitForLoadingIndicator: false)
+    }
+
+    func testSettingsScreenshot() {
+        let app = launchApp(startTab: "home")
+
+        openSettingsRoot(in: app)
+        openSettingsSubpage("Health & Sync", in: app)
+        openSettingsSubpage("AI Provider", in: app)
+        openSettingsSubpage("Backup & Data", in: app)
+        openSettingsSubpage("Developer", in: app)
+        for _ in 0..<4 {
+            app.swipeDown()
+        }
+
+        snapshot("05_settings", waitForLoadingIndicator: false)
+    }
+
+    func testEmptyStatePrimaryActions() {
+        let workouts = launchApp(startTab: "workouts", fixture: nil)
+        waitForAnchor("workouts.ready", in: workouts)
+        XCTAssertTrue(workouts.buttons["Start First Workout"].waitForExistence(timeout: 5))
+        XCTAssertTrue(workouts.buttons["Choose Template"].exists)
+        workouts.terminate()
+
+        let runs = launchApp(startTab: "runs", fixture: nil)
+        waitForAnchor("runs.ready", in: runs)
+        XCTAssertTrue(runs.buttons["Start First Run"].waitForExistence(timeout: 5))
+        XCTAssertTrue(runs.buttons["Log Past Run"].exists)
+        XCTAssertTrue(runs.buttons["Import from Health"].exists)
+        runs.terminate()
+
+        let weight = launchApp(startTab: "weight", fixture: nil)
+        waitForAnchor("weight.ready", in: weight)
+        XCTAssertTrue(weight.buttons["Log Weight"].waitForExistence(timeout: 5))
+        XCTAssertTrue(weight.buttons["Import from Health"].exists)
+        weight.terminate()
+    }
+
+    func testAISurfaceAndHistoryNavigation() {
+        let app = launchApp(startTab: "ai")
+
+        XCTAssertTrue(app.navigationBars["AI"].waitForExistence(timeout: 5))
+        let historyButton = app.buttons["AI History"]
+        waitForElement(historyButton)
+        historyButton.tap()
+        XCTAssertTrue(app.navigationBars["AI History"].waitForExistence(timeout: 5))
+    }
+
+    func testToolbarActionSheetsAndRunAssistantPresent() {
+        let workouts = launchApp(startTab: "workouts")
+        waitForAnchor("workouts.ready", in: workouts)
+        workouts.buttons["Add Workout"].tap()
+        XCTAssertTrue(workouts.navigationBars["Workout Actions"].waitForExistence(timeout: 5))
+        waitForElement(workouts.buttons["workouts.action.start_now"])
+        XCTAssertTrue(workouts.buttons["workouts.action.log_past"].exists)
+        XCTAssertTrue(workouts.buttons["workouts.action.use_template"].exists)
+        workouts.buttons["Cancel"].tap()
+        workouts.terminate()
+
+        let runs = launchApp(startTab: "runs")
+        waitForAnchor("runs.ready", in: runs)
+        runs.buttons["Track Activity"].tap()
+        XCTAssertTrue(runs.navigationBars["Activity Actions"].waitForExistence(timeout: 5))
+        waitForElement(runs.buttons["runs.action.start_now"])
+        XCTAssertTrue(runs.buttons["runs.action.log_past"].exists)
+        XCTAssertTrue(runs.buttons["runs.action.import_health"].exists)
+        runs.buttons["Cancel"].tap()
+
+        runs.buttons["Running Assistant"].tap()
+        XCTAssertTrue(runs.navigationBars["Running Assistant"].waitForExistence(timeout: 5))
+        runs.buttons["Close"].tap()
+        runs.terminate()
+
+        let weight = launchApp(startTab: "weight")
+        waitForAnchor("weight.ready", in: weight)
+        weight.buttons["Log Weight"].tap()
+        XCTAssertTrue(weight.navigationBars["Weight Actions"].waitForExistence(timeout: 5))
+        waitForElement(weight.buttons["weight.action.start_now"])
+        XCTAssertTrue(weight.buttons["weight.action.import_health"].exists)
+        weight.buttons["Cancel"].tap()
+        weight.terminate()
+    }
+
+    private func launchApp(startTab: String, fixture: String? = "core_tabs") -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchEnvironment["UITEST_MODE"] = "1"
+        if let fixture {
+            app.launchEnvironment["UITEST_FIXTURE"] = fixture
+        }
+        app.launchEnvironment["UITEST_RESET_STATE"] = "1"
+        app.launchEnvironment["UITEST_START_TAB"] = startTab
+        setupSnapshot(app)
+        app.launch()
+        XCUIDevice.shared.orientation = .portrait
+        return app
+    }
+
+    private func waitForAnchor(_ identifier: String, in app: XCUIApplication, timeout: TimeInterval = 10) {
+        let anchor = app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+        waitForElement(anchor, timeout: timeout)
+    }
+
+    private func waitForElement(_ element: XCUIElement, timeout: TimeInterval = 10) {
+        XCTAssertTrue(
+            element.waitForExistence(timeout: timeout),
+            "Expected element to exist: \(element)"
+        )
+    }
+
+    private func openSettingsRoot(in app: XCUIApplication) {
+        let settingsButton = app.buttons["home.settings.button"]
+        waitForElement(settingsButton)
+        settingsButton.tap()
+
+        waitForAnchor("settings.ready", in: app)
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+    }
+
+    private func openSettingsSubpage(_ title: String, in app: XCUIApplication, returnToSettings: Bool = true) {
+        let button = app.buttons[title]
+        for _ in 0..<5 where !button.exists {
+            app.swipeUp()
+        }
+        waitForElement(button)
+        button.tap()
+        XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5))
+        if returnToSettings {
+            app.navigationBars[title].buttons.element(boundBy: 0).tap()
+            XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        }
+    }
+}

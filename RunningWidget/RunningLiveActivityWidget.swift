@@ -11,6 +11,8 @@ struct RunningActivityAttributes: ActivityAttributes {
         var distanceMeters: Double
         var paceSecondsPerUnit: Double?
         var distanceUnit: String // "km" or "mi"
+        var isPaused: Bool
+        var timerReferenceDate: Date // Date() - duration; used by Text(date, style: .timer)
 
         // Computed properties for display
         var distanceInUnits: Double {
@@ -85,13 +87,21 @@ struct RunningLiveActivity: Widget {
                 
                 DynamicIslandExpandedRegion(.center) {
                     VStack(spacing: 4) {
-                        Text("Active Run")
+                        Text(context.attributes.title)
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        Text(context.state.formattedDuration)
-                            .font(.title)
-                            .fontWeight(.bold)
-                            .monospacedDigit()
+                        Group {
+                            if context.state.isPaused {
+                                Text(context.state.formattedDuration)
+                            } else {
+                                Text(context.state.timerReferenceDate, style: .timer)
+                            }
+                        }
+                        .font(.title)
+                        .fontWeight(.bold)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                     }
                 }
                 
@@ -127,10 +137,19 @@ struct RunningLiveActivity: Widget {
                     .foregroundColor(.green)
             } compactTrailing: {
                 // Compact trailing (right side of Dynamic Island)
-                Text(context.state.formattedDuration)
-                    .font(.caption2)
-                    .fontWeight(.semibold)
-                    .monospacedDigit()
+                Group {
+                    if context.state.isPaused {
+                        Text(context.state.formattedDuration)
+                    } else {
+                        Text(context.state.timerReferenceDate, style: .timer)
+                    }
+                }
+                .font(.caption2)
+                .fontWeight(.semibold)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(width: context.state.duration >= 3600 ? 58 : 42, alignment: .trailing)
             } minimal: {
                 // Minimal view (when multiple activities are active)
                 Image(systemName: "figure.run")
@@ -190,10 +209,17 @@ struct LockScreenLiveActivityView: View {
                     Label("Time", systemImage: "clock.fill")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text(context.state.formattedDuration)
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .monospacedDigit()
+                    if context.state.isPaused {
+                        Text(context.state.formattedDuration)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .monospacedDigit()
+                    } else {
+                        Text(context.state.timerReferenceDate, style: .timer)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .monospacedDigit()
+                    }
                 }
                 .frame(maxWidth: .infinity)
                 
@@ -226,4 +252,3 @@ struct LockScreenLiveActivityView: View {
 // The ActivityConfiguration is automatically discovered by ActivityKit when
 // Activity.request() is called in LiveActivityManager. The widget UI is rendered
 // by the system based on this configuration.
-

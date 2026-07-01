@@ -3,9 +3,6 @@ import SwiftData
 #if canImport(UIKit)
 import UIKit
 #endif
-#if canImport(FoundationModels)
-import FoundationModels
-#endif
 
 struct RunAssistantDashboardView: View {
     enum AIApprovalResult {
@@ -14,6 +11,10 @@ struct RunAssistantDashboardView: View {
     }
 
     @Environment(\.modelContext) private var modelContext
+    @AppStorage(AIProviderManager.providerPreferenceKey) private var aiProviderPreferenceRaw: String = AIProviderPreference.appleIntelligence.rawValue
+    @AppStorage(AIProviderManager.openRouterKeyConfiguredKey) private var openRouterKeyConfigured: Bool = false
+    @AppStorage(AIProviderManager.openRouterResolvedModelKey) private var openRouterResolvedModel: String = ""
+    @AppStorage(AIUsageBudgetManager.openRouterDailyLimitPreferenceKey) private var openRouterDailyLimit: Int = AIUsageBudgetManager.openRouterFreeUserDailyRequestLimit
 
     @Binding var profile: RunAssistantProfile
     let onStartRun: () -> Void
@@ -33,6 +34,15 @@ struct RunAssistantDashboardView: View {
     @State private var pendingAITitle: String = "Generate Balanced Plan"
     @State private var restDayTargets: [Int: Int] = [:]
     @State private var selectedWeekOverride: Int? = nil
+    @State private var statusRefreshTick: Int = 0
+
+    private var currentAIProviderStatus: AIProviderStatus {
+        _ = aiProviderPreferenceRaw
+        _ = openRouterKeyConfigured
+        _ = openRouterResolvedModel
+        _ = statusRefreshTick
+        return AIProviderManager.currentStatus()
+    }
 
     private var activePlan: RunningPlan? {
         plans.first(where: { $0.isActive && !$0.isArchived })
@@ -56,7 +66,7 @@ struct RunAssistantDashboardView: View {
                     .frame(maxWidth: .infinity)
                 }
 
-                if WorkoutPlanGenerator.shared.availability() == .available {
+                if currentAIProviderStatus.canGenerateNow {
                     aiCard
                 } else {
                     aiUnavailableCard
@@ -82,8 +92,12 @@ struct RunAssistantDashboardView: View {
             Text(successMessage ?? "")
         }
         .task {
+            AIProviderManager.bootstrapOpenRouterKeyIfAvailable()
             reconcileIfPossible()
             RunAssistantAIService.shared.prewarmIfPossible()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            statusRefreshTick += 1
         }
         .onChange(of: runs.count) { _, _ in
             reconcileIfPossible()
@@ -428,16 +442,24 @@ struct RunAssistantDashboardView: View {
                 Text("More Plans")
                     .font(.headline)
                 Spacer()
-                Text("Apple Intelligence")
+                Text(currentAIProviderStatus.effectiveProvider == .appleIntelligence ? "Apple Intelligence" : "OpenRouter Free")
                     .font(.caption.weight(.semibold))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background(AppTheme.accentColor.opacity(0.16))
                     .clipShape(Capsule())
             }
-            Text("Generate personalized plans using your cardio and weight data.")
+            Text(currentAIProviderStatus.effectiveProvider == .appleIntelligence
+                 ? "Generate personalized plans using your cardio and weight data."
+                 : "Generate personalized plans using OpenRouter's current free-tier model and your saved API key.")
                 .font(.caption)
                 .foregroundStyle(AppTheme.secondaryTextColor)
+
+            if currentAIProviderStatus.effectiveProvider == .openRouter {
+                Text(openRouterBudgetSummary)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.secondaryTextColor)
+            }
 
             VStack(spacing: 8) {
                 ForEach(aiPlanOptions) { option in
@@ -457,7 +479,7 @@ struct RunAssistantDashboardView: View {
                 Text("More Plans")
                     .font(.headline)
                 Spacer()
-                Text("AI Unavailable")
+                Text(currentAIProviderStatus.effectiveProvider == .appleIntelligence ? "Apple Required" : "OpenRouter Needed")
                     .font(.caption.weight(.semibold))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
@@ -465,19 +487,24 @@ struct RunAssistantDashboardView: View {
                     .clipShape(Capsule())
             }
 
-            Text(runAssistantUnavailableTitle)
+            Text(currentAIProviderStatus.unavailableTitle)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(AppTheme.textColor)
 
-            Text(runAssistantUnavailableDescription)
+            Text(currentAIProviderStatus.unavailableDescription)
                 .font(.caption)
                 .foregroundStyle(AppTheme.secondaryTextColor)
 
-            if shouldShowAISettingsButton {
+            NavigationLink(destination: SettingsView()) {
+                Label(currentAIProviderStatus.needsAppConfiguration ? "Configure OpenRouter" : "AI Provider Settings", systemImage: "slider.horizontal.3")
+            }
+            .buttonStyle(.bordered)
+
+            if currentAIProviderStatus.needsSystemSettings {
                 Button {
                     openSettings()
                 } label: {
-                    Label("Open Settings", systemImage: "gear")
+                    Label("Open iPhone Settings", systemImage: "gear")
                 }
                 .buttonStyle(.borderedProminent)
             }
@@ -486,6 +513,12 @@ struct RunAssistantDashboardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(AppTheme.secondaryBackgroundColor)
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var openRouterBudgetSummary: String {
+        _ = openRouterDailyLimit
+        let budget = AIUsageBudgetManager.currentOpenRouterStatus()
+        return "\(budget.dailyRemaining)/\(budget.dailyLimit) free-model requests left today, \(budget.minuteRemaining)/\(budget.minuteLimit) left this minute."
     }
 
     private struct AIPlanOption: Identifiable {
@@ -724,62 +757,6 @@ struct RunAssistantDashboardView: View {
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
         return formatter.string(from: date)
-    }
-
-    private var runAssistantUnavailableTitle: String {
-        #if AI_FOUNDATION_AVAILABLE
-        if #available(iOS 26, *) {
-            #if canImport(FoundationModels)
-            let model = SystemLanguageModel.default
-            switch model.availability {
-            case .unavailable(.appleIntelligenceNotEnabled):
-                return "Apple Intelligence Not Enabled"
-            case .unavailable(.modelNotReady):
-                return "AI Model Not Ready"
-            case .unavailable(.deviceNotEligible):
-                return "Device Not Supported"
-            default:
-                return "Apple Intelligence Unavailable"
-            }
-            #endif
-        }
-        #endif
-        return "Apple Intelligence Unavailable"
-    }
-
-    private var runAssistantUnavailableDescription: String {
-        #if AI_FOUNDATION_AVAILABLE
-        if #available(iOS 26, *) {
-            #if canImport(FoundationModels)
-            let model = SystemLanguageModel.default
-            switch model.availability {
-            case .unavailable(.appleIntelligenceNotEnabled):
-                return "Enable Apple Intelligence in Settings > Apple Intelligence & Siri to generate personalized AI running plans."
-            case .unavailable(.modelNotReady):
-                return "The AI model is still downloading or preparing on this device. Try again shortly."
-            case .unavailable(.deviceNotEligible):
-                return "This device does not support Apple Intelligence. AI running plan generation requires compatible hardware."
-            default:
-                return "AI running plan generation is currently unavailable."
-            }
-            #endif
-        }
-        #endif
-        return "AI running plan generation is not available on this device."
-    }
-
-    private var shouldShowAISettingsButton: Bool {
-        #if AI_FOUNDATION_AVAILABLE
-        if #available(iOS 26, *) {
-            #if canImport(FoundationModels)
-            let model = SystemLanguageModel.default
-            if case .unavailable(.appleIntelligenceNotEnabled) = model.availability {
-                return true
-            }
-            #endif
-        }
-        #endif
-        return false
     }
 
     private func openSettings() {

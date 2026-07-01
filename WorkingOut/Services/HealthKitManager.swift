@@ -10,6 +10,12 @@ private let workoutAnchorDefaultsKey = "healthKit.cardioWorkoutAnchor"
 
 @MainActor
 final class HealthKitManager: ObservableObject {
+    struct CardioWorkoutChanges {
+        let added: [HKWorkout]
+        let deletedUUIDs: [String]
+        let newAnchor: HKQueryAnchor?
+    }
+
     struct SleepScoreBreakdown {
         let totalScore: Int
         let durationScore: Int
@@ -75,6 +81,7 @@ final class HealthKitManager: ObservableObject {
     private let writeTypes: Set<HKSampleType> = {
         var set = Set<HKSampleType>()
         set.insert(HKObjectType.workoutType())
+        set.insert(HKSeriesType.workoutRoute())
         set.insert(HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning)!)
         if let t = HKObjectType.quantityType(forIdentifier: .distanceCycling) { set.insert(t) }
         if let t = HKObjectType.quantityType(forIdentifier: .distanceRowing) { set.insert(t) }
@@ -88,17 +95,74 @@ final class HealthKitManager: ObservableObject {
 
     // MARK: - Authorization
     func requestAuthorization() async throws {
-        guard HKHealthStore.isHealthDataAvailable() else { return }
+        guard HKHealthStore.isHealthDataAvailable() else {
+            isAuthorized = false
+            return
+        }
         try await healthStore.requestAuthorization(toShare: writeTypes, read: readTypes)
-        await MainActor.run { self.isAuthorized = self.authorizationStatusOK() }
+        await refreshAuthorizationState()
+    }
+
+    func refreshAuthorizationState() async {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            isAuthorized = false
+            return
+        }
+        isAuthorized = authorizationStatusOK()
+    }
+
+    func authorizationRequiresRequest() async -> Bool {
+        guard HKHealthStore.isHealthDataAvailable() else { return false }
+        do {
+            let status = try await authorizationRequestStatus()
+            switch status {
+            case .shouldRequest, .unknown:
+                return true
+            case .unnecessary:
+                return false
+            @unknown default:
+                return true
+            }
+        } catch {
+            return false
+        }
+    }
+
+    func persistCardioWorkoutAnchor(_ anchor: HKQueryAnchor?) {
+        storeWorkoutAnchor(anchor)
+    }
+
+    private func authorizationRequestStatus() async throws -> HKAuthorizationRequestStatus {
+        try await withCheckedThrowingContinuation { continuation in
+            healthStore.getRequestStatusForAuthorization(toShare: writeTypes, read: readTypes) { status, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                continuation.resume(returning: status)
+            }
+        }
+    }
+
+    private var requiredWorkoutWriteTypes: [HKSampleType] {
+        var types: [HKSampleType] = [
+            HKObjectType.workoutType(),
+            HKSeriesType.workoutRoute(),
+            HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning)!
+        ]
+        if let cycling = HKObjectType.quantityType(forIdentifier: .distanceCycling) {
+            types.append(cycling)
+        }
+        if let rowing = HKObjectType.quantityType(forIdentifier: .distanceRowing) {
+            types.append(rowing)
+        }
+        return types
     }
 
     private func authorizationStatusOK() -> Bool {
-        // Consider authorized if workout and distance are allowed
-        let workoutStatus = healthStore.authorizationStatus(for: HKObjectType.workoutType())
-        let distanceType = HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning)!
-        let distanceStatus = healthStore.authorizationStatus(for: distanceType)
-        return workoutStatus == .sharingAuthorized || distanceStatus == .sharingAuthorized
+        requiredWorkoutWriteTypes.allSatisfy { sampleType in
+            healthStore.authorizationStatus(for: sampleType) == .sharingAuthorized
+        }
     }
 
     private func cardioWorkoutsPredicate() -> NSPredicate {
@@ -149,7 +213,7 @@ final class HealthKitManager: ObservableObject {
     }
 
     // MARK: - Save Workout
-    func saveRunWorkout(start: Date, end: Date, distanceMeters: Double, energyBurned: Double? = nil, route: [CLLocation]? = nil, activityType: String = "running") async throws -> HKWorkout {
+    func saveRunWorkout(start: Date, end: Date, distanceMeters: Double, energyBurned: Double? = nil, activityType: String = "running") async throws -> HKWorkout {
         let store = self.healthStore
 
         // Prepare quantities
@@ -195,12 +259,10 @@ final class HealthKitManager: ObservableObject {
         // Build the workout using HKWorkoutBuilder (iOS 17+ recommended)
         let builder = HKWorkoutBuilder(healthStore: store, configuration: configuration, device: .local())
 
-        // Set the workout start and end dates using async alternatives
+        // Add samples before ending collection so the builder lifecycle stays consistent.
         try await builder.beginCollection(at: start)
-        try await builder.endCollection(at: end)
-
-        // Add samples to the builder using async API
         try await builder.addSamples(additionalSamples)
+        try await builder.endCollection(at: end)
 
         // Finish and save the workout
         let workout: HKWorkout = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<HKWorkout, Error>) in
@@ -214,21 +276,28 @@ final class HealthKitManager: ObservableObject {
             }
         }
 
-        // Optionally save route data (must be associated after workout is saved)
-        if let route = route, !route.isEmpty {
-            let routeBuilder = HKWorkoutRouteBuilder(healthStore: store, device: .local())
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                routeBuilder.insertRouteData(route) { _, error in
-                    if let error = error { continuation.resume(throwing: error); return }
-                    routeBuilder.finishRoute(with: workout, metadata: nil) { _, finishError in
-                        if let finishError = finishError { continuation.resume(throwing: finishError); return }
-                        continuation.resume(returning: ())
+        return workout
+    }
+
+    func saveRunRoute(_ route: [CLLocation], for workout: HKWorkout) async throws {
+        guard !route.isEmpty else { return }
+
+        let routeBuilder = HKWorkoutRouteBuilder(healthStore: healthStore, device: .local())
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            routeBuilder.insertRouteData(route) { _, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                routeBuilder.finishRoute(with: workout, metadata: nil) { _, finishError in
+                    if let finishError {
+                        continuation.resume(throwing: finishError)
+                        return
                     }
+                    continuation.resume(returning: ())
                 }
             }
         }
-
-        return workout
     }
 
     // MARK: - Steps
@@ -263,7 +332,7 @@ final class HealthKitManager: ObservableObject {
         }
     }
 
-    func fetchCardioWorkoutChanges(resetAnchor: Bool = false, limit: Int = HKObjectQueryNoLimit) async throws -> (added: [HKWorkout], deletedUUIDs: [String]) {
+    func fetchCardioWorkoutChanges(resetAnchor: Bool = false, limit: Int = HKObjectQueryNoLimit) async throws -> CardioWorkoutChanges {
         let anchor = resetAnchor ? nil : storedWorkoutAnchor()
         let predicate = cardioWorkoutsPredicate()
 
@@ -279,12 +348,16 @@ final class HealthKitManager: ObservableObject {
                     return
                 }
 
-                self.storeWorkoutAnchor(newAnchor)
-
                 let workouts = (samples as? [HKWorkout]) ?? []
                 let added = workouts.filter { self.supportedCardioTypes.contains($0.workoutActivityType) }
                 let deletedUUIDs = (deleted ?? []).map { $0.uuid.uuidString }
-                continuation.resume(returning: (added, deletedUUIDs))
+                continuation.resume(
+                    returning: CardioWorkoutChanges(
+                        added: added,
+                        deletedUUIDs: deletedUUIDs,
+                        newAnchor: newAnchor
+                    )
+                )
             }
             self.healthStore.execute(query)
         }

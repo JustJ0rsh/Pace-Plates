@@ -16,6 +16,7 @@ struct WorkingOutXApp: App {
     let persistenceController = PersistenceController.shared
 
     init() {
+        AppLaunchConfiguration.current.prepareUserDefaults(bundleIdentifier: Bundle.main.bundleIdentifier)
         // Apply the global theme settings on app initialization
         AppTheme.applyGlobalTheme()
     }

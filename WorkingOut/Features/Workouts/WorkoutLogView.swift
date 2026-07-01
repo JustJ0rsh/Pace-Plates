@@ -18,6 +18,7 @@ struct WorkoutLogView: View {
     @State private var newlyCreatedSessionID: UUID? = nil
     @State private var isEditing: Bool = false
     @State private var showTemplates: Bool = false
+    @State private var showWorkoutActions: Bool = false
     @AppStorage("weightUnit") private var preferredWeightUnit = "lbs"
     
     // Filters
@@ -66,9 +67,25 @@ struct WorkoutLogView: View {
                             ContentUnavailableView(
                                 "No workouts yet",
                                 systemImage: "dumbbell.fill",
-                                description: Text("Tap the + button to add your first workout.")
+                                description: Text("Start from scratch or choose a saved template.")
                             )
                             .frame(maxWidth: .infinity, minHeight: 180)
+
+                            Button {
+                                addWorkoutSession()
+                            } label: {
+                                Label("Start First Workout", systemImage: "play.fill")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+
+                            Button {
+                                showTemplates = true
+                            } label: {
+                                Label("Choose Template", systemImage: "doc.text")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
                         }
                         .floatingTile()
                     }
@@ -113,6 +130,9 @@ struct WorkoutLogView: View {
                             Text("Total Weight Lifted per Day")
                                 .font(.headline)
                                 .foregroundStyle(AppTheme.textColor)
+                            Text(workoutVolumeSummary(dailyVolume: dailyVolume))
+                                .font(.subheadline)
+                                .foregroundStyle(AppTheme.secondaryTextColor)
                             WorkoutVolumeChartSection(
                                 dailyVolume: dailyVolume,
                                 groupedVolume: groupedVolume,
@@ -193,6 +213,7 @@ struct WorkoutLogView: View {
                 .padding(.horizontal, AppTheme.padding)
                 .padding(.top)
         }
+        .accessibilityIdentifier("workouts.ready")
         .appBackground(AppTheme.gradientWorkouts)
             .foregroundColor(AppTheme.textColor)
             .navigationTitle("Workouts")
@@ -207,17 +228,8 @@ struct WorkoutLogView: View {
                             Label("Templates", systemImage: "doc.text.fill")
                         }
                         
-                        Menu {
-                            Button {
-                                addWorkoutSession()
-                            } label: {
-                                Label("New Workout", systemImage: "plus")
-                            }
-                            Button {
-                                addPastWorkoutSession()
-                            } label: {
-                                Label("Add Past Workout", systemImage: "calendar")
-                            }
+                        Button {
+                            showWorkoutActions = true
                         } label: {
                             Image(systemName: "plus.circle.fill")
                                 .imageScale(.large)
@@ -238,6 +250,37 @@ struct WorkoutLogView: View {
                         newSessionToOpen = session
                     }
                 }
+            }
+            .sheet(isPresented: $showWorkoutActions) {
+                QuickActionSheet(
+                    title: "Workout Actions",
+                    actions: [
+                        QuickActionSheetAction(
+                            id: "workout.start-now",
+                            title: "Start now",
+                            subtitle: "Create a new workout session.",
+                            systemImage: "play.fill",
+                            accessibilityIdentifier: "workouts.action.start_now",
+                            handler: addWorkoutSession
+                        ),
+                        QuickActionSheetAction(
+                            id: "workout.log-past",
+                            title: "Log past activity",
+                            subtitle: "Create a workout with an editable date.",
+                            systemImage: "calendar",
+                            accessibilityIdentifier: "workouts.action.log_past",
+                            handler: addPastWorkoutSession
+                        ),
+                        QuickActionSheetAction(
+                            id: "workout.use-template",
+                            title: "Use template",
+                            subtitle: "Choose from saved workout templates.",
+                            systemImage: "doc.text",
+                            accessibilityIdentifier: "workouts.action.use_template",
+                            handler: { showTemplates = true }
+                        )
+                    ]
+                )
             }
             .sheet(item: $quickViewSession) { session in
                 WorkoutQuickViewSheet(
@@ -368,6 +411,22 @@ struct WorkoutLogView: View {
         }
         
         return (dailyVolume, groupedVolume)
+    }
+
+    private func workoutVolumeSummary(dailyVolume: [(date: Date, value: Double)]) -> String {
+        let total = dailyVolume.reduce(0) { $0 + $1.value }
+        guard total > 0 else { return "Log a workout to see your volume trend." }
+        let formatted = total.formatted(.number.precision(.fractionLength(0)).grouping(.automatic))
+        return "You lifted \(formatted) \(preferredWeightUnit) in \(rangeDescription)."
+    }
+
+    private var rangeDescription: String {
+        switch selectedRange {
+        case .days7: return "the last 7 days"
+        case .month1: return "the last month"
+        case .months6: return "the last 6 months"
+        case .year1: return "the last year"
+        }
     }
 
     private func availableCategories() -> [String] {
