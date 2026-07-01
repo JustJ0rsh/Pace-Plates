@@ -1,0 +1,791 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		420B3EEA2EB3E28400F73922 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 420B3EE92EB3E28400F73922 /* WidgetKit.framework */; };
+		420B3EEC2EB3E28400F73922 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 420B3EEB2EB3E28400F73922 /* SwiftUI.framework */; };
+		420B3EFD2EB3E28600F73922 /* RunningWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 420B3EE82EB3E28400F73922 /* RunningWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		420B40FF2EBDA73900F73922 /* GameCenterResources.gamekit in Resources */ = {isa = PBXBuildFile; fileRef = 420B40FE2EBDA73900F73922 /* GameCenterResources.gamekit */; };
+		43A0000D2EFF00010000000D /* WorkoutThumbnailExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 43A000022EFF000100000002 /* WorkoutThumbnailExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		420B3EFB2EB3E28600F73922 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 42B50D192D9DE5670082A9FA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 420B3EE72EB3E28400F73922;
+			remoteInfo = RunningWidgetExtension;
+		};
+		42B50D3F2D9DE5690082A9FA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 42B50D192D9DE5670082A9FA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 42B50D202D9DE5670082A9FA;
+			remoteInfo = "Pace & Plates";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		420B3F022EB3E28600F73922 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				420B3EFD2EB3E28600F73922 /* RunningWidgetExtension.appex in Embed Foundation Extensions */,
+				43A0000D2EFF00010000000D /* WorkoutThumbnailExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		420B3EE82EB3E28400F73922 /* RunningWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RunningWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		420B3EE92EB3E28400F73922 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		420B3EEB2EB3E28400F73922 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		420B40FE2EBDA73900F73922 /* GameCenterResources.gamekit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = GameCenterResources.gamekit; sourceTree = "<group>"; };
+		42B50D212D9DE5670082A9FA /* Pace & Plates.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Pace & Plates.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		42B50D3B2D9DE5690082A9FA /* WorkingOutUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WorkingOutUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		42FCE1502EA875FA00334FD2 /* WeatherKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WeatherKit.framework; path = System/Library/Frameworks/WeatherKit.framework; sourceTree = SDKROOT; };
+		43A000022EFF000100000002 /* WorkoutThumbnailExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WorkoutThumbnailExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		420B3F012EB3E28600F73922 /* Exceptions for "RunningWidget" folder in "RunningWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 420B3EE72EB3E28400F73922 /* RunningWidgetExtension */;
+		};
+		42FCE02B2E9F216E00334FD2 /* Exceptions for "WorkingOut" folder in "Pace & Plates" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 42B50D202D9DE5670082A9FA /* Pace & Plates */;
+		};
+		43A000072EFF000100000007 /* Exceptions for "WorkoutThumbnailExtension" folder in "WorkoutThumbnailExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 43A000012EFF000100000001 /* WorkoutThumbnailExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		420B3EED2EB3E28400F73922 /* RunningWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				420B3F012EB3E28600F73922 /* Exceptions for "RunningWidget" folder in "RunningWidgetExtension" target */,
+			);
+			path = RunningWidget;
+			sourceTree = "<group>";
+		};
+		42B50D232D9DE5670082A9FA /* WorkingOut */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				42FCE02B2E9F216E00334FD2 /* Exceptions for "WorkingOut" folder in "Pace & Plates" target */,
+			);
+			path = WorkingOut;
+			sourceTree = "<group>";
+		};
+		42B50D4D2D9DE5690082A9FA /* WorkingOutUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = WorkingOutUITests;
+			sourceTree = "<group>";
+		};
+		43A000062EFF000100000006 /* WorkoutThumbnailExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				43A000072EFF000100000007 /* Exceptions for "WorkoutThumbnailExtension" folder in "WorkoutThumbnailExtension" target */,
+			);
+			path = WorkoutThumbnailExtension;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		420B3EE52EB3E28400F73922 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				420B3EEC2EB3E28400F73922 /* SwiftUI.framework in Frameworks */,
+				420B3EEA2EB3E28400F73922 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		42B50D1E2D9DE5670082A9FA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		42B50D3C2D9DE5690082A9FA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		43A000042EFF000100000004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		42B50D182D9DE5670082A9FA = {
+			isa = PBXGroup;
+			children = (
+				420B40FE2EBDA73900F73922 /* GameCenterResources.gamekit */,
+				42B50D232D9DE5670082A9FA /* WorkingOut */,
+				42B50D4D2D9DE5690082A9FA /* WorkingOutUITests */,
+				420B3EED2EB3E28400F73922 /* RunningWidget */,
+				42B50D222D9DE5670082A9FA /* Products */,
+				43A000062EFF000100000006 /* WorkoutThumbnailExtension */,
+				42FCE14F2EA875FA00334FD2 /* Frameworks */,
+			);
+			sourceTree = "<group>";
+		};
+		42B50D222D9DE5670082A9FA /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				42B50D212D9DE5670082A9FA /* Pace & Plates.app */,
+				42B50D3B2D9DE5690082A9FA /* WorkingOutUITests.xctest */,
+				420B3EE82EB3E28400F73922 /* RunningWidgetExtension.appex */,
+				43A000022EFF000100000002 /* WorkoutThumbnailExtension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		42FCE14F2EA875FA00334FD2 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				42FCE1502EA875FA00334FD2 /* WeatherKit.framework */,
+				420B3EE92EB3E28400F73922 /* WidgetKit.framework */,
+				420B3EEB2EB3E28400F73922 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		420B3EE72EB3E28400F73922 /* RunningWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 420B3EFE2EB3E28600F73922 /* Build configuration list for PBXNativeTarget "RunningWidgetExtension" */;
+			buildPhases = (
+				420B3EE42EB3E28400F73922 /* Sources */,
+				420B3EE52EB3E28400F73922 /* Frameworks */,
+				420B3EE62EB3E28400F73922 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				420B3EED2EB3E28400F73922 /* RunningWidget */,
+			);
+			name = RunningWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = RunningWidgetExtension;
+			productReference = 420B3EE82EB3E28400F73922 /* RunningWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		42B50D202D9DE5670082A9FA /* Pace & Plates */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 42B50D452D9DE5690082A9FA /* Build configuration list for PBXNativeTarget "Pace & Plates" */;
+			buildPhases = (
+				42B50D1D2D9DE5670082A9FA /* Sources */,
+				42B50D1E2D9DE5670082A9FA /* Frameworks */,
+				42B50D1F2D9DE5670082A9FA /* Resources */,
+				420B3F022EB3E28600F73922 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				420B3EFC2EB3E28600F73922 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				42B50D232D9DE5670082A9FA /* WorkingOut */,
+			);
+			name = "Pace & Plates";
+			packageProductDependencies = (
+			);
+			productName = WorkingOut;
+			productReference = 42B50D212D9DE5670082A9FA /* Pace & Plates.app */;
+			productType = "com.apple.product-type.application";
+		};
+		42B50D3A2D9DE5690082A9FA /* WorkingOutUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 42B50D4C2D9DE5690082A9FA /* Build configuration list for PBXNativeTarget "WorkingOutUITests" */;
+			buildPhases = (
+				42B50D3E2D9DE5690082A9FA /* Sources */,
+				42B50D3C2D9DE5690082A9FA /* Frameworks */,
+				42B50D3D2D9DE5690082A9FA /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				42B50D402D9DE5690082A9FA /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				42B50D4D2D9DE5690082A9FA /* WorkingOutUITests */,
+			);
+			name = WorkingOutUITests;
+			packageProductDependencies = (
+			);
+			productName = WorkingOutUITests;
+			productReference = 42B50D3B2D9DE5690082A9FA /* WorkingOutUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		43A000012EFF000100000001 /* WorkoutThumbnailExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 43A000082EFF000100000008 /* Build configuration list for PBXNativeTarget "WorkoutThumbnailExtension" */;
+			buildPhases = (
+				43A000032EFF000100000003 /* Sources */,
+				43A000042EFF000100000004 /* Frameworks */,
+				43A000052EFF000100000005 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				43A000062EFF000100000006 /* WorkoutThumbnailExtension */,
+			);
+			name = WorkoutThumbnailExtension;
+			packageProductDependencies = (
+			);
+			productName = WorkoutThumbnailExtension;
+			productReference = 43A000022EFF000100000002 /* WorkoutThumbnailExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		42B50D192D9DE5670082A9FA /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					420B3EE72EB3E28400F73922 = {
+						CreatedOnToolsVersion = 26.0.1;
+					};
+					42B50D202D9DE5670082A9FA = {
+						CreatedOnToolsVersion = 16.2;
+					};
+					42B50D3A2D9DE5690082A9FA = {
+						CreatedOnToolsVersion = 26.0.1;
+						TestTargetID = 42B50D202D9DE5670082A9FA;
+					};
+				};
+			};
+			buildConfigurationList = 42B50D1C2D9DE5670082A9FA /* Build configuration list for PBXProject "Pace & Plates" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 42B50D182D9DE5670082A9FA;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 42B50D222D9DE5670082A9FA /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				42B50D202D9DE5670082A9FA /* Pace & Plates */,
+				42B50D3A2D9DE5690082A9FA /* WorkingOutUITests */,
+				420B3EE72EB3E28400F73922 /* RunningWidgetExtension */,
+				43A000012EFF000100000001 /* WorkoutThumbnailExtension */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		420B3EE62EB3E28400F73922 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		42B50D1F2D9DE5670082A9FA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				420B40FF2EBDA73900F73922 /* GameCenterResources.gamekit in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		42B50D3D2D9DE5690082A9FA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		43A000052EFF000100000005 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		420B3EE42EB3E28400F73922 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		42B50D1D2D9DE5670082A9FA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		42B50D3E2D9DE5690082A9FA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		43A000032EFF000100000003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		420B3EFC2EB3E28600F73922 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 420B3EE72EB3E28400F73922 /* RunningWidgetExtension */;
+			targetProxy = 420B3EFB2EB3E28600F73922 /* PBXContainerItemProxy */;
+		};
+		42B50D402D9DE5690082A9FA /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 42B50D202D9DE5670082A9FA /* Pace & Plates */;
+			targetProxy = 42B50D3F2D9DE5690082A9FA /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		420B3EFF2EB3E28600F73922 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = RunningWidget/RunningWidgetExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JK2CCHMR6P;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RunningWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RunningWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 2.4;
+				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOut.RunningWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		420B3F002EB3E28600F73922 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = RunningWidget/RunningWidgetExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JK2CCHMR6P;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RunningWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RunningWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 2.4;
+				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOut.RunningWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		42B50D412D9DE5690082A9FA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JK2CCHMR6P;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 2.2;
+				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOutUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = "Pace & Plates";
+			};
+			name = Debug;
+		};
+		42B50D422D9DE5690082A9FA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JK2CCHMR6P;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 2.2;
+				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOutUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = "Pace & Plates";
+			};
+			name = Release;
+		};
+		42B50D432D9DE5690082A9FA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = JK2CCHMR6P;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		42B50D442D9DE5690082A9FA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = JK2CCHMR6P;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		42B50D462D9DE5690082A9FA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				CODE_SIGN_ENTITLEMENTS = WorkingOut/WorkingOut.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"WorkingOut/Preview Content\"";
+				DEVELOPMENT_TEAM = JK2CCHMR6P;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WorkingOut/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Pace & Plates";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 2.4;
+				OTHER_SWIFT_FLAGS = "-DAI_FOUNDATION_AVAILABLE";
+				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOut;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		42B50D472D9DE5690082A9FA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				CODE_SIGN_ENTITLEMENTS = WorkingOut/WorkingOut.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"WorkingOut/Preview Content\"";
+				DEVELOPMENT_TEAM = JK2CCHMR6P;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WorkingOut/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Pace & Plates";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 2.4;
+				OTHER_SWIFT_FLAGS = "-DAI_FOUNDATION_AVAILABLE";
+				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOut;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		43A000092EFF000100000009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JK2CCHMR6P;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "$(SRCROOT)/WorkoutThumbnailExtension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = PPWorkoutThumbnails;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 2.4;
+				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOut.PPWorkoutThumbnail;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		43A0000A2EFF00010000000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JK2CCHMR6P;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "$(SRCROOT)/WorkoutThumbnailExtension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = PPWorkoutThumbnails;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 2.4;
+				PRODUCT_BUNDLE_IDENTIFIER = Jorsh.WorkingOut.PPWorkoutThumbnail;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		420B3EFE2EB3E28600F73922 /* Build configuration list for PBXNativeTarget "RunningWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				420B3EFF2EB3E28600F73922 /* Debug */,
+				420B3F002EB3E28600F73922 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		42B50D1C2D9DE5670082A9FA /* Build configuration list for PBXProject "Pace & Plates" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				42B50D432D9DE5690082A9FA /* Debug */,
+				42B50D442D9DE5690082A9FA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		42B50D452D9DE5690082A9FA /* Build configuration list for PBXNativeTarget "Pace & Plates" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				42B50D462D9DE5690082A9FA /* Debug */,
+				42B50D472D9DE5690082A9FA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		42B50D4C2D9DE5690082A9FA /* Build configuration list for PBXNativeTarget "WorkingOutUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				42B50D412D9DE5690082A9FA /* Debug */,
+				42B50D422D9DE5690082A9FA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		43A000082EFF000100000008 /* Build configuration list for PBXNativeTarget "WorkoutThumbnailExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				43A000092EFF000100000009 /* Debug */,
+				43A0000A2EFF00010000000A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 42B50D192D9DE5670082A9FA /* Project object */;
+}

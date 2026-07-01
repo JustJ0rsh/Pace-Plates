@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="24128" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" launchScreen="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="VC1">
+    <device id="retina6_12" orientation="portrait" appearance="light"/>
+    <dependencies>
+        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="24063"/>
+        <capability name="Safe area layout guides" minToolsVersion="9.0"/>
+        <capability name="System colors in document resources" minToolsVersion="11.0"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <scenes>
+        <!--View Controller-->
+        <scene sceneID="SC1">
+            <objects>
+                <viewController storyboardIdentifier="LaunchScreen" id="VC1" sceneMemberID="viewController">
+                    <view key="view" contentMode="scaleToFill" id="V1">
+                        <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <imageView userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" misplaced="YES" image="LaunchImage" translatesAutoresizingMaskIntoConstraints="NO" id="IMG1">
+                                <rect key="frame" x="-109" y="0.0" width="612" height="852"/>
+                            </imageView>
+                        </subviews>
+                        <viewLayoutGuide key="safeArea" id="SAFE1"/>
+                        <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+                        <constraints>
+                            <constraint firstItem="IMG1" firstAttribute="centerX" secondItem="SAFE1" secondAttribute="centerX" id="C1"/>
+                            <constraint firstItem="IMG1" firstAttribute="centerY" secondItem="SAFE1" secondAttribute="centerY" id="C2"/>
+                            <constraint firstItem="IMG1" firstAttribute="leading" relation="greaterThanOrEqual" secondItem="SAFE1" secondAttribute="leading" constant="16" id="C3"/>
+                            <constraint firstItem="SAFE1" firstAttribute="trailing" relation="greaterThanOrEqual" secondItem="IMG1" secondAttribute="trailing" constant="16" id="C4"/>
+                            <constraint firstItem="IMG1" firstAttribute="width" relation="lessThanOrEqual" secondItem="SAFE1" secondAttribute="width" multiplier="0.6" id="C5"/>
+                            <constraint firstItem="IMG1" firstAttribute="height" relation="lessThanOrEqual" secondItem="SAFE1" secondAttribute="height" multiplier="0.4" id="C6"/>
+                        </constraints>
+                    </view>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="FR1" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="52.671755725190835" y="374.64788732394368"/>
+        </scene>
+    </scenes>
+    <resources>
+        <image name="LaunchImage" width="1242" height="2688"/>
+        <systemColor name="systemBackgroundColor">
+            <color white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+        </systemColor>
+    </resources>
+</document>

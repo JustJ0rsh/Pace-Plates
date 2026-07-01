@@ -1,0 +1,23 @@
+# Secrets
+AuthKey_*.p8
+*.p8
+.env
+.env.local
+
+# fastlane generated files
+**/fastlane/report.xml
+**/fastlane/Preview.html
+**/fastlane/screenshots
+**/fastlane/test_output
+
+# Local build/test artifacts
+.tmp/
+.swift-module-cache/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
