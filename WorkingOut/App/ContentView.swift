@@ -29,23 +29,26 @@ struct ContentView: View {
     var body: some View {
         TabView(selection: $selectedTab) {
             // Left side - Use Group to prevent unnecessary NavigationStack recreation
+            // Nav bar buttons set their color explicitly via AppTheme.toolbarButtonColor
+            // in each view's toolbar — inherited tints are dropped by NavigationStack
+            // toolbars on tab revisits, which made button colors inconsistent.
             NavigationStack { HomeView() }
                 .tabItem { Label("Home", systemImage: "house.fill") }
                 .tag(0)
-            
+
             NavigationStack { WorkoutLogView() }
                 .tabItem { Label("Workouts", systemImage: "figure.strengthtraining.traditional") }
                 .tag(1)
-            
+
             NavigationStack { AIPlannerView() }
                 .tabItem { Label("AI", systemImage: "sparkles") }
                 .tag(2)
-            
+
             // Right side
             NavigationStack { RunLogView() }
                 .tabItem { Label("Runs", systemImage: "figure.run") }
                 .tag(3)
-            
+
             NavigationStack { WeightLogView() }
                 .tabItem { Label("Weight", systemImage: "scalemass.fill") }
                 .tag(4)
@@ -65,7 +68,7 @@ struct ContentView: View {
                     await HealthKitManager.shared.refreshAuthorizationState()
                 }
                 HealthKitManager.shared.startWorkoutChangeObservationIfNeeded()
-                AIProviderManager.bootstrapOpenRouterKeyIfAvailable()
+                AIProviderManager.cleanUpLegacyOpenRouterArtifacts()
             }
             // Seed + cleanup the exercise library safely (idempotent)
             ExerciseLibrary.populateInitialExercises(context: persistenceController.container.mainContext)

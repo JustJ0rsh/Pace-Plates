@@ -458,7 +458,13 @@ struct AIConversationSheet: View {
                 }
             }
 
-            for try await chunk in WorkoutPlanGenerator.shared.generatePlanStream(request: request) {
+            // Per-request token so overlapping generations never read each other's plan JSON.
+            let requestToken = UUID()
+            // Drain the token's entry even if the stream throws below; the normal-path
+            // read removes it first, making this a no-op on success.
+            defer { _ = WorkoutPlanGenerator.takeStructuredPlanJSON(for: requestToken) }
+
+            for try await chunk in WorkoutPlanGenerator.shared.generatePlanStream(request: request, token: requestToken) {
                 // Check for cancellation
                 if Task.isCancelled { break }
                 
@@ -472,8 +478,11 @@ struct AIConversationSheet: View {
                 }
             }
 
+            // Read (and remove) only this request's structured plan JSON.
+            let producedPlanJSON = WorkoutPlanGenerator.takeStructuredPlanJSON(for: requestToken)
+
             await MainActor.run {
-                structuredPlanJSON = WorkoutPlanGenerator.lastStructuredPlanJSON
+                structuredPlanJSON = producedPlanJSON
 
                 var finalized = fullBufferedText
                 if mode == .plan,

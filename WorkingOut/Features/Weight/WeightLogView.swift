@@ -180,6 +180,7 @@ struct WeightLogView: View {
                 Button(action: { isEditing.toggle() }) {
                     Text(isEditing ? "Done" : "Edit")
                         .font(.headline)
+                        .foregroundStyle(AppTheme.toolbarButtonColor)
                 }
             }
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -188,6 +189,7 @@ struct WeightLogView: View {
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(AppTheme.toolbarButtonColor)
                         .accessibilityLabel("Log Weight")
                 }
             }
@@ -283,8 +285,9 @@ struct WeightLogView: View {
                     Set(weightEntries.map { Calendar.current.startOfDay(for: $0.date) })
                 }
 
-                // Filter out entries that already exist (same day)
-                let newWeights = healthWeights.filter { entry in
+                // Collapse to the LATEST sample per day within this batch (same rule
+                // as the manual import path), then drop days that already exist locally.
+                let newWeights = HealthKitManager.latestWeightSamplesPerDay(healthWeights).filter { entry in
                     !existingDates.contains(Calendar.current.startOfDay(for: entry.date))
                 }
 

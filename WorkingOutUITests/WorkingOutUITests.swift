@@ -23,6 +23,19 @@ final class WorkingOutUITests: XCTestCase {
         snapshot("01_home", waitForLoadingIndicator: false)
     }
 
+    func testSettingsNavigationOpensFromHomeToolbar() {
+        let app = launchApp(startTab: "home")
+
+        let settingsButton = app.buttons["home.settings.button"]
+        waitForElement(settingsButton)
+        XCTAssertTrue(app.navigationBars["Home"].waitForExistence(timeout: 5))
+
+        settingsButton.tap()
+
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        waitForAnchor("settings.ready", in: app, timeout: 5)
+    }
+
     func testHomeQuickActionContextMenusStayScopedToPressedButton() {
         let app = launchApp(startTab: "home")
 
@@ -76,10 +89,9 @@ final class WorkingOutUITests: XCTestCase {
         let app = launchApp(startTab: "home")
 
         openSettingsRoot(in: app)
-        openSettingsSubpage("Health & Sync", in: app)
-        openSettingsSubpage("AI Provider", in: app)
-        openSettingsSubpage("Backup & Data", in: app)
-        openSettingsSubpage("Developer", in: app)
+        openSettingsSubpage("Health & Sync", in: app, snapshotName: "05a_settings_health_sync")
+        openSettingsSubpage("Backup & Data", in: app, snapshotName: "05c_settings_backup_data")
+        openSettingsSubpage("Developer", in: app, snapshotName: "05d_settings_developer")
         for _ in 0..<4 {
             app.swipeDown()
         }
@@ -188,7 +200,12 @@ final class WorkingOutUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
     }
 
-    private func openSettingsSubpage(_ title: String, in app: XCUIApplication, returnToSettings: Bool = true) {
+    private func openSettingsSubpage(
+        _ title: String,
+        in app: XCUIApplication,
+        returnToSettings: Bool = true,
+        snapshotName: String? = nil
+    ) {
         let button = app.buttons[title]
         for _ in 0..<5 where !button.exists {
             app.swipeUp()
@@ -196,6 +213,9 @@ final class WorkingOutUITests: XCTestCase {
         waitForElement(button)
         button.tap()
         XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5))
+        if let snapshotName {
+            snapshot(snapshotName, waitForLoadingIndicator: false)
+        }
         if returnToSettings {
             app.navigationBars[title].buttons.element(boundBy: 0).tap()
             XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))

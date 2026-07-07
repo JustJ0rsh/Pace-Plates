@@ -13,6 +13,14 @@ final class WorkoutSession {
     var shouldSaveAsTemplate: Bool = false
     var sourceTemplateID: UUID? // ID of the template this session was created from
     var isSampleData: Bool = false
+
+    // Wearable link: set when this session is linked to an imported Health workout
+    var healthWorkoutUUID: String? = nil
+    var healthDuration: TimeInterval? = nil
+    var healthCalories: Double? = nil
+    var healthAvgHeartRate: Double? = nil
+    var healthSourceName: String? = nil
+    var healthActivityType: String? = nil
     
     init(id: UUID = UUID(), date: Date = Date(), notes: String? = nil, title: String? = nil, shouldSaveAsTemplate: Bool = false, sourceTemplateID: UUID? = nil) {
         self.id = id

@@ -13,6 +13,8 @@ struct WorkoutLogView: View {
     @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
     @Query(sort: [SortDescriptor<WorkoutSession>(\.date, order: .reverse)]) private var workoutSessions: [WorkoutSession]
     @Query(sort: [SortDescriptor<ExerciseDefinition>(\.name)]) private var exerciseDefinitions: [ExerciseDefinition]
+    @Query(filter: #Predicate<HealthWorkoutInboxItem> { $0.statusRaw == "pending" })
+    private var pendingInboxItems: [HealthWorkoutInboxItem]
     @State private var newSessionToOpen: WorkoutSession? = nil
     @State private var pastSessionID: UUID? = nil
     @State private var newlyCreatedSessionID: UUID? = nil
@@ -214,6 +216,12 @@ struct WorkoutLogView: View {
                 .padding(.top)
         }
         .accessibilityIdentifier("workouts.ready")
+        .task {
+            await WearableWorkoutInboxService.sync(context: modelContext)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .healthKitWorkoutsDidChange)) { _ in
+            Task { await WearableWorkoutInboxService.sync(context: modelContext) }
+        }
         .appBackground(AppTheme.gradientWorkouts)
             .foregroundColor(AppTheme.textColor)
             .navigationTitle("Workouts")
@@ -224,22 +232,49 @@ struct WorkoutLogView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: 12) {
+                        NavigationLink {
+                            WearableInboxView()
+                        } label: {
+                            Image(systemName: "tray.fill")
+                                .foregroundStyle(AppTheme.toolbarButtonColor)
+                                .overlay(alignment: .topTrailing) {
+                                    if !pendingInboxItems.isEmpty {
+                                        Text("\(min(pendingInboxItems.count, 99))")
+                                            .font(.system(size: 10, weight: .bold))
+                                            .foregroundStyle(.white)
+                                            .padding(3)
+                                            .frame(minWidth: 15)
+                                            .background(Color.red)
+                                            .clipShape(Capsule())
+                                            .offset(x: 8, y: -8)
+                                    }
+                                }
+                                .accessibilityLabel(pendingInboxItems.isEmpty
+                                    ? "Workout Inbox"
+                                    : "Workout Inbox, \(pendingInboxItems.count) pending")
+                        }
+
                         Button(action: { showTemplates = true }) {
                             Label("Templates", systemImage: "doc.text.fill")
+                                .foregroundStyle(AppTheme.toolbarButtonColor)
                         }
-                        
+
                         Button {
                             showWorkoutActions = true
                         } label: {
                             Image(systemName: "plus.circle.fill")
                                 .imageScale(.large)
+                                .foregroundStyle(AppTheme.toolbarButtonColor)
                                 .accessibilityLabel("Add Workout")
                         }
                     }
                 }
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button(isEditing ? "Done" : "Edit") { isEditing.toggle() }
-                        .font(.headline)
+                    Button(action: { isEditing.toggle() }) {
+                        Text(isEditing ? "Done" : "Edit")
+                            .font(.headline)
+                            .foregroundStyle(AppTheme.toolbarButtonColor)
+                    }
                 }
             }
             .sheet(isPresented: $showTemplates) {

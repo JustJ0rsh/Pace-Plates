@@ -1,5 +1,7 @@
 # OpenRouter Anonymous Quota Proposal
 
+> **Obsolete / superseded (2026-07):** The OpenRouter cloud AI provider was removed. Pace & Plates now runs all AI on-device via Apple Intelligence with no cloud service. This document is retained for historical reference only.
+
 ## Recommendation
 
 Use a small server-side OpenRouter proxy with a server-enforced daily quota per anonymous installation.

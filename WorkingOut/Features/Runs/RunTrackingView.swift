@@ -492,6 +492,7 @@ struct RunTrackingProView: View {
     @State private var showingAlert = false
     @State private var alertMessage = ""
     @State private var showingSettingsPrompt = false
+    @State private var showingDiscardConfirmation = false
     
     @State private var isSavingRun: Bool = false
     @AppStorage("weightUnit") private var weightUnit: String = "lbs"
@@ -825,10 +826,25 @@ struct RunTrackingProView: View {
             .padding(.bottom)
         }
         .navigationTitle("Tracking \(activityDisplayName)")
-        .navigationBarBackButtonHidden(runTracker.isRunning)
+        // Hide the system back button while actively running (tracking persists
+        // in the background) and while paused with unsaved data (so leaving is
+        // routed through the discard confirmation instead of silently dismissing).
+        .navigationBarBackButtonHidden(runTracker.isRunning || runTracker.duration > 0)
+        // Block interactive sheet swipe-down for the same states — it would bypass
+        // handleDone() and leave an orphaned Live Activity on a paused run.
+        .interactiveDismissDisabled(runTracker.isRunning || runTracker.duration > 0)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if !runTracker.isRunning && runTracker.duration > 0 {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        handleDone()
+                    } label: {
+                        Label("Back", systemImage: "chevron.backward")
+                    }
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: 16) {
                     Button {
@@ -840,9 +856,9 @@ struct RunTrackingProView: View {
                     }
                     .disabled(runTracker.authorizationStatus == .denied || runTracker.authorizationStatus == .restricted)
                     .help("Center on current location")
-                    
+
                     Button("Done") {
-                        dismiss()
+                        handleDone()
                     }
                     .fontWeight(.semibold)
                 }
@@ -863,7 +879,7 @@ struct RunTrackingProView: View {
                     .help("Center on current location")
                     
                     Button("Done") {
-                        dismiss()
+                        handleDone()
                     }
                     .fontWeight(.semibold)
                 }
@@ -879,6 +895,42 @@ struct RunTrackingProView: View {
         } message: {
             Text(alertMessage)
         }
+        .alert("Discard \(activityDisplayName)?", isPresented: $showingDiscardConfirmation) {
+            Button("Discard", role: .destructive) { discardRun() }
+            Button("Keep", role: .cancel) { }
+        } message: {
+            Text("This \(activityDisplayName.lowercased()) is paused and hasn't been saved. Leaving now will discard it.")
+        }
+    }
+
+    // Handle the "Done" toolbar button.
+    // - Active run: keep tracking (background run support) and just dismiss.
+    // - Paused run with elapsed data: prompt so it isn't abandoned with a stale
+    //   Live Activity.
+    // - Fresh/zero-data session: tear down any Live Activity, clear the tracker,
+    //   and dismiss cleanly without prompting.
+    private func handleDone() {
+        if runTracker.isRunning {
+            // Actively running: preserve tracking and the Live Activity.
+            dismiss()
+        } else if runTracker.duration > 0 {
+            showingDiscardConfirmation = true
+        } else {
+            // Never started or zero-duration: nothing to save.
+            LiveActivityManager.shared.end()
+            runTracker.clearCurrentRun(resetActivityType: true)
+            dismiss()
+        }
+    }
+
+    // Fully abandon a paused run: stop tracking, reset RunTracker state, and end
+    // the Live Activity so it can't persist or be adopted on the next launch.
+    private func discardRun() {
+        _ = runTracker.stopRun()
+        LiveActivityManager.shared.end()
+        runTracker.clearCurrentRun(resetActivityType: true)
+        shouldFollowUser = false
+        dismiss()
     }
     
     private func saveRun() {

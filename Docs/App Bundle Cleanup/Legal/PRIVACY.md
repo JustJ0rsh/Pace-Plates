@@ -17,15 +17,16 @@ Pace & Plates helps you log workouts, runs, and body weight on your iPhone. Your
 .   3) How We Use Data
 - **App features:** show, edit, and chart your workouts, runs, and weight.
 - **Integrations:** save runs to Apple Health (with permission); show local weather; optionally show a Live Activity.
+- **AI generation:** prompts are processed on‑device through Apple Intelligence. Your AI prompts never leave your device. We do not use any cloud AI service.
 - **Preferences:** unit selection (metric/imperial) only affects on‑device formatting
 
 .   4) Storage Locations
 - **On‑device:** all logs and preferences are saved locally.
 - **iCloud (CloudKit, Private Database):** if enabled, your data syncs privately under your Apple ID. We (the developer) cannot access your private CloudKit data.
-- **Apple services:** HealthKit, WeatherKit, MapKit, ActivityKit operate under Apple’s terms. We do not receive those requests
+- **Apple services:** HealthKit, WeatherKit, MapKit, ActivityKit, and Apple Intelligence operate under Apple’s terms. We do not receive those requests
 
 .   5) Third‑Party SDKs/Services
-Apple frameworks only: HealthKit, CloudKit (Private DB), MapKit, WeatherKit, ActivityKit, Core Location, SwiftData. No advertising or analytics SDKs
+Apple frameworks only: HealthKit, CloudKit (Private DB), MapKit, WeatherKit, ActivityKit, Core Location, SwiftData, Apple Intelligence. No advertising or analytics SDKs
 
 .   6) Sharing
 - We do **not** share your data with third parties.

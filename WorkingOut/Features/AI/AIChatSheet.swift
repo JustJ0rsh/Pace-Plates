@@ -375,7 +375,10 @@ struct AIChatSheet: View {
         )
     }
 
-    private func send(question: String, userMessage: String, appendUserMessage: Bool) {
+    // `contextRetryCount` tracks automatic retries after a context-overflow reset. It is 0 for every
+    // user-initiated send (the default) and is only incremented by the internal auto-retry below, so
+    // the counter naturally resets on the next user send.
+    private func send(question: String, userMessage: String, appendUserMessage: Bool, contextRetryCount: Int = 0) {
         let question = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !question.isEmpty, !isStreaming else { return }
 
@@ -465,10 +468,20 @@ struct AIChatSheet: View {
                                         errorMessage.contains("too long") ||
                                         errorMessage.contains("maximum"))
                 
-                if isContextOverflow {
+                if isContextOverflow && contextRetryCount >= 1 {
+                    // Already retried once and still overflowing — stop looping and tell the user.
+                    print("🛑 Context overflow persisted after retry - surfacing to user")
+                    await MainActor.run {
+                        errorText = "This conversation is too long for me to process, even after refreshing. Please start a new chat or ask a shorter question."
+                        if let streamingID = lastStreamedAssistantID,
+                           let idx = messages.lastIndex(where: { $0.id == streamingID }) {
+                            messages[idx].text = "That was too long for me to process. Try a shorter question or clear the chat to start fresh."
+                        }
+                    }
+                } else if isContextOverflow {
                     // Auto-reset with conversation summary
                     print("🔄 Context overflow detected - auto-resetting with summary")
-                    
+
                     // Summarize recent conversation
                     let summary = await WorkoutPlanGenerator.summarizeConversation(
                         messages.map { ($0.role == .user ? "User" : "Assistant", $0.text) }
@@ -507,7 +520,8 @@ struct AIChatSheet: View {
                         send(
                             question: question,
                             userMessage: userMessage,
-                            appendUserMessage: false
+                            appendUserMessage: false,
+                            contextRetryCount: contextRetryCount + 1
                         )
                     }
                     return

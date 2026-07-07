@@ -636,12 +636,14 @@ struct HomeView: View {
             ToolbarItem(placement: .topBarLeading) {
                 NavigationLink(destination: CommunityView()) {
                     Image(systemName: "person.3.fill")
+                        .foregroundStyle(AppTheme.toolbarButtonColor)
                 }
                 .accessibilityLabel("Community")
             }
             ToolbarItem(placement: .topBarTrailing) {
                 NavigationLink(destination: SettingsView()) {
                     Image(systemName: "gear")
+                        .foregroundStyle(AppTheme.toolbarButtonColor)
                 }
                 .accessibilityLabel("Settings")
                 .accessibilityIdentifier("home.settings.button")

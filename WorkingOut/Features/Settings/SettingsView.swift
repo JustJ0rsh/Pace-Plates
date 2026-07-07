@@ -23,10 +23,6 @@ struct SettingsView: View {
     @AppStorage("enableWeeklyWeightReminder") private var enableWeeklyWeightReminder: Bool = false
     @AppStorage("showVitalsOnHome") private var showVitalsOnHome: Bool = true
     @AppStorage("enableBackgroundRunTracking") private var enableBackgroundRunTracking: Bool = true
-    @AppStorage(AIProviderManager.providerPreferenceKey) private var aiProviderPreferenceRaw: String = AIProviderPreference.appleIntelligence.rawValue
-    @AppStorage(AIProviderManager.openRouterKeyConfiguredKey) private var openRouterKeyConfigured: Bool = false
-    @AppStorage(AIProviderManager.openRouterResolvedModelKey) private var openRouterResolvedModel: String = ""
-    @AppStorage(AIUsageBudgetManager.openRouterDailyLimitPreferenceKey) private var openRouterDailyLimit: Int = AIUsageBudgetManager.openRouterFreeUserDailyRequestLimit
     @AppStorage("runsLastHealthImportAt") private var runsLastHealthImportAt: Double = 0
     @AppStorage("weightLastHealthImportAt") private var weightLastHealthImportAt: Double = 0
     @FocusState private var ageFocused: Bool
@@ -45,7 +41,6 @@ struct SettingsView: View {
     @State private var showHealthSyncResult: Bool = false
     @State private var healthSyncResultMessage: String = ""
     @State private var locationAuthorizationStatus: CLAuthorizationStatus = CLLocationManager().authorizationStatus
-    @State private var openRouterAPIKeyInput: String = ""
     private let locationManager = CLLocationManager()
     #if DEBUG
     @State private var confirmAddSampleData: Bool = false
@@ -173,8 +168,6 @@ struct SettingsView: View {
         }
         .onAppear {
             if !launchConfiguration.shouldSkipAutomationSideEffects {
-                AIProviderManager.bootstrapOpenRouterKeyIfAvailable()
-                openRouterAPIKeyInput = ""
                 loadProfileFromHealthKit()
             }
             refreshLocationAuthorizationStatus()
@@ -360,26 +353,35 @@ struct SettingsView: View {
     private var advancedSection: some View {
         Section("Advanced") {
             NavigationLink {
-                healthSyncSettingsPage
+                LazySettingsDestination {
+                    healthSyncSettingsPage
+                }
             } label: {
                 Label("Health & Sync", systemImage: "heart.text.square")
             }
 
-            NavigationLink {
-                aiProviderSettingsPage
-            } label: {
-                Label("AI Provider", systemImage: "sparkles")
+            Toggle(isOn: $useStructuredPlanView) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Structured Plan View")
+                    Text("Display saved AI plans as interactive cards when structured data is available.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             NavigationLink {
-                backupDataSettingsPage
+                LazySettingsDestination {
+                    backupDataSettingsPage
+                }
             } label: {
                 Label("Backup & Data", systemImage: "externaldrive")
             }
 
             #if DEBUG
             NavigationLink {
-                developerSettingsPage
+                LazySettingsDestination {
+                    developerSettingsPage
+                }
             } label: {
                 Label("Developer", systemImage: "hammer")
             }
@@ -529,100 +531,6 @@ struct SettingsView: View {
         }
     }
 
-    private var aiProviderSettingsPage: some View {
-        settingsSubpage(title: "AI Provider") {
-            Section("Plans") {
-                Toggle(isOn: $useStructuredPlanView) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Structured Plan View")
-                        Text("Display saved plans as interactive cards when structured data is available. Note: New plan generation uses proven Markdown format for reliability.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-            Section("Provider") {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Current AI Provider")
-                    Text(currentAIProviderSummary)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
-                if currentAIProviderStatus.appleIntelligenceStatus.isCapable {
-                    Picker("AI Provider", selection: aiProviderPreferenceBinding) {
-                        ForEach(AIProviderPreference.allCases) { provider in
-                            Text(provider.displayName).tag(provider)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    Text(selectedAIProviderSubtitle)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("This device does not support Apple Intelligence, so Pace & Plates uses OpenRouter here.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Section("OpenRouter") {
-                SecureField(openRouterKeyConfigured ? "Enter a new key to replace saved key" : "OpenRouter API Key", text: $openRouterAPIKeyInput)
-                    .textContentType(.password)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled(true)
-
-                if openRouterKeyConfigured {
-                    Label("API key saved in this device's Keychain.", systemImage: "lock.shield")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
-                HStack(spacing: 10) {
-                    Button(openRouterKeyConfigured ? "Update Key" : "Save Key") {
-                        saveOpenRouterKey()
-                    }
-                    .buttonStyle(.borderedProminent)
-
-                    Button("Remove Key", role: .destructive) {
-                        removeOpenRouterKey()
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(!openRouterKeyConfigured)
-                }
-
-                Text(openRouterStatusSummary)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("OpenRouter Limits") {
-                Picker("Free Model Daily Cap", selection: $openRouterDailyLimit) {
-                    Text("50/day").tag(AIUsageBudgetManager.openRouterFreeUserDailyRequestLimit)
-                    Text("1000/day").tag(AIUsageBudgetManager.openRouterCreditedDailyRequestLimit)
-                }
-                .onChange(of: openRouterDailyLimit) { _, newValue in
-                    AIUsageBudgetManager.setOpenRouterDailyLimit(newValue)
-                }
-
-                Button {
-                    AIUsageBudgetManager.resetOpenRouterUsage()
-                    alertTitle = "AI Provider"
-                    alertMessage = "OpenRouter usage counters reset on this device."
-                    showAlert = true
-                } label: {
-                    Label("Reset Local Usage Counter", systemImage: "arrow.counterclockwise")
-                }
-
-                Text("OpenRouter currently limits free-model usage to 20 requests per minute. Accounts with less than 10 credits purchased are limited to 50 free-model requests per UTC day; accounts with at least 10 credits purchased may use 1000 per UTC day. The app enforces the selected cap locally before sending requests.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
     private var backupDataSettingsPage: some View {
         settingsSubpage(title: "Backup & Data") {
             Section("Backup") {
@@ -691,70 +599,6 @@ struct SettingsView: View {
     }
     #endif
 
-    private var currentAIProviderStatus: AIProviderStatus {
-        _ = aiProviderPreferenceRaw
-        _ = openRouterKeyConfigured
-        _ = openRouterResolvedModel
-        return AIProviderManager.currentStatus()
-    }
-
-    private var aiProviderPreferenceBinding: Binding<AIProviderPreference> {
-        Binding(
-            get: { AIProviderManager.providerPreference() },
-            set: { AIProviderManager.setProviderPreference($0) }
-        )
-    }
-
-    private var currentAIProviderSummary: String {
-        let status = currentAIProviderStatus
-        switch status.effectiveProvider {
-        case .appleIntelligence:
-            return status.canGenerateNow
-                ? "Apple Intelligence is active and ready on this device."
-                : status.unavailableDescription
-        case .openRouter:
-            let modelText = status.openRouterModelID.map { " Current free-tier model: \($0)." } ?? ""
-            let readiness = status.hasOpenRouterKey
-                ? "OpenRouter is active with your saved API key."
-                : "OpenRouter is selected, but no API key is saved yet."
-            return readiness + modelText
-        }
-    }
-
-    private var selectedAIProviderSubtitle: String {
-        aiProviderPreferenceBinding.wrappedValue.subtitle
-    }
-
-    private var openRouterStatusSummary: String {
-        let status = currentAIProviderStatus
-        let budget = AIUsageBudgetManager.currentOpenRouterStatus()
-        var lines: [String] = []
-
-        if openRouterKeyConfigured {
-            lines.append("Stored securely in Keychain.")
-        } else {
-            lines.append("No OpenRouter key saved yet.")
-        }
-
-        if let modelID = status.openRouterModelID, !modelID.isEmpty {
-            lines.append("Free-tier model: \(modelID).")
-        } else {
-            lines.append("A compatible `:free` text model will be chosen automatically.")
-        }
-
-        lines.append("Device guardrails: \(budget.dailyRemaining)/\(budget.dailyLimit) free-model requests left for the current UTC day, \(budget.minuteRemaining)/\(budget.minuteLimit) left this minute, and up to \(AIUsageBudgetManager.maxModelAttemptsPerRequest) free-model attempts per AI action.")
-        lines.append("Response caps: chat \(AIUsageBudgetManager.openRouterChatOutputTokenLimit) tokens, workout plans \(AIUsageBudgetManager.openRouterWorkoutPlanOutputTokenLimit), running plans \(AIUsageBudgetManager.openRouterRunPlanOutputTokenLimit).")
-
-        if let cooldownUntil = budget.cooldownUntil, cooldownUntil > Date() {
-            let formatter = RelativeDateTimeFormatter()
-            formatter.unitsStyle = .short
-            lines.append("Provider cooldown active until \(formatter.localizedString(for: cooldownUntil, relativeTo: Date())).")
-        }
-
-        lines.append("`OPENROUTER_API_KEY` can also bootstrap the key for local development.")
-        return lines.joined(separator: " ")
-    }
-
     private var heightDisplayValue: String {
         if heightUnit == "in" {
             let totalInches = Int(round(heightValue))
@@ -766,44 +610,6 @@ struct SettingsView: View {
         return String(format: "%.1f cm", heightValue)
     }
 
-    private func saveOpenRouterKey() {
-        let trimmed = openRouterAPIKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        alertTitle = "AI Provider"
-        guard !trimmed.isEmpty else {
-            alertMessage = openRouterKeyConfigured
-                ? "Enter a new OpenRouter API key to replace the saved Keychain item."
-                : "Enter an OpenRouter API key first."
-            showAlert = true
-            return
-        }
-
-        guard AIProviderManager.isUsableOpenRouterKeyCandidate(trimmed) else {
-            alertMessage = "That does not look like a usable OpenRouter API key. Paste the full key with no spaces or line breaks."
-            showAlert = true
-            return
-        }
-
-        if AIProviderManager.saveOpenRouterKey(trimmed) {
-            openRouterAPIKeyInput = ""
-            AIProviderManager.setProviderPreference(.openRouter)
-            alertMessage = "OpenRouter API key saved securely in Keychain. OpenRouter is now selected for AI."
-        } else {
-            alertMessage = "Could not save the OpenRouter API key."
-        }
-        showAlert = true
-    }
-
-    private func removeOpenRouterKey() {
-        alertTitle = "AI Provider"
-        if AIProviderManager.deleteOpenRouterKey() {
-            openRouterAPIKeyInput = ""
-            alertMessage = "OpenRouter API key removed."
-        } else {
-            alertMessage = "Could not remove the OpenRouter API key."
-        }
-        showAlert = true
-    }
-    
     // MARK: - Backup actions
     @State private var showImporter: Bool = false
     private struct IdentifiableURL: Identifiable { let id = UUID(); let url: URL }
@@ -894,7 +700,7 @@ struct SettingsView: View {
                 runsLastHealthImportAt = now
                 weightLastHealthImportAt = now
 
-                healthSyncResultMessage = "Runs: +\(runSummary.inserted) imported, \(runSummary.linked) linked, \(runSummary.skipped) skipped. Weights: +\(weightsInserted) imported."
+                healthSyncResultMessage = "Runs: +\(runSummary.inserted) imported, \(runSummary.linked) linked, \(runSummary.skipped) skipped, \(runSummary.deleted) removed. Weights: +\(weightsInserted) imported."
             } catch {
                 healthSyncResultMessage = "Health refresh failed: \(error.localizedDescription)"
             }
@@ -905,7 +711,7 @@ struct SettingsView: View {
     }
 
     @MainActor
-    private func importRunsFromHealth(limit: Int = 100) async throws -> (inserted: Int, linked: Int, skipped: Int) {
+    private func importRunsFromHealth(limit: Int = 100) async throws -> (inserted: Int, linked: Int, skipped: Int, deleted: Int) {
         let changes = try await HealthKitManager.shared.fetchCardioWorkoutChanges(resetAnchor: false, limit: limit)
         let workouts = changes.added
         var allRuns = try modelContext.fetch(FetchDescriptor<RunningSession>())
@@ -915,14 +721,13 @@ struct SettingsView: View {
         var inserted = 0
         var linked = 0
         var skipped = 0
-        var deletedAny = false
+        var deleted = 0
 
         if !changes.deletedUUIDs.isEmpty {
             let deletedSet = Set(changes.deletedUUIDs)
             for run in allRuns where (run.healthWorkoutUUID.map { deletedSet.contains($0) } ?? false) {
                 modelContext.delete(run)
-                skipped += 1
-                deletedAny = true
+                deleted += 1
             }
             allRuns.removeAll { run in
                 guard let uuid = run.healthWorkoutUUID else { return false }
@@ -982,13 +787,13 @@ struct SettingsView: View {
             existingUUIDs.insert(uuidStr)
         }
 
-        if inserted > 0 || linked > 0 || deletedAny {
+        if inserted > 0 || linked > 0 || deleted > 0 {
             try modelContext.save()
         }
 
         HealthKitManager.shared.persistCardioWorkoutAnchor(changes.newAnchor)
 
-        return (inserted, linked, skipped)
+        return (inserted, linked, skipped, deleted)
     }
 
     @MainActor
@@ -997,8 +802,12 @@ struct SettingsView: View {
         let existing = try modelContext.fetch(FetchDescriptor<WeightEntry>())
         var existingDays = Set(existing.map { Calendar.current.startOfDay(for: $0.date) })
 
+        // Keep only the LATEST sample per day within the imported batch so an
+        // evening correction wins over a morning weigh-in (getWeightHistory is oldest-first).
+        let latestPerDay = HealthKitManager.latestWeightSamplesPerDay(history)
+
         var inserted = 0
-        for item in history {
+        for item in latestPerDay {
             let day = Calendar.current.startOfDay(for: item.date)
             if existingDays.contains(day) { continue }
 
@@ -1031,15 +840,11 @@ struct SettingsView: View {
         distance: Double,
         unit: String
     ) -> RunningSession? {
-        let window: TimeInterval = 120
-        let distanceTolerance: Double = 0.07
-        let durationTolerance: TimeInterval = 180
-
         return runs.first {
-            abs($0.date.timeIntervalSince(endDate)) <= window &&
-            abs($0.duration - duration) <= durationTolerance &&
-            $0.distanceUnit == unit &&
-            abs($0.distance - distance) <= distanceTolerance
+            HealthKitManager.runsAreSimilar(
+                aDate: $0.date, aDuration: $0.duration, aDistance: $0.distance, aUnit: $0.distanceUnit,
+                bDate: endDate, bDuration: duration, bDistance: distance, bUnit: unit
+            )
         }
     }
 
@@ -1100,21 +905,17 @@ struct SettingsView: View {
             
             for run in allRuns {
                 let isDuplicate = runsToKeep.contains { existing in
-                    let dateDiff = abs(existing.date.timeIntervalSince(run.date))
-                    let distanceDiff = abs(existing.distance - run.distance)
-                    let durationDiff = abs(existing.duration - run.duration)
-                    
-                    let areSimilar = dateDiff < 120 &&
-                                    existing.distanceUnit == run.distanceUnit &&
-                                    distanceDiff < 0.07 &&
-                                    durationDiff < 30
-                    
                     if let uuid1 = existing.healthWorkoutUUID, !uuid1.isEmpty,
                        let uuid2 = run.healthWorkoutUUID, !uuid2.isEmpty {
                         return uuid1 == uuid2
                     }
-                    
-                    return areSimilar
+
+                    return HealthKitManager.runsAreSimilar(
+                        aDate: existing.date, aDuration: existing.duration,
+                        aDistance: existing.distance, aUnit: existing.distanceUnit,
+                        bDate: run.date, bDuration: run.duration,
+                        bDistance: run.distance, bUnit: run.distanceUnit
+                    )
                 }
                 
                 if isDuplicate {
@@ -1231,6 +1032,14 @@ struct SettingsView: View {
         let weights = try modelContext.fetch(FetchDescriptor<WeightEntry>())
         weights.forEach { modelContext.delete($0) }
         try modelContext.save()
+    }
+}
+
+private struct LazySettingsDestination<Content: View>: View {
+    let content: () -> Content
+
+    var body: some View {
+        content()
     }
 }
 

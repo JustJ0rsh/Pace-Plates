@@ -7,6 +7,7 @@ extension Notification.Name {
 }
 
 private let workoutAnchorDefaultsKey = "healthKit.cardioWorkoutAnchor"
+private let strengthWorkoutAnchorDefaultsKey = "healthKit.strengthWorkoutAnchor"
 
 @MainActor
 final class HealthKitManager: ObservableObject {
@@ -41,6 +42,19 @@ final class HealthKitManager: ObservableObject {
         .rowing,
         .elliptical,
         .stairClimbing
+    ]
+
+    // Non-cardio wearable workouts routed to the workout inbox (cardio auto-imports as runs)
+    nonisolated static let supportedStrengthTypes: Set<HKWorkoutActivityType> = [
+        .traditionalStrengthTraining,
+        .functionalStrengthTraining,
+        .highIntensityIntervalTraining,
+        .coreTraining,
+        .crossTraining,
+        .yoga,
+        .pilates,
+        .flexibility,
+        .martialArts
     ]
 
     // MARK: - Types
@@ -132,6 +146,10 @@ final class HealthKitManager: ObservableObject {
         storeWorkoutAnchor(anchor)
     }
 
+    func persistStrengthWorkoutAnchor(_ anchor: HKQueryAnchor?) {
+        storeAnchor(anchor, key: strengthWorkoutAnchorDefaultsKey)
+    }
+
     private func authorizationRequestStatus() async throws -> HKAuthorizationRequestStatus {
         try await withCheckedThrowingContinuation { continuation in
             healthStore.getRequestStatusForAuthorization(toShare: writeTypes, read: readTypes) { status, error in
@@ -171,17 +189,25 @@ final class HealthKitManager: ObservableObject {
     }
 
     nonisolated private func storedWorkoutAnchor() -> HKQueryAnchor? {
-        guard let data = UserDefaults.standard.data(forKey: workoutAnchorDefaultsKey) else { return nil }
-        return try? NSKeyedUnarchiver.unarchivedObject(ofClass: HKQueryAnchor.self, from: data)
+        storedAnchor(key: workoutAnchorDefaultsKey)
     }
 
     nonisolated private func storeWorkoutAnchor(_ anchor: HKQueryAnchor?) {
+        storeAnchor(anchor, key: workoutAnchorDefaultsKey)
+    }
+
+    nonisolated private func storedAnchor(key: String) -> HKQueryAnchor? {
+        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+        return try? NSKeyedUnarchiver.unarchivedObject(ofClass: HKQueryAnchor.self, from: data)
+    }
+
+    nonisolated private func storeAnchor(_ anchor: HKQueryAnchor?, key: String) {
         guard let anchor else {
-            UserDefaults.standard.removeObject(forKey: workoutAnchorDefaultsKey)
+            UserDefaults.standard.removeObject(forKey: key)
             return
         }
         if let data = try? NSKeyedArchiver.archivedData(withRootObject: anchor, requiringSecureCoding: true) {
-            UserDefaults.standard.set(data, forKey: workoutAnchorDefaultsKey)
+            UserDefaults.standard.set(data, forKey: key)
         }
     }
 
@@ -350,6 +376,43 @@ final class HealthKitManager: ObservableObject {
 
                 let workouts = (samples as? [HKWorkout]) ?? []
                 let added = workouts.filter { self.supportedCardioTypes.contains($0.workoutActivityType) }
+                let deletedUUIDs = (deleted ?? []).map { $0.uuid.uuidString }
+                continuation.resume(
+                    returning: CardioWorkoutChanges(
+                        added: added,
+                        deletedUUIDs: deletedUUIDs,
+                        newAnchor: newAnchor
+                    )
+                )
+            }
+            self.healthStore.execute(query)
+        }
+    }
+
+    /// Anchored fetch of non-cardio wearable workouts (strength, HIIT, yoga, …) for the inbox.
+    /// `since` bounds the first scan; subsequent calls advance via the stored anchor.
+    func fetchStrengthWorkoutChanges(since: Date, resetAnchor: Bool = false, limit: Int = HKObjectQueryNoLimit) async throws -> CardioWorkoutChanges {
+        let anchor = resetAnchor ? nil : storedAnchor(key: strengthWorkoutAnchorDefaultsKey)
+        let typePredicates = Self.supportedStrengthTypes.map { HKQuery.predicateForWorkouts(with: $0) }
+        let predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+            NSCompoundPredicate(orPredicateWithSubpredicates: typePredicates),
+            HKQuery.predicateForSamples(withStart: since, end: nil, options: [])
+        ])
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKAnchoredObjectQuery(
+                type: .workoutType(),
+                predicate: predicate,
+                anchor: anchor,
+                limit: limit
+            ) { _, samples, deleted, newAnchor, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+
+                let workouts = (samples as? [HKWorkout]) ?? []
+                let added = workouts.filter { Self.supportedStrengthTypes.contains($0.workoutActivityType) }
                 let deletedUUIDs = (deleted ?? []).map { $0.uuid.uuidString }
                 continuation.resume(
                     returning: CardioWorkoutChanges(
@@ -650,7 +713,7 @@ final class HealthKitManager: ObservableObject {
         // Choose a workout which end date and duration are close, and (if provided) distance close
         var best: HKWorkout? = nil
         var bestScore: Double = .greatestFiniteMagnitude
-        for w in runs where w.workoutActivityType == .running {
+        for w in runs where supportedCardioTypes.contains(w.workoutActivityType) {
             let dt = abs(w.endDate.timeIntervalSince(endDate))
             let ddur = abs(w.duration - duration)
             var score = dt + ddur
@@ -989,7 +1052,53 @@ final class HealthKitManager: ObservableObject {
             healthStore.execute(query)
         }
     }
-    
+
+    /// Collapse a batch of weight samples to the LATEST sample per calendar day.
+    /// getWeightHistory returns samples oldest-first, so a later same-day sample
+    /// (e.g. an evening correction) should overwrite an earlier one on import.
+    /// Shared by both the manual and silent auto-import paths so they agree.
+    static func latestWeightSamplesPerDay(
+        _ samples: [(date: Date, weightInPounds: Double)],
+        calendar: Calendar = .current
+    ) -> [(date: Date, weightInPounds: Double)] {
+        var latestByDay: [Date: (date: Date, weightInPounds: Double)] = [:]
+        for sample in samples {
+            let day = calendar.startOfDay(for: sample.date)
+            if let existing = latestByDay[day], existing.date >= sample.date { continue }
+            latestByDay[day] = sample
+        }
+        return latestByDay.values.sorted { $0.date < $1.date }
+    }
+
+    // MARK: - Run similarity (shared dedup / link matching)
+
+    /// Meters represented by a stored distance value in the given unit. Uses the
+    /// same conversion factors as the rest of the app (1609.34 m/mi, 1000 m/km).
+    static func metersFor(distance: Double, unit: String) -> Double {
+        (unit == "mi") ? (distance * 1609.34) : (distance * 1000.0)
+    }
+
+    /// Shared time window for treating two runs as "the same run" during import
+    /// matching and deduplication. Applied consistently in all sites.
+    static let runMatchDateWindow: TimeInterval = 120
+    static let runMatchDurationTolerance: TimeInterval = 120
+    /// Physical distance tolerance in meters — unit-independent so a run logged in
+    /// "mi" still matches after the user switches the app to "km".
+    static let runMatchDistanceToleranceMeters: Double = 100
+
+    /// Unit-independent similarity test for two runs. All distances are converted to
+    /// meters before comparison so unit switches don't produce duplicate rows.
+    static func runsAreSimilar(
+        aDate: Date, aDuration: TimeInterval, aDistance: Double, aUnit: String,
+        bDate: Date, bDuration: TimeInterval, bDistance: Double, bUnit: String
+    ) -> Bool {
+        let aMeters = metersFor(distance: aDistance, unit: aUnit)
+        let bMeters = metersFor(distance: bDistance, unit: bUnit)
+        return abs(aDate.timeIntervalSince(bDate)) <= runMatchDateWindow &&
+            abs(aDuration - bDuration) <= runMatchDurationTolerance &&
+            abs(aMeters - bMeters) <= runMatchDistanceToleranceMeters
+    }
+
     /// Fetch all heart rate samples for a workout with timestamps
     func heartRateSamples(for workout: HKWorkout) async throws -> [(timestamp: Date, bpm: Double)] {
         guard let heartRateType = HKQuantityType.quantityType(forIdentifier: .heartRate) else { return [] }

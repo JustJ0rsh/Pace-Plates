@@ -8,10 +8,6 @@ struct AIPlannerView: View {
     @AppStorage("weightUnit") private var weightUnit: String = "lbs"
     @AppStorage("distanceUnit") private var distanceUnit: String = "mi"
     @AppStorage("userEquipment") private var userEquipment: String = ""
-    @AppStorage(AIProviderManager.providerPreferenceKey) private var aiProviderPreferenceRaw: String = AIProviderPreference.appleIntelligence.rawValue
-    @AppStorage(AIProviderManager.openRouterKeyConfiguredKey) private var openRouterKeyConfigured: Bool = false
-    @AppStorage(AIProviderManager.openRouterResolvedModelKey) private var openRouterResolvedModel: String = ""
-    @AppStorage(AIUsageBudgetManager.openRouterDailyLimitPreferenceKey) private var openRouterDailyLimit: Int = AIUsageBudgetManager.openRouterFreeUserDailyRequestLimit
 
     // Use Settings-backed goal directly
     // Lose | maintain | gain
@@ -28,9 +24,6 @@ struct AIPlannerView: View {
     @State private var statusRefreshTick: Int = 0
 
     private var providerStatus: AIProviderStatus {
-        _ = aiProviderPreferenceRaw
-        _ = openRouterKeyConfigured
-        _ = openRouterResolvedModel
         _ = statusRefreshTick
         return AIProviderManager.currentStatus()
     }
@@ -60,12 +53,12 @@ struct AIPlannerView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 NavigationLink(destination: AIHistoryView()) {
                     Image(systemName: "clock.arrow.circlepath")
+                        .foregroundStyle(AppTheme.toolbarButtonColor)
                 }
                 .accessibilityLabel("AI History")
             }
         }
         .onAppear {
-            AIProviderManager.bootstrapOpenRouterKeyIfAvailable()
             Task { await WorkoutPlanGenerator.shared.prewarmIfPossible() }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
@@ -185,33 +178,21 @@ struct AIPlannerView: View {
                 VStack(spacing: 12) {
                     HStack(spacing: 8) {
                         Circle()
-                            .fill(providerStatus.effectiveProvider == .appleIntelligence ? Color.green : AppTheme.accentColor)
+                            .fill(Color.green)
                             .frame(width: 10, height: 10)
                         Text(providerStatus.providerReadyDescription)
                             .foregroundStyle(AppTheme.secondaryTextColor)
                         Spacer()
                     }
 
-                    if providerStatus.effectiveProvider == .appleIntelligence {
-                        HStack {
-                            Spacer()
-                            Button(action: { showResetConfirmation = true }) {
-                                Label("Reset Model Context", systemImage: "arrow.counterclockwise.circle")
-                                    .font(.footnote)
-                            }
-                            .buttonStyle(.bordered)
-                            Spacer()
+                    HStack {
+                        Spacer()
+                        Button(action: { showResetConfirmation = true }) {
+                            Label("Reset Model Context", systemImage: "arrow.counterclockwise.circle")
+                                .font(.footnote)
                         }
-                    } else {
-                        Text("Cloud requests are sent through OpenRouter only while this provider is selected.")
-                            .font(.footnote)
-                            .foregroundStyle(AppTheme.secondaryTextColor)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                        Text(openRouterBudgetSummary)
-                            .font(.footnote)
-                            .foregroundStyle(AppTheme.secondaryTextColor)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        .buttonStyle(.bordered)
+                        Spacer()
                     }
                 }
             }
@@ -264,13 +245,6 @@ struct AIPlannerView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
             
-            NavigationLink(destination: SettingsView()) {
-                Label(providerStatus.needsAppConfiguration ? "Configure OpenRouter" : "AI Provider Settings", systemImage: "slider.horizontal.3")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .padding(.horizontal, 32)
-
             if providerStatus.needsSystemSettings {
                 Button(action: openSettings) {
                     Label("Open iPhone Settings", systemImage: "gear")
@@ -288,20 +262,15 @@ struct AIPlannerView: View {
     // MARK: - Unavailable State Helpers
 
     private var unavailableIconName: String {
-        switch providerStatus.effectiveProvider {
-        case .appleIntelligence:
-            switch providerStatus.appleIntelligenceStatus {
-            case .notEnabled:
-                return "sparkles.rectangle.stack"
-            case .modelNotReady:
-                return "arrow.down.circle"
-            case .unsupported, .unavailable:
-                return "exclamationmark.triangle"
-            case .available:
-                return "checkmark.circle"
-            }
-        case .openRouter:
-            return providerStatus.hasOpenRouterKey ? "wifi.exclamationmark" : "key.slash"
+        switch providerStatus.appleIntelligenceStatus {
+        case .notEnabled:
+            return "sparkles.rectangle.stack"
+        case .modelNotReady:
+            return "arrow.down.circle"
+        case .unsupported, .unavailable:
+            return "exclamationmark.triangle"
+        case .available:
+            return "checkmark.circle"
         }
     }
 
@@ -309,12 +278,6 @@ struct AIPlannerView: View {
         if let url = URL(string: UIApplication.openSettingsURLString) {
             UIApplication.shared.open(url)
         }
-    }
-
-    private var openRouterBudgetSummary: String {
-        _ = openRouterDailyLimit
-        let budget = AIUsageBudgetManager.currentOpenRouterStatus()
-        return "\(budget.dailyRemaining)/\(budget.dailyLimit) free-model requests left today, \(budget.minuteRemaining)/\(budget.minuteLimit) left this minute. One AI action may use up to \(AIUsageBudgetManager.maxModelAttemptsPerRequest) attempts if free providers are busy."
     }
 }
 

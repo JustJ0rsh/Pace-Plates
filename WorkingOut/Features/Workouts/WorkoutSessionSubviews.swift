@@ -85,6 +85,66 @@ struct WorkoutDetailsTile: View {
     }
 }
 
+/// Shows metrics attached from a linked wearable/Health workout.
+struct WearableMetricsTile: View {
+    let session: WorkoutSession
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "applewatch")
+                    .foregroundStyle(AppTheme.accentColor)
+                Text(session.healthSourceName ?? "Apple Watch")
+                    .font(.headline)
+                Spacer()
+                if let key = session.healthActivityType {
+                    Text(WearableWorkoutInboxService.activityDisplayName(for: key))
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(AppTheme.accentColor.opacity(0.14))
+                        .clipShape(Capsule())
+                }
+            }
+
+            HStack(spacing: 0) {
+                if let duration = session.healthDuration {
+                    wearableMetric(icon: "clock", value: durationText(duration), label: "Duration")
+                }
+                if let calories = session.healthCalories {
+                    wearableMetric(icon: "flame", value: "\(Int(calories.rounded()))", label: "kcal")
+                }
+                if let bpm = session.healthAvgHeartRate {
+                    wearableMetric(icon: "heart", value: "\(Int(bpm.rounded()))", label: "Avg bpm")
+                }
+            }
+        }
+        .floatingTile()
+    }
+
+    private func wearableMetric(icon: String, value: String, label: String) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundStyle(AppTheme.accentColor)
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func durationText(_ duration: TimeInterval) -> String {
+        let totalMinutes = Int(duration / 60)
+        let hours = totalMinutes / 60
+        let minutes = totalMinutes % 60
+        if hours > 0 { return "\(hours)h \(minutes)m" }
+        return "\(max(totalMinutes, 1))m"
+    }
+}
+
 struct WorkoutExercisesTile: View {
     @Environment(\.modelContext) private var modelContext
     let session: WorkoutSession

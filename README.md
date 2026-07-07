@@ -26,9 +26,9 @@ A comprehensive iOS app for tracking workouts, runs, and body weight, built with
   - Quick access to all features
 
 - **AI Coaching**
-  - Apple Intelligence support on compatible devices
-  - OpenRouter fallback for older devices or cloud-based generation
+  - On-device Apple Intelligence (Apple Foundation Models) on compatible devices
   - Workout-plan generation, AI chat, and running-plan assistance
+  - No cloud AI service — AI prompts never leave the device; devices without Apple Intelligence gracefully hide AI features
 
 ## Technical Details
 
@@ -50,14 +50,21 @@ A comprehensive iOS app for tracking workouts, runs, and body weight, built with
 2. Open `WorkingOut.xcodeproj` in Xcode
 3. Build and run the project
 
-## AI Provider Setup
+## AI
 
-- Pace & Plates now supports two AI providers: `Apple Intelligence` and `OpenRouter`.
-- On Apple Intelligence-capable iPhones, users can choose either provider in Settings.
-- On Apple Intelligence-ineligible devices, the app automatically uses OpenRouter.
-- OpenRouter keys are stored in the iOS Keychain, not in `UserDefaults`.
-- For local development, `.env.example` documents the `OPENROUTER_API_KEY` variable. If you launch from Xcode, pass that value into the app process as an environment variable or enter it in the in-app Settings screen.
-- The app intentionally targets OpenRouter `:free` text models to avoid paid model usage by default.
+- All AI in Pace & Plates runs **on-device** via Apple Intelligence (Apple
+  Foundation Models). There is no cloud AI provider.
+- AI features — workout-plan generation, AI chat/ask, and the run assistant's
+  plan drafting — are available only on Apple Intelligence-capable devices
+  running iOS 26+. AI prompts never leave the device.
+- On devices without Apple Intelligence (unsupported hardware, or the feature
+  not yet enabled/downloaded), the app degrades gracefully: AI entry points
+  show an unavailable state instead of failing.
+- The Foundation Models code path is compiled behind the
+  `-DAI_FOUNDATION_AVAILABLE` Swift flag and gated again at runtime through
+  `AIProviderManager` / `SystemLanguageModel.default.availability`.
+- No API keys or environment variables are required. (A prior OpenRouter cloud
+  provider has been removed.)
 
 ## Development
 

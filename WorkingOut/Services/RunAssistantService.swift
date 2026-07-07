@@ -1,6 +1,39 @@
 import Foundation
 import SwiftData
 
+/// Centralized weekday <-> date math for running plans.
+///
+/// Sessions store `weekday` as a locale-independent number (1=Sun ... 7=Sat).
+/// The pitfall: `DateComponents.weekday` resolves *within the calendar's week*,
+/// and which dates fall in a given `.weekOfYear` depends on `calendar.firstWeekday`.
+/// In a Monday-first locale (UK/EU), setting `comps.weekday = 1` (Sunday) on a
+/// week-of-year anchor lands on a Sunday in a *different* calendar week than a
+/// Sunday-first locale would produce — pushing the session into an adjacent week.
+///
+/// To stay deterministic regardless of locale we never assign `comps.weekday`.
+/// Instead we compute the start of the target week (which respects firstWeekday,
+/// so its own weekday == `calendar.firstWeekday`) and add a fixed day offset:
+///     offset = (weekday - calendar.firstWeekday + 7) % 7
+/// All conversions between the stored 1=Sun...7=Sat number and a date go through
+/// here so scheduling, rest-day moves, and the dashboard agree.
+enum RunAssistantWeekday {
+    /// Resolves a stored weekday (1=Sun ... 7=Sat) to a concrete date within the
+    /// week `weekOffset` weeks after `startDate`, independent of `firstWeekday`.
+    static func scheduledDate(startDate: Date, weekOffset: Int, weekday: Int) -> Date {
+        let calendar = Calendar.current
+        let weekStart = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: startDate)) ?? startDate
+        let offsetWeekStart = calendar.date(byAdding: .weekOfYear, value: weekOffset, to: weekStart) ?? weekStart
+        let offset = ((weekday - calendar.firstWeekday) + 7) % 7
+        return calendar.date(byAdding: .day, value: offset, to: offsetWeekStart) ?? offsetWeekStart
+    }
+
+    /// Reads the stored weekday number (1=Sun ... 7=Sat) from a scheduled date.
+    /// `.weekday` is already locale-independent, so this is a straight component read.
+    static func weekday(of date: Date) -> Int {
+        Calendar.current.component(.weekday, from: date)
+    }
+}
+
 @MainActor
 final class RunAssistantService {
     static let shared = RunAssistantService()
@@ -148,14 +181,13 @@ final class RunAssistantService {
         guard let plan = fetchPlan(id: planID, context: context),
               let sessions = plan.sessions else { return }
 
-        let calendar = Calendar.current
         let targetWeek = sessions.filter { $0.weekIndex == weekIndex }
 
         guard let restToMove = targetWeek.first(where: {
-            $0.sessionType == "rest" && calendar.component(.weekday, from: $0.scheduledDate ?? plan.startDate) == fromWeekday
+            $0.sessionType == "rest" && RunAssistantWeekday.weekday(of: $0.scheduledDate ?? plan.startDate) == fromWeekday
         }),
         let sessionToSwap = targetWeek.first(where: {
-            $0.sessionType != "rest" && calendar.component(.weekday, from: $0.scheduledDate ?? plan.startDate) == toWeekday
+            $0.sessionType != "rest" && RunAssistantWeekday.weekday(of: $0.scheduledDate ?? plan.startDate) == toWeekday
         }) else {
             return
         }
@@ -652,13 +684,7 @@ final class RunAssistantService {
     }
 
     private func scheduledDate(startDate: Date, weekOffset: Int, weekday: Int) -> Date {
-        let calendar = Calendar.current
-        let weekStart = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: startDate)) ?? startDate
-        let offsetWeekStart = calendar.date(byAdding: .weekOfYear, value: weekOffset, to: weekStart) ?? weekStart
-
-        var components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: offsetWeekStart)
-        components.weekday = weekday
-        return calendar.date(from: components) ?? offsetWeekStart
+        RunAssistantWeekday.scheduledDate(startDate: startDate, weekOffset: weekOffset, weekday: weekday)
     }
 
     private func sessionWeekdays(for plan: RunningPlan) -> [Int] {
@@ -668,13 +694,13 @@ final class RunAssistantService {
         let currentWeek = max(0, calendar.dateComponents([.weekOfYear], from: plan.startDate, to: today).weekOfYear ?? 0)
 
         let inCurrentWeek = sessions.filter { $0.weekIndex == currentWeek && $0.sessionType != "rest" }
-        let currentWeekdays = inCurrentWeek.compactMap { $0.scheduledDate.map { calendar.component(.weekday, from: $0) } }
+        let currentWeekdays = inCurrentWeek.compactMap { $0.scheduledDate.map { RunAssistantWeekday.weekday(of: $0) } }
         if !currentWeekdays.isEmpty {
             return Array(Set(currentWeekdays)).sorted()
         }
 
         let week0 = sessions.filter { $0.weekIndex == 0 && $0.sessionType != "rest" }
-        let fallback = week0.compactMap { $0.scheduledDate.map { calendar.component(.weekday, from: $0) } }
+        let fallback = week0.compactMap { $0.scheduledDate.map { RunAssistantWeekday.weekday(of: $0) } }
         return Array(Set(fallback)).sorted()
     }
 
@@ -725,6 +751,6 @@ final class RunAssistantService {
 
     private func weekdayNumber(for session: RunningPlanSession) -> Int {
         guard let date = session.scheduledDate else { return 8 }
-        return Calendar.current.component(.weekday, from: date)
+        return RunAssistantWeekday.weekday(of: date)
     }
 }

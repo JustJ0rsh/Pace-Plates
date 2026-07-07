@@ -19,22 +19,20 @@ enum PrivacyPolicyContent {
     .   3) How We Use Data
     - **App features:** show, edit, and chart your workouts, runs, and weight.
     - **Integrations:** save runs to Apple Health (with permission); show local weather; optionally show a Live Activity.
-    - **AI generation:** when you use Apple Intelligence, prompts are processed on-device through Apple’s framework. If you choose OpenRouter and provide your own API key, the prompt and the workout/running context needed to answer it are sent to OpenRouter and the model provider OpenRouter routes the request to.
+    - **AI generation:** prompts are processed on-device through Apple Intelligence. Your AI prompts never leave your device.
     - **Preferences:** unit selection (metric/imperial) only affects on-device formatting
 
     .   4) Storage Locations
     - **On-device:** all logs and preferences are saved locally.
     - **iCloud (CloudKit, Private Database):** if enabled, your data syncs privately under your Apple ID. We (the developer) cannot access your private CloudKit data.
     - **Apple services:** HealthKit, WeatherKit, MapKit, ActivityKit, and Apple Intelligence operate under Apple’s terms. We do not receive those requests.
-    - **OpenRouter (optional):** if you select OpenRouter in Settings, your AI prompt and the minimum app context needed for generation are sent directly from your device to OpenRouter using your API key.
 
     .   5) Third-Party SDKs/Services
     Apple frameworks: HealthKit, CloudKit (Private DB), MapKit, WeatherKit, ActivityKit, Core Location, SwiftData, Apple Intelligence.
-    Optional cloud AI service: OpenRouter, only when you choose it and save an API key.
     No advertising or analytics SDKs.
 
     .   6) Sharing
-    - We do **not** send your data to third parties unless you explicitly enable OpenRouter for AI generation. If you do, the AI prompt and included training context are shared with OpenRouter and the model provider handling that request.
+    - We do **not** send your data to third parties.
     - We do **not** sell your data.
     - We do **not** use your data for advertising, profiling, or cross-app tracking.
 
@@ -43,7 +41,6 @@ enum PrivacyPolicyContent {
     - **Location:** grant/deny in Settings -> Privacy -> Location Services.
     - **Notifications/Live Activities:** grant/deny in Settings -> Notifications.
     - **iCloud sync:** enable/disable in Settings -> [Your Name] -> iCloud -> Show All -> Pace & Plates
-    - **AI provider:** choose Apple Intelligence or OpenRouter inside Pace & Plates Settings. Remove your OpenRouter key there at any time.
 
     .   8) Retention
     Your data remains until you delete it. You can remove entries individually in the app at any time
@@ -59,10 +56,10 @@ enum PrivacyPolicyContent {
     Pace & Plates is not directed to children under 13 and does not knowingly collect personal information from children
 
     .   11) Security
-    We rely on Apple platform security for on-device data, Keychain for the optional OpenRouter API key, and CloudKit’s authentication/encryption for iCloud. We do not run independent servers for your app content.
+    We rely on Apple platform security for on-device data and CloudKit’s authentication/encryption for iCloud. We do not run independent servers for your app content.
 
     .   12) International Transfers
-    Data stored in iCloud is handled by Apple under your Apple ID and Apple’s terms. If you enable OpenRouter, OpenRouter and its routed model provider may process AI requests outside your country under their own terms.
+    Data stored in iCloud is handled by Apple under your Apple ID and Apple’s terms.
 
     .   13) Changes
     We may update this policy when features change. We will update the effective date and our App Store disclosures accordingly

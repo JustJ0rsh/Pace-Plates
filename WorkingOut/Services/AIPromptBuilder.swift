@@ -186,67 +186,6 @@ enum AIPromptBuilder {
         return clamp(lines.joined(separator: "\n"))
     }
 
-    static func buildOpenRouterStructuredPlanPrompt(
-        goal: String,
-        context: String,
-        weightUnit: String,
-        distanceUnit: String,
-        userStats: WorkoutPlanGenerator.UserStats
-    ) -> String {
-        var lines: [String] = []
-        lines.append(buildPlanPrompt(
-            goal: goal,
-            context: context,
-            weightUnit: weightUnit,
-            distanceUnit: distanceUnit,
-            userStats: userStats
-        ))
-        lines.append("")
-        lines.append("Return ONLY valid JSON with this exact structure:")
-        lines.append("""
-        {
-          "title": "string",
-          "overview": "string",
-          "unit": "\(weightUnit)",
-          "weeks": [
-            {
-              "title": "Week 1",
-              "days": [
-                {
-                  "title": "string",
-                  "type": "strengthUpper | strengthLower | fullBodyStrength | runEasy | runTempo | runIntervals | longRun | cyclingEndurance | rowing | swimming | activeRecovery | rest",
-                  "items": [
-                    {
-                      "name": "string",
-                      "sets": 3,
-                      "reps": 8,
-                      "suggestedWeight": "135 \(weightUnit)",
-                      "notes": "short technique cue",
-                      "distance": null,
-                      "distanceUnit": null,
-                      "pace": null,
-                      "durationMinutes": null,
-                      "effort": null
-                    }
-                  ]
-                }
-              ]
-            }
-          ],
-          "guidance": "string"
-        }
-        """)
-        lines.append("Rules:")
-        lines.append("- Include exactly 1 week and exactly 7 days.")
-        lines.append("- Rest and active recovery days should have an empty items array.")
-        lines.append("- Strength items should use sets/reps and suggestedWeight fields.")
-        lines.append("- Running items should use distance, distanceUnit, pace, durationMinutes, and effort when relevant.")
-        lines.append("- Non-running cardio should avoid running pace math and can use durationMinutes plus effort.")
-        lines.append("- Use null for fields that do not apply.")
-        lines.append("- Do not include Markdown fences or commentary.")
-        return clamp(lines.joined(separator: "\n"))
-    }
-    
     // MARK: - Helper Methods
     
     private static func formatUserStats(_ stats: WorkoutPlanGenerator.UserStats, compact: Bool) -> [String] {

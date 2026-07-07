@@ -565,6 +565,7 @@ struct RunLogView: View {
                     Button(action: { isEditing.toggle() }) {
                         Text(isEditing ? "Done" : "Edit")
                             .font(.headline)
+                            .foregroundStyle(AppTheme.toolbarButtonColor)
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -573,6 +574,7 @@ struct RunLogView: View {
                     } label: {
                         Image(systemName: "figure.run.circle")
                             .font(.system(size: 19, weight: .semibold))
+                            .foregroundStyle(AppTheme.toolbarButtonColor)
                             .accessibilityLabel("Running Assistant")
                     }
                 }
@@ -582,6 +584,7 @@ struct RunLogView: View {
                     } label: {
                         Image(systemName: "plus")
                             .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(AppTheme.toolbarButtonColor)
                             .accessibilityLabel("Track Activity")
                     }
                 }
@@ -1137,15 +1140,11 @@ struct RunLogView: View {
         distance: Double,
         unit: String
     ) -> UUID? {
-        let window: TimeInterval = 120
-        let distanceTolerance: Double = 0.07
-        let durationTolerance: TimeInterval = 180
-
         return runs.first {
-            abs($0.date.timeIntervalSince(endDate)) <= window &&
-            abs($0.duration - duration) <= durationTolerance &&
-            $0.distanceUnit == unit &&
-            abs($0.distance - distance) <= distanceTolerance
+            HealthKitManager.runsAreSimilar(
+                aDate: $0.date, aDuration: $0.duration, aDistance: $0.distance, aUnit: $0.distanceUnit,
+                bDate: endDate, bDuration: duration, bDistance: distance, bUnit: unit
+            )
         }?.id
     }
 

@@ -15,8 +15,18 @@ final class GameCenterService: NSObject {
         UserDefaults.standard.bool(forKey: Self.communityAccessKey)
     }
 
+    /// Clears the opt-in flag and deactivates the Game Center Access Point so no
+    /// further scores/achievements are uploaded and the on-screen dot is hidden.
+    func disableCommunityAccess() {
+        UserDefaults.standard.set(false, forKey: Self.communityAccessKey)
+        apObserver?.invalidate()
+        apObserver = nil
+        GKAccessPoint.shared.isActive = false
+    }
+
     // MARK: - Authentication
     func authenticate(presenting viewController: UIViewController? = nil, completion: ((Error?) -> Void)? = nil) {
+        guard isCommunityAccessEnabled else { completion?(nil); return }
         GKLocalPlayer.local.authenticateHandler = { [weak self] authVC, error in
             if let authVC {
                 if let presenter = viewController ?? GameCenterService.topViewController() {
@@ -45,6 +55,7 @@ final class GameCenterService: NSObject {
 
     // MARK: - UI Presentation (modern: Access Point trigger, no deprecated controllers)
     func presentLeaderboards(leaderboardID: String? = nil, from presenter: UIViewController? = nil) {
+        guard isCommunityAccessEnabled else { return }
         guard isAuthenticated || GKLocalPlayer.local.isAuthenticated else {
             authenticate(presenting: presenter) { [weak self] _ in
                 self?.presentLeaderboards(leaderboardID: leaderboardID, from: presenter)
@@ -56,6 +67,7 @@ final class GameCenterService: NSObject {
     }
 
     func presentAchievements(from presenter: UIViewController? = nil) {
+        guard isCommunityAccessEnabled else { return }
         guard isAuthenticated || GKLocalPlayer.local.isAuthenticated else {
             authenticate(presenting: presenter) { [weak self] _ in
                 self?.presentAchievements(from: presenter)

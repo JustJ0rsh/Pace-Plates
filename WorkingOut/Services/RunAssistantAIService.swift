@@ -69,9 +69,7 @@ final class RunAssistantAIService {
     }
 
     func prewarmIfPossible() {
-        let status = AIProviderManager.currentStatus()
-        guard status.effectiveProvider == .appleIntelligence,
-              status.appleIntelligenceStatus.canGenerateNow else {
+        guard AIProviderManager.currentStatus().canGenerateNow else {
             return
         }
 
@@ -486,45 +484,7 @@ Rules:
         providerStatus: AIProviderStatus,
         onStreamChunk: (@MainActor (String) -> Void)?
     ) async throws -> AIRunPlanPayload {
-        switch providerStatus.effectiveProvider {
-        case .appleIntelligence:
-            return try await generateGuidedPayload(prompt: prompt, onStreamChunk: onStreamChunk)
-        case .openRouter:
-            return try await generateOpenRouterPayload(prompt: prompt, onStreamChunk: onStreamChunk)
-        }
-    }
-
-    private func generateOpenRouterPayload(
-        prompt: String,
-        onStreamChunk: (@MainActor (String) -> Void)?
-    ) async throws -> AIRunPlanPayload {
-        guard let apiKey = AIProviderManager.loadOpenRouterKey() else {
-            throw AIError.unavailable("OpenRouter is selected, but no API key is saved in Settings.")
-        }
-
-        let completion = try await OpenRouterAIService.shared.completeStructuredJSON(
-            systemPrompt: openRouterRunPlanSystemPrompt,
-            userPrompt: openRouterRunPlanPrompt(prompt),
-            apiKey: apiKey,
-            temperature: 0.30,
-            maxTokens: AIUsageBudgetManager.openRouterRunPlanOutputTokenLimit
-        )
-        AIProviderManager.setCurrentOpenRouterModelID(completion.modelID)
-
-        guard let data = completion.text.data(using: .utf8) else {
-            throw AIError.invalidResponse
-        }
-
-        let payload = try JSONDecoder().decode(AIRunPlanPayload.self, from: data)
-
-        if let onStreamChunk {
-            let preview = runPlanPreview(from: payload)
-            for piece in AIStreamSmoothing.wordChunked(preview, maxChunkChars: 50) {
-                onStreamChunk(piece)
-            }
-        }
-
-        return payload
+        try await generateGuidedPayload(prompt: prompt, onStreamChunk: onStreamChunk)
     }
 
     private func generateGuidedPayload(
@@ -1056,51 +1016,6 @@ Rules:
         }
     }
 
-    private var openRouterRunPlanSystemPrompt: String {
-        """
-        You are a running coach returning only valid JSON for Pace & Plates.
-        Do not wrap the response in Markdown.
-        Follow the requested schema exactly.
-        Use concise, safe, non-medical coaching notes.
-        Include every weekday 1 through 7 for every week.
-        """
-    }
-
-    private func openRouterRunPlanPrompt(_ prompt: String) -> String {
-        """
-        \(prompt)
-
-        Return ONLY valid JSON with this exact structure:
-        {
-          "planName": "string",
-          "style": "speed | endurance | hybrid | endurance_beginner | endurance_intermediate | speed_beginner | speed_intermediate",
-          "targetDistanceMiles": 5,
-          "primaryGoal": "speed | endurance | hybrid",
-          "durationWeeks": 8,
-          "daysPerWeek": 4,
-          "sessions": [
-            {
-              "weekIndex": 0,
-              "weekday": 1,
-              "sessionType": "easy | interval | tempo | long | recovery | rest",
-              "targetDistanceMiles": 3.0,
-              "targetDurationMinutes": 32,
-              "targetPaceMinPerMile": 10.5,
-              "intensityLevel": "easy | moderate | hard",
-              "notes": "short coaching note"
-            }
-          ]
-        }
-
-        Rules:
-        - Include weeks 0...(durationWeeks-1).
-        - Include all 7 weekdays for every week.
-        - Non-rest sessions must include positive targetDistanceMiles and targetDurationMinutes values.
-        - Rest sessions can leave targetDistanceMiles, targetDurationMinutes, and targetPaceMinPerMile as null.
-        - Do not include Markdown fences or commentary.
-        """
-    }
-
     private func weekdayAbbreviation(_ weekday: Int) -> String {
         let symbols = Calendar.current.shortWeekdaySymbols
         let index = max(0, min(symbols.count - 1, weekday - 1))
@@ -1516,12 +1431,7 @@ Rules:
     }
 
     private func scheduledDate(startDate: Date, weekOffset: Int, weekday: Int) -> Date {
-        let calendar = Calendar.current
-        let weekStart = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: startDate)) ?? startDate
-        let offsetWeekStart = calendar.date(byAdding: .weekOfYear, value: weekOffset, to: weekStart) ?? weekStart
-        var comps = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: offsetWeekStart)
-        comps.weekday = weekday
-        return calendar.date(from: comps) ?? offsetWeekStart
+        RunAssistantWeekday.scheduledDate(startDate: startDate, weekOffset: weekOffset, weekday: weekday)
     }
 
     #if canImport(FoundationModels)

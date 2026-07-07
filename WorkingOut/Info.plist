@@ -4,11 +4,40 @@
 <dict>
 	<key>CFBundleDisplayName</key>
 	<string>Pace &amp; Plates</string>
-	<key>UIBackgroundModes</key>
+	<key>CFBundleDocumentTypes</key>
 	<array>
-		<string>location</string>
-		<string>fetch</string>
-		<string>remote-notification</string>
+		<dict>
+			<key>CFBundleTypeIconFiles</key>
+			<array>
+				<string>PPWorkoutIcon</string>
+			</array>
+			<key>CFBundleTypeName</key>
+			<string>Pace &amp; Plates Workout</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.justj0rsh.paceandplates.ppworkout</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeIconFiles</key>
+			<array>
+				<string>PaceplateDocIcon</string>
+			</array>
+			<key>CFBundleTypeName</key>
+			<string>Pace &amp; Plates Workout File</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.justj0rsh.paceandplates.paceplate</string>
+			</array>
+		</dict>
 	</array>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.healthcare-fitness</string>
@@ -41,6 +70,12 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UILaunchScreen</key>
@@ -48,8 +83,6 @@
 	</dict>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 		<string>UIInterfaceOrientationPortrait</string>
 	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
@@ -58,41 +91,6 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
-	</array>
-	<key>CFBundleDocumentTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeName</key>
-			<string>Pace &amp; Plates Workout</string>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>LSHandlerRank</key>
-			<string>Owner</string>
-			<key>LSItemContentTypes</key>
-			<array>
-				<string>com.justj0rsh.paceandplates.ppworkout</string>
-			</array>
-			<key>CFBundleTypeIconFiles</key>
-			<array>
-				<string>PPWorkoutIcon</string>
-			</array>
-		</dict>
-		<dict>
-			<key>CFBundleTypeName</key>
-			<string>Pace &amp; Plates Workout File</string>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>LSHandlerRank</key>
-			<string>Owner</string>
-			<key>LSItemContentTypes</key>
-			<array>
-				<string>com.justj0rsh.paceandplates.paceplate</string>
-			</array>
-			<key>CFBundleTypeIconFiles</key>
-			<array>
-				<string>PaceplateDocIcon</string>
-			</array>
-		</dict>
 	</array>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
@@ -120,7 +118,6 @@
 					<string>ppworkout</string>
 					<string>workout</string>
 				</array>
-				<!-- Removed MIME type to prevent system choosing JSON icon -->
 			</dict>
 		</dict>
 		<dict>

@@ -11,10 +11,6 @@ struct RunAssistantDashboardView: View {
     }
 
     @Environment(\.modelContext) private var modelContext
-    @AppStorage(AIProviderManager.providerPreferenceKey) private var aiProviderPreferenceRaw: String = AIProviderPreference.appleIntelligence.rawValue
-    @AppStorage(AIProviderManager.openRouterKeyConfiguredKey) private var openRouterKeyConfigured: Bool = false
-    @AppStorage(AIProviderManager.openRouterResolvedModelKey) private var openRouterResolvedModel: String = ""
-    @AppStorage(AIUsageBudgetManager.openRouterDailyLimitPreferenceKey) private var openRouterDailyLimit: Int = AIUsageBudgetManager.openRouterFreeUserDailyRequestLimit
 
     @Binding var profile: RunAssistantProfile
     let onStartRun: () -> Void
@@ -37,9 +33,6 @@ struct RunAssistantDashboardView: View {
     @State private var statusRefreshTick: Int = 0
 
     private var currentAIProviderStatus: AIProviderStatus {
-        _ = aiProviderPreferenceRaw
-        _ = openRouterKeyConfigured
-        _ = openRouterResolvedModel
         _ = statusRefreshTick
         return AIProviderManager.currentStatus()
     }
@@ -92,7 +85,6 @@ struct RunAssistantDashboardView: View {
             Text(successMessage ?? "")
         }
         .task {
-            AIProviderManager.bootstrapOpenRouterKeyIfAvailable()
             reconcileIfPossible()
             RunAssistantAIService.shared.prewarmIfPossible()
         }
@@ -163,9 +155,10 @@ struct RunAssistantDashboardView: View {
     @ViewBuilder
     private func todayCard(_ plan: RunningPlan) -> some View {
         let today = todaySession(for: plan)
+        let upcoming = today == nil ? upcomingSession(for: plan) : nil
 
         VStack(alignment: .leading, spacing: 8) {
-            Text("Today's Session")
+            Text(today != nil ? "Today's Session" : "Next Session")
                 .font(.headline)
 
             if let session = today {
@@ -223,8 +216,25 @@ struct RunAssistantDashboardView: View {
                         .buttonStyle(.bordered)
                     }
                 }
+            } else if let session = upcoming {
+                Text("Rest day — nothing scheduled today.")
+                    .foregroundStyle(AppTheme.secondaryTextColor)
+
+                if let date = session.scheduledDate {
+                    Text(upcomingLabel(for: date))
+                        .font(.subheadline.bold())
+                }
+                sessionSummary(session)
+
+                // Only "Start Run" is offered for a future session. We deliberately
+                // omit "Complete"/"Skip" here so a session on another day is never
+                // silently marked done from the today card.
+                Button("Start Run") {
+                    onStartRun()
+                }
+                .buttonStyle(.borderedProminent)
             } else {
-                Text("No scheduled session today.")
+                Text("No upcoming sessions scheduled.")
                     .foregroundStyle(AppTheme.secondaryTextColor)
             }
         }
@@ -232,6 +242,13 @@ struct RunAssistantDashboardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(AppTheme.secondaryBackgroundColor)
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func upcomingLabel(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return "Next Session · \(formatter.string(from: date))"
     }
 
     @ViewBuilder
@@ -442,24 +459,16 @@ struct RunAssistantDashboardView: View {
                 Text("More Plans")
                     .font(.headline)
                 Spacer()
-                Text(currentAIProviderStatus.effectiveProvider == .appleIntelligence ? "Apple Intelligence" : "OpenRouter Free")
+                Text("Apple Intelligence")
                     .font(.caption.weight(.semibold))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background(AppTheme.accentColor.opacity(0.16))
                     .clipShape(Capsule())
             }
-            Text(currentAIProviderStatus.effectiveProvider == .appleIntelligence
-                 ? "Generate personalized plans using your cardio and weight data."
-                 : "Generate personalized plans using OpenRouter's current free-tier model and your saved API key.")
+            Text("Generate personalized plans using your cardio and weight data.")
                 .font(.caption)
                 .foregroundStyle(AppTheme.secondaryTextColor)
-
-            if currentAIProviderStatus.effectiveProvider == .openRouter {
-                Text(openRouterBudgetSummary)
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.secondaryTextColor)
-            }
 
             VStack(spacing: 8) {
                 ForEach(aiPlanOptions) { option in
@@ -479,7 +488,7 @@ struct RunAssistantDashboardView: View {
                 Text("More Plans")
                     .font(.headline)
                 Spacer()
-                Text(currentAIProviderStatus.effectiveProvider == .appleIntelligence ? "Apple Required" : "OpenRouter Needed")
+                Text("Apple Required")
                     .font(.caption.weight(.semibold))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
@@ -495,11 +504,6 @@ struct RunAssistantDashboardView: View {
                 .font(.caption)
                 .foregroundStyle(AppTheme.secondaryTextColor)
 
-            NavigationLink(destination: SettingsView()) {
-                Label(currentAIProviderStatus.needsAppConfiguration ? "Configure OpenRouter" : "AI Provider Settings", systemImage: "slider.horizontal.3")
-            }
-            .buttonStyle(.bordered)
-
             if currentAIProviderStatus.needsSystemSettings {
                 Button {
                     openSettings()
@@ -513,12 +517,6 @@ struct RunAssistantDashboardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(AppTheme.secondaryBackgroundColor)
         .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-
-    private var openRouterBudgetSummary: String {
-        _ = openRouterDailyLimit
-        let budget = AIUsageBudgetManager.currentOpenRouterStatus()
-        return "\(budget.dailyRemaining)/\(budget.dailyLimit) free-model requests left today, \(budget.minuteRemaining)/\(budget.minuteLimit) left this minute."
     }
 
     private struct AIPlanOption: Identifiable {
@@ -656,6 +654,7 @@ struct RunAssistantDashboardView: View {
         return RunAssistantService.shared.clampedWeekIndex(base, plan: plan)
     }
 
+    /// A non-rest session actually scheduled for today, or nil on a rest/empty day.
     private func todaySession(for plan: RunningPlan) -> RunningPlanSession? {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
@@ -666,12 +665,23 @@ struct RunAssistantDashboardView: View {
             return calendar.isDate(scheduledDate, inSameDayAs: today)
         }
 
-        if let exact = todays.sorted(by: { $0.dayIndex < $1.dayIndex }).first {
-            return exact
+        return todays.sorted(by: { $0.dayIndex < $1.dayIndex }).first
+    }
+
+    /// The soonest pending non-rest session scheduled after today. Used only when
+    /// there is nothing scheduled today, so the card can offer a clearly-labeled
+    /// "next" session instead of passing off a future session as today's.
+    private func upcomingSession(for plan: RunningPlan) -> RunningPlanSession? {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let nonRest = (plan.sessions ?? []).filter { $0.sessionType != "rest" }
+
+        let future = nonRest.filter { session in
+            guard session.status == "pending", let scheduledDate = session.scheduledDate else { return false }
+            return scheduledDate >= today
         }
 
-        let pending = nonRest.filter { $0.status == "pending" }
-        return pending.sorted {
+        return future.sorted {
             ($0.scheduledDate ?? .distantFuture) < ($1.scheduledDate ?? .distantFuture)
         }.first
     }
@@ -696,7 +706,7 @@ struct RunAssistantDashboardView: View {
 
     private func weekdayNumber(_ session: RunningPlanSession) -> Int {
         guard let date = session.scheduledDate else { return 1 }
-        return Calendar.current.component(.weekday, from: date)
+        return RunAssistantWeekday.weekday(of: date)
     }
 
     @ViewBuilder

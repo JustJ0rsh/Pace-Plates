@@ -49,7 +49,38 @@ final class WorkoutPlanGenerator {
     static var lastConversationSummary: String? = nil
 
     // Last structured plan JSON emitted during generation (if any). Used for persistence/preview.
+    // Deprecated: kept as a mirror write for backward compatibility. Prefer the per-request token
+    // API (`generatePlanStream(request:token:)` + `takeStructuredPlanJSON(for:)`) which is race-free
+    // across overlapping generations. Do not rely on this for new callers.
     static var lastStructuredPlanJSON: String? = nil
+
+    // Per-request structured plan JSON results, keyed by a caller-supplied request token.
+    // This eliminates the cross-generation race where two overlapping generations clobber a single
+    // global slot: each consumer reads (and removes) only its own token's result.
+    private static let structuredPlanLock = NSLock()
+    private static var structuredPlanJSONByToken: [UUID: String] = [:]
+
+    private static func storeStructuredPlanJSON(_ json: String?, for token: UUID?) {
+        // Always mirror to the deprecated global for any legacy reader.
+        lastStructuredPlanJSON = json
+        guard let token else { return }
+        structuredPlanLock.lock()
+        defer { structuredPlanLock.unlock() }
+        if let json {
+            structuredPlanJSONByToken[token] = json
+        } else {
+            structuredPlanJSONByToken.removeValue(forKey: token)
+        }
+    }
+
+    /// Reads and removes the structured plan JSON produced for a given request token.
+    /// Call this once, after the request's stream has finished. Returns nil if the request
+    /// produced no structured plan.
+    static func takeStructuredPlanJSON(for token: UUID) -> String? {
+        structuredPlanLock.lock()
+        defer { structuredPlanLock.unlock() }
+        return structuredPlanJSONByToken.removeValue(forKey: token)
+    }
 
     #if canImport(FoundationModels)
     @available(iOS 26, *)
@@ -127,24 +158,13 @@ final class WorkoutPlanGenerator {
     }
 
     func persistenceModelIdentifier() -> String {
-        let status = AIProviderManager.currentStatus()
-        switch status.effectiveProvider {
-        case .appleIntelligence:
-            return AIResolvedProvider.appleIntelligence.rawValue
-        case .openRouter:
-            if let modelID = status.openRouterModelID, !modelID.isEmpty {
-                return "openrouter/\(modelID)"
-            }
-            return AIResolvedProvider.openRouter.rawValue
-        }
+        AIProviderManager.appleIntelligenceModelIdentifier
     }
 
     // Prewarm on AI tab open to reduce first-token latency
     @MainActor
     func prewarmIfPossible() async {
-        let status = AIProviderManager.currentStatus()
-        guard status.effectiveProvider == .appleIntelligence,
-              status.appleIntelligenceStatus.canGenerateNow else {
+        guard AIProviderManager.currentStatus().canGenerateNow else {
             return
         }
 
@@ -167,9 +187,6 @@ final class WorkoutPlanGenerator {
     /// Reset/offload the model sessions to clear context and free memory
     @MainActor
     func resetModelContext() {
-        let status = AIProviderManager.currentStatus()
-        guard status.effectiveProvider == .appleIntelligence else { return }
-
         #if AI_FOUNDATION_AVAILABLE
         if #available(iOS 26, *) {
             #if canImport(FoundationModels)
@@ -206,25 +223,21 @@ final class WorkoutPlanGenerator {
     }
 
     // Streams the generated plan. Uses on‑device model when available, else template fallback.
-    func generatePlanStream(request: WorkoutPlanRequest) -> AsyncThrowingStream<String, Error> {
+    // Pass a per-request `token` to retrieve this request's structured plan JSON race-free via
+    // `takeStructuredPlanJSON(for:)` once the stream finishes. Overlapping generations with distinct
+    // tokens never clobber each other's result.
+    func generatePlanStream(request: WorkoutPlanRequest,
+                            token: UUID? = nil) -> AsyncThrowingStream<String, Error> {
         if request.mode == .ask {
             return generateAskStream(request: request, history: [])
         }
-        Self.lastStructuredPlanJSON = nil
+        Self.storeStructuredPlanJSON(nil, for: token)
 
         let status = AIProviderManager.currentStatus()
-        switch status.effectiveProvider {
-        case .appleIntelligence:
-            guard status.appleIntelligenceStatus.canGenerateNow else {
-                return unavailableStream(message: status.unavailableDescription)
-            }
-            return generatePlanStreamOnDevice(request: request)
-        case .openRouter:
-            guard let apiKey = AIProviderManager.loadOpenRouterKey() else {
-                return unavailableStream(message: status.unavailableDescription)
-            }
-            return generatePlanStreamOpenRouter(request: request, apiKey: apiKey)
+        guard status.canGenerateNow else {
+            return unavailableStream(message: status.unavailableDescription)
         }
+        return generatePlanStreamOnDevice(request: request, token: token)
     }
 
     // Streaming for Ask mode with concise conversation context (no repetition)
@@ -236,21 +249,8 @@ final class WorkoutPlanGenerator {
             for: request.extraContext,
             history: history
         )
-        switch status.effectiveProvider {
-        case .appleIntelligence:
-            guard status.appleIntelligenceStatus.canGenerateNow else {
-                return unavailableStream(message: status.unavailableDescription)
-            }
-        case .openRouter:
-            guard let apiKey = AIProviderManager.loadOpenRouterKey() else {
-                return unavailableStream(message: status.unavailableDescription)
-            }
-            return generateAskStreamOpenRouter(
-                request: request,
-                apiKey: apiKey,
-                profile: profile,
-                conversationContext: conversationContext
-            )
+        guard status.canGenerateNow else {
+            return unavailableStream(message: status.unavailableDescription)
         }
 
         #if AI_FOUNDATION_AVAILABLE
@@ -259,6 +259,7 @@ final class WorkoutPlanGenerator {
             return AsyncThrowingStream { continuation in
                 Task {
                     do {
+                        try Task.checkCancellation()
                         let generationOptions = Self.generationOptionsForAsk(profile: profile)
                         // Use a fresh, ephemeral session to avoid context accumulation
                         let session: LanguageModelSession = await MainActor.run {
@@ -330,6 +331,12 @@ final class WorkoutPlanGenerator {
                                 continuation.finish(throwing: error)
                                 return
                             }
+                        } else {
+                            // Built with AI_FOUNDATION_AVAILABLE but running on an older OS at runtime:
+                            // the availability check fails, so guarantee the stream still finishes.
+                            continuation.yield("AI unavailable on this device or OS version.")
+                            continuation.finish()
+                            return
                         }
                         #else
                         // Fallback for older versions or when Foundation Models unavailable
@@ -337,6 +344,12 @@ final class WorkoutPlanGenerator {
                         continuation.finish()
                         return
                         #endif
+                    } catch {
+                        // Any failure during setup (session, stats, prompt building) must still finish
+                        // the stream so the consumer's `for try await` never hangs.
+                        print("❌ Conversation setup failed: \(error.localizedDescription)")
+                        continuation.finish(throwing: error)
+                        return
                     }
                 }
             }
@@ -420,7 +433,8 @@ final class WorkoutPlanGenerator {
     }
 
     // MARK: On‑device (Apple Intelligence)
-    private func generatePlanStreamOnDevice(request: WorkoutPlanRequest) -> AsyncThrowingStream<String, Error> {
+    private func generatePlanStreamOnDevice(request: WorkoutPlanRequest,
+                                            token: UUID? = nil) -> AsyncThrowingStream<String, Error> {
         #if AI_FOUNDATION_AVAILABLE
         if #available(iOS 26, *) {
             // Guided generation via FoundationModels; use a fresh session per request to avoid context carry-over
@@ -449,7 +463,8 @@ final class WorkoutPlanGenerator {
                                         session: session,
                                         request: request,
                                         userStats: userStats,
-                                        continuation: continuation
+                                        continuation: continuation,
+                                        token: token
                                     ) {
                                         continuation.finish()
                                         return
@@ -513,121 +528,6 @@ final class WorkoutPlanGenerator {
         return AsyncThrowingStream { continuation in
             continuation.yield(message)
             continuation.finish()
-        }
-    }
-
-    private func generatePlanStreamOpenRouter(
-        request: WorkoutPlanRequest,
-        apiKey: String
-    ) -> AsyncThrowingStream<String, Error> {
-        AsyncThrowingStream { continuation in
-            Task {
-                do {
-                    let userStats = await Self.collectRecentStats(
-                        context: request.modelContext,
-                        weightUnit: request.weightUnit,
-                        distanceUnit: request.distanceUnit
-                    )
-                    let prompt = AIPromptBuilder.buildOpenRouterStructuredPlanPrompt(
-                        goal: request.goal,
-                        context: request.extraContext,
-                        weightUnit: request.weightUnit,
-                        distanceUnit: request.distanceUnit,
-                        userStats: userStats
-                    )
-                    let completion = try await OpenRouterAIService.shared.completeStructuredJSON(
-                        systemPrompt: Self.openRouterPlanSystemPrompt,
-                        userPrompt: prompt,
-                        apiKey: apiKey,
-                        temperature: 0.35,
-                        maxTokens: AIUsageBudgetManager.openRouterWorkoutPlanOutputTokenLimit
-                    )
-                    AIProviderManager.setCurrentOpenRouterModelID(completion.modelID)
-
-                    let decodedPlan = try Self.decodeStructuredPlan(from: completion.text)
-                    let normalizedPlan = Self.normalizePlan(decodedPlan)
-                    Self.lastStructuredPlanJSON = Self.encodeStructuredPlanJSON(normalizedPlan)
-
-                    let finalMarkdown = Self.formatMarkdown(
-                        from: normalizedPlan,
-                        weightUnit: request.weightUnit,
-                        distanceUnit: request.distanceUnit
-                    )
-                    for piece in AIStreamSmoothing.wordChunked(finalMarkdown, maxChunkChars: 52) {
-                        if Task.isCancelled { break }
-                        continuation.yield(piece)
-                    }
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
-                }
-            }
-        }
-    }
-
-    private func generateAskStreamOpenRouter(
-        request: WorkoutPlanRequest,
-        apiKey: String,
-        profile: AskGenerationProfile,
-        conversationContext: String?
-    ) -> AsyncThrowingStream<String, Error> {
-        AsyncThrowingStream { continuation in
-            Task {
-                do {
-                    let userStats = await Self.collectRecentStats(
-                        context: request.modelContext,
-                        weightUnit: request.weightUnit,
-                        distanceUnit: request.distanceUnit
-                    )
-                    let equipment = UserDefaults.standard.string(forKey: "userEquipment")
-                    var prompt = AIPromptBuilder.buildConversationPrompt(
-                        goal: request.goal,
-                        question: request.extraContext,
-                        weightUnit: request.weightUnit,
-                        distanceUnit: request.distanceUnit,
-                        userStats: userStats,
-                        equipment: equipment,
-                        conversationContext: conversationContext
-                    )
-                    if prompt.count > 900 { prompt = String(prompt.prefix(900)) }
-
-                    let stream = OpenRouterAIService.shared.streamChat(
-                        systemPrompt: "You are a concise fitness and nutrition coach. Keep answers short, practical, and safe.",
-                        messages: [OpenRouterChatMessage(role: "user", content: Self.clampPrompt(prompt))],
-                        apiKey: apiKey,
-                        temperature: Self.profileTemperature(for: profile),
-                        maxTokens: AIUsageBudgetManager.openRouterChatOutputTokenLimit
-                    )
-
-                    for try await chunk in stream {
-                        if Task.isCancelled { break }
-                        continuation.yield(chunk)
-                    }
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
-                }
-            }
-        }
-    }
-
-    private static var openRouterPlanSystemPrompt: String {
-        """
-        You are a fitness and running coach returning only valid JSON for Pace & Plates.
-        Do not wrap the response in Markdown.
-        Follow the requested schema exactly.
-        Use exactly 1 week with exactly 7 days.
-        Every strength item should include sets, reps, and a suggestedWeight string when possible.
-        Keep guidance concise, practical, and non-medical.
-        """
-    }
-
-    private static func profileTemperature(for profile: AskGenerationProfile) -> Double {
-        switch profile {
-        case .conversational:
-            return 0.75
-        case .strictStructuredOutput:
-            return 0.35
         }
     }
 
@@ -902,7 +802,8 @@ final class WorkoutPlanGenerator {
         session: LanguageModelSession,
         request: WorkoutPlanRequest,
         userStats: UserStats,
-        continuation: AsyncThrowingStream<String, Error>.Continuation
+        continuation: AsyncThrowingStream<String, Error>.Continuation,
+        token: UUID? = nil
     ) async -> Bool {
         let instructions = AIPromptBuilder.buildPlanPrompt(
             goal: request.goal,
@@ -946,7 +847,7 @@ final class WorkoutPlanGenerator {
             guard let finalRawContent else { return false }
             let finalPlan = try WorkoutPlan(finalRawContent)
             let normalizedPlan = normalizePlan(finalPlan)
-            Self.lastStructuredPlanJSON = Self.encodeStructuredPlanJSON(normalizedPlan)
+            Self.storeStructuredPlanJSON(Self.encodeStructuredPlanJSON(normalizedPlan), for: token)
 
             let finalMarkdown = formatMarkdown(
                 from: normalizedPlan,
@@ -977,9 +878,13 @@ final class WorkoutPlanGenerator {
         )
     }
 
+    enum StructuredPlanError: Error {
+        case invalidJSON
+    }
+
     private static func decodeStructuredPlan(from json: String) throws -> WorkoutPlan {
         guard let data = json.data(using: .utf8) else {
-            throw OpenRouterError.invalidStructuredOutput
+            throw StructuredPlanError.invalidJSON
         }
         return try JSONDecoder().decode(WorkoutPlan.self, from: data)
     }

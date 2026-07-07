@@ -59,6 +59,12 @@ enum AppTheme {
         }
     }
 
+    // Navigation bar buttons stay white on dark toolbars; the Light theme uses
+    // the palette's dark text color instead so buttons don't vanish on a light bar.
+    static var toolbarButtonColor: Color {
+        toolbarColorScheme == .light ? palette.textColor : .white
+    }
+
     static var backgroundColor: Color { palette.backgroundColor }
     static var secondaryBackgroundColor: Color { palette.secondaryBackgroundColor }
     static var textColor: Color { palette.textColor }
@@ -508,7 +514,8 @@ enum AppTheme {
         navBar.scrollEdgeAppearance = navBarAppearance
         navBar.compactAppearance = navBarAppearance
         navBar.compactScrollEdgeAppearance = navBarAppearance
-        navBar.tintColor = UIColor(palette.accentColor)
+        // Match SwiftUI's toolbar button color so first render and revisits agree.
+        navBar.tintColor = UIColor(Self.toolbarButtonColor)
         navBar.isTranslucent = false
         navBar.prefersLargeTitles = true
 

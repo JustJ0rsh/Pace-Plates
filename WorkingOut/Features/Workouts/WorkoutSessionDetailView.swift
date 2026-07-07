@@ -63,6 +63,10 @@ struct WorkoutSessionDetailView: View {
                     onSelectAllTitle: selectAllText
                 )
 
+                if session.healthWorkoutUUID != nil {
+                    WearableMetricsTile(session: session)
+                }
+
                 // Exercises Tile
                 WorkoutExercisesTile(
                     session: session,

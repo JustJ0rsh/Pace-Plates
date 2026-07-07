@@ -66,7 +66,8 @@ class PersistenceController {
             WeightEntry.self,
             AIConversation.self,
             WorkoutTemplate.self,
-            TemplateExercise.self
+            TemplateExercise.self,
+            HealthWorkoutInboxItem.self
         ])
 
         // Build a configuration; enable CloudKit (will fall back to local if not available)
