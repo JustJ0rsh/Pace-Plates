@@ -1,0 +1,1008 @@
+{
+  "source": "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Settings/SettingsView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Settings",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 68
+        }
+      },
+      {
+        "comment": "",
+        "key": "Health Sync",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 90
+        }
+      },
+      {
+        "comment": "",
+        "key": "Export Data?",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 95
+        }
+      },
+      {
+        "comment": "",
+        "key": "Import Data?",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 101
+        }
+      },
+      {
+        "comment": "",
+        "key": "Remove Duplicates?",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 107
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete All Data?",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 113
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add Sample Data?",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 121
+        }
+      },
+      {
+        "comment": "",
+        "key": "Remove Sample Data?",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 129
+        }
+      },
+      {
+        "comment": "",
+        "key": "OK",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 86
+        }
+      },
+      {
+        "comment": "",
+        "key": "OK",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 91
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 96
+        }
+      },
+      {
+        "comment": "",
+        "key": "Export",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 97
+        }
+      },
+      {
+        "comment": "",
+        "key": "Create a backup file to share or save?",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 99
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 102
+        }
+      },
+      {
+        "comment": "",
+        "key": "Import",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 103
+        }
+      },
+      {
+        "comment": "",
+        "key": "Importing will replace existing items when conflicts occur.",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 105
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 108
+        }
+      },
+      {
+        "comment": "",
+        "key": "Remove",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 109
+        }
+      },
+      {
+        "comment": "",
+        "key": "We will scan workouts, runs, and templates to drop duplicates.",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 111
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 114
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 115
+        }
+      },
+      {
+        "comment": "",
+        "key": "This will remove all data from this device and iCloud for your account. This action cannot be undone.",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 118
+        }
+      },
+      {
+        "comment": "",
+        "key": "This will remove all data on this device. This action cannot be undone.",
+        "location": {
+          "startingColumn": 132,
+          "startingLine": 118
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 122
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add Data",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 123
+        }
+      },
+      {
+        "comment": "",
+        "key": "This will add 1 month of realistic sample data including workouts and cardio sessions (no weight entries).",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 127
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 130
+        }
+      },
+      {
+        "comment": "",
+        "key": "Remove",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 131
+        }
+      },
+      {
+        "comment": "",
+        "key": "This will remove only the sample data that was added via 'Add Sample Data'. Your real data will not be affected.",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 135
+        }
+      },
+      {
+        "comment": "",
+        "key": "Done",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 166
+        }
+      },
+      {
+        "comment": "",
+        "key": "Units",
+        "location": {
+          "startingColumn": 17,
+          "startingLine": 201
+        }
+      },
+      {
+        "comment": "",
+        "key": "Appearance",
+        "location": {
+          "startingColumn": 17,
+          "startingLine": 214
+        }
+      },
+      {
+        "comment": "",
+        "key": "Profile",
+        "location": {
+          "startingColumn": 17,
+          "startingLine": 229
+        }
+      },
+      {
+        "comment": "",
+        "key": "Goals",
+        "location": {
+          "startingColumn": 17,
+          "startingLine": 294
+        }
+      },
+      {
+        "comment": "",
+        "key": "Home Screen",
+        "location": {
+          "startingColumn": 17,
+          "startingLine": 305
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reminders",
+        "location": {
+          "startingColumn": 17,
+          "startingLine": 318
+        }
+      },
+      {
+        "comment": "",
+        "key": "Advanced",
+        "location": {
+          "startingColumn": 17,
+          "startingLine": 361
+        }
+      },
+      {
+        "comment": "",
+        "key": "About",
+        "location": {
+          "startingColumn": 17,
+          "startingLine": 391
+        }
+      },
+      {
+        "comment": "",
+        "key": "Measurement System",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 202
+        }
+      },
+      {
+        "comment": "",
+        "key": "Metric",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 203
+        }
+      },
+      {
+        "comment": "",
+        "key": "Imperial",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 204
+        }
+      },
+      {
+        "comment": "",
+        "key": "Theme",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 219
+        }
+      },
+      {
+        "comment": "",
+        "key": "Sex",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 230
+        }
+      },
+      {
+        "comment": "",
+        "key": "Experience Level",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 236
+        }
+      },
+      {
+        "comment": "",
+        "key": "Male",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 231
+        }
+      },
+      {
+        "comment": "",
+        "key": "Female",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 232
+        }
+      },
+      {
+        "comment": "",
+        "key": "New to Working Out",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 237
+        }
+      },
+      {
+        "comment": "",
+        "key": "Experienced",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 238
+        }
+      },
+      {
+        "comment": "",
+        "key": "Age",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 250
+        }
+      },
+      {
+        "comment": "",
+        "key": "0",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 252
+        }
+      },
+      {
+        "comment": "",
+        "key": "Height",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 265
+        }
+      },
+      {
+        "comment": "",
+        "key": "Goal Weight",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 281
+        }
+      },
+      {
+        "comment": "",
+        "key": "0",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 283
+        }
+      },
+      {
+        "comment": "",
+        "key": "Weight Goal",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 295
+        }
+      },
+      {
+        "comment": "",
+        "key": "Lose",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 296
+        }
+      },
+      {
+        "comment": "",
+        "key": "Maintain",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 297
+        }
+      },
+      {
+        "comment": "",
+        "key": "Gain",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 298
+        }
+      },
+      {
+        "comment": "",
+        "key": "Show Vitals Section",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 308
+        }
+      },
+      {
+        "comment": "",
+        "key": "Display health vitals like heart rate, steps, and sleep on the home screen.",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 309
+        }
+      },
+      {
+        "comment": "",
+        "key": "Weekly Weight Reminder",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 321
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reminds you to log your weight weekly.",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 322
+        }
+      },
+      {
+        "comment": "",
+        "key": "Day",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 339
+        }
+      },
+      {
+        "comment": "",
+        "key": "Time",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 352
+        }
+      },
+      {
+        "comment": "",
+        "key": "Sun",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 340
+        }
+      },
+      {
+        "comment": "",
+        "key": "Mon",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 341
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tue",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 342
+        }
+      },
+      {
+        "comment": "",
+        "key": "Wed",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 343
+        }
+      },
+      {
+        "comment": "",
+        "key": "Thu",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 344
+        }
+      },
+      {
+        "comment": "",
+        "key": "Fri",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 345
+        }
+      },
+      {
+        "comment": "",
+        "key": "Sat",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 346
+        }
+      },
+      {
+        "comment": "",
+        "key": "Health & Sync",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 365
+        }
+      },
+      {
+        "comment": "",
+        "key": "AI Provider",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 371
+        }
+      },
+      {
+        "comment": "",
+        "key": "Backup & Data",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 377
+        }
+      },
+      {
+        "comment": "",
+        "key": "Developer",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 384
+        }
+      },
+      {
+        "comment": "",
+        "key": "Version",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 393
+        }
+      },
+      {
+        "comment": "",
+        "key": "2.4",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 396
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tracking",
+        "location": {
+          "startingColumn": 21,
+          "startingLine": 481
+        }
+      },
+      {
+        "comment": "",
+        "key": "Apple Health",
+        "location": {
+          "startingColumn": 21,
+          "startingLine": 510
+        }
+      },
+      {
+        "comment": "",
+        "key": "Enable \"Always\" Location Access",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 497
+        }
+      },
+      {
+        "comment": "",
+        "key": "Background Run Tracking",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 484
+        }
+      },
+      {
+        "comment": "",
+        "key": "Keep tracking active when Pace & Plates is in the background for better locked-screen cardio accuracy. Requires \"Always\" location access.",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 485
+        }
+      },
+      {
+        "comment": "",
+        "key": "Imports recent runs and weight entries from Apple Health.",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 525
+        }
+      },
+      {
+        "comment": "",
+        "key": "Refreshing Health Data...",
+        "location": {
+          "startingColumn": 55,
+          "startingLine": 520
+        }
+      },
+      {
+        "comment": "",
+        "key": "Refresh Health Data Now",
+        "location": {
+          "startingColumn": 85,
+          "startingLine": 520
+        }
+      },
+      {
+        "comment": "",
+        "key": "Plans",
+        "location": {
+          "startingColumn": 21,
+          "startingLine": 534
+        }
+      },
+      {
+        "comment": "",
+        "key": "Provider",
+        "location": {
+          "startingColumn": 21,
+          "startingLine": 545
+        }
+      },
+      {
+        "comment": "",
+        "key": "OpenRouter",
+        "location": {
+          "startingColumn": 21,
+          "startingLine": 571
+        }
+      },
+      {
+        "comment": "",
+        "key": "OpenRouter Limits",
+        "location": {
+          "startingColumn": 21,
+          "startingLine": 601
+        }
+      },
+      {
+        "comment": "",
+        "key": "Structured Plan View",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 537
+        }
+      },
+      {
+        "comment": "",
+        "key": "Display saved plans as interactive cards when structured data is available. Note: New plan generation uses proven Markdown format for reliability.",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 538
+        }
+      },
+      {
+        "comment": "",
+        "key": "This device does not support Apple Intelligence, so Pace & Plates uses OpenRouter here.",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 565
+        }
+      },
+      {
+        "comment": "",
+        "key": "AI Provider",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 554
+        }
+      },
+      {
+        "comment": "",
+        "key": "Current AI Provider",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 547
+        }
+      },
+      {
+        "comment": "",
+        "key": "Enter a new key to replace saved key",
+        "location": {
+          "startingColumn": 55,
+          "startingLine": 572
+        }
+      },
+      {
+        "comment": "",
+        "key": "OpenRouter API Key",
+        "location": {
+          "startingColumn": 96,
+          "startingLine": 572
+        }
+      },
+      {
+        "comment": "",
+        "key": "API key saved in this device's Keychain.",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 578
+        }
+      },
+      {
+        "comment": "",
+        "key": "Update Key",
+        "location": {
+          "startingColumn": 54,
+          "startingLine": 584
+        }
+      },
+      {
+        "comment": "",
+        "key": "Save Key",
+        "location": {
+          "startingColumn": 69,
+          "startingLine": 584
+        }
+      },
+      {
+        "comment": "",
+        "key": "Remove Key",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 589
+        }
+      },
+      {
+        "comment": "",
+        "key": "OpenRouter currently limits free-model usage to 20 requests per minute. Accounts with less than 10 credits purchased are limited to 50 free-model requests per UTC day; accounts with at least 10 credits purchased may use 1000 per UTC day. The app enforces the selected cap locally before sending requests.",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 619
+        }
+      },
+      {
+        "comment": "",
+        "key": "Free Model Daily Cap",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 602
+        }
+      },
+      {
+        "comment": "",
+        "key": "50/day",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 603
+        }
+      },
+      {
+        "comment": "",
+        "key": "1000/day",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 604
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reset Local Usage Counter",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 616
+        }
+      },
+      {
+        "comment": "",
+        "key": "Backup",
+        "location": {
+          "startingColumn": 21,
+          "startingLine": 628
+        }
+      },
+      {
+        "comment": "",
+        "key": "Data",
+        "location": {
+          "startingColumn": 21,
+          "startingLine": 651
+        }
+      },
+      {
+        "comment": "",
+        "key": "Privacy",
+        "location": {
+          "startingColumn": 21,
+          "startingLine": 666
+        }
+      },
+      {
+        "comment": "",
+        "key": "Export Data",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 632
+        }
+      },
+      {
+        "comment": "",
+        "key": "Import Data",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 638
+        }
+      },
+      {
+        "comment": "",
+        "key": "Remove All Duplicates",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 655
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete All Data",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 662
+        }
+      },
+      {
+        "comment": "",
+        "key": "Privacy Policy",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 668
+        }
+      },
+      {
+        "comment": "",
+        "key": "Debug",
+        "location": {
+          "startingColumn": 21,
+          "startingLine": 677
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add Sample Data (1 Month)",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 681
+        }
+      },
+      {
+        "comment": "",
+        "key": "Remove Sample Data",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 687
+        }
+      },
+      {
+        "comment": "",
+        "key": "Height",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 1329
+        }
+      },
+      {
+        "comment": "",
+        "key": "Feet",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 1306
+        }
+      },
+      {
+        "comment": "",
+        "key": "Inches",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 1308
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld ft",
+        "location": {
+          "startingColumn": 98,
+          "startingLine": 1306
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld in",
+        "location": {
+          "startingColumn": 103,
+          "startingLine": 1308
+        }
+      },
+      {
+        "comment": "",
+        "key": "Centimeters",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 1317
+        }
+      },
+      {
+        "comment": "",
+        "key": "Decimal",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 1319
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 110,
+          "startingLine": 1317
+        }
+      },
+      {
+        "comment": "",
+        "key": ".%lld",
+        "location": {
+          "startingColumn": 102,
+          "startingLine": 1319
+        }
+      },
+      {
+        "comment": "",
+        "key": "Done",
+        "location": {
+          "startingColumn": 81,
+          "startingLine": 1331
+        }
+      }
+    ]
+  },
+  "version": 1
+}

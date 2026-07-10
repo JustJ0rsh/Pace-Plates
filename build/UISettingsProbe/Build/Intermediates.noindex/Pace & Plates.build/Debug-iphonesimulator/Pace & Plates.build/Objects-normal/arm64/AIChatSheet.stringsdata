@@ -1,0 +1,160 @@
+{
+  "source": "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/AI/AIChatSheet.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "AI Assistant",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 288
+        }
+      },
+      {
+        "comment": "",
+        "key": "Error",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 333
+        }
+      },
+      {
+        "comment": "",
+        "key": "Saved",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 334
+        }
+      },
+      {
+        "comment": "",
+        "key": "Clear Chat History?",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 339
+        }
+      },
+      {
+        "comment": "",
+        "key": "Pick a guided prompt to generate focused coaching for strength, endurance, and overall fitness.",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 148
+        }
+      },
+      {
+        "comment": "",
+        "key": "Training Prompt Packs",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 251
+        }
+      },
+      {
+        "comment": "",
+        "key": "Generating…",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 260
+        }
+      },
+      {
+        "comment": "",
+        "key": "Close",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 297
+        }
+      },
+      {
+        "comment": "",
+        "key": "Clear",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 300
+        }
+      },
+      {
+        "comment": "",
+        "key": "Save",
+        "location": {
+          "startingColumn": 41,
+          "startingLine": 310
+        }
+      },
+      {
+        "comment": "",
+        "key": "OK",
+        "location": {
+          "startingColumn": 76,
+          "startingLine": 333
+        }
+      },
+      {
+        "comment": "",
+        "key": "OK",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 335
+        }
+      },
+      {
+        "comment": "",
+        "key": "Conversation saved",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 337
+        }
+      },
+      {
+        "comment": "",
+        "key": "Clear All Messages",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 340
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 343
+        }
+      },
+      {
+        "comment": "",
+        "key": "This will clear the current conversation and start fresh. The AI will lose all context from this session.",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 345
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tap to ask",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 674
+        }
+      },
+      {
+        "comment": "",
+        "key": "Verified",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 724
+        }
+      },
+      {
+        "comment": "",
+        "key": "Generating…",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 741
+        }
+      }
+    ]
+  },
+  "version": 1
+}

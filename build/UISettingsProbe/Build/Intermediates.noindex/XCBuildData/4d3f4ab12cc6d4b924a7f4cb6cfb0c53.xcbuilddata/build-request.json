@@ -1,0 +1,78 @@
+{
+  "buildCommand" : {
+    "command" : "build",
+    "skipDependencies" : false,
+    "style" : "buildAndRun"
+  },
+  "configuredTargets" : [
+    {
+      "guid" : "0ad3c2820613b2603d999f937b0771de6aa194b042e133b0547dca4ed6033695"
+    },
+    {
+      "guid" : "0ad3c2820613b2603d999f937b0771deddd89822722a3e87e052047ab25f2bbc"
+    },
+    {
+      "guid" : "0ad3c2820613b2603d999f937b0771de25a93fc448ea884a742a353fbef92175"
+    }
+  ],
+  "containerPath" : "/Users/joshua/Developer/Pace & Plates/Pace & Plates.xcodeproj",
+  "continueBuildingAfterErrors" : false,
+  "dependencyScope" : "workspace",
+  "enableIndexBuildArena" : false,
+  "hideShellScriptEnvironment" : false,
+  "parameters" : {
+    "action" : "build",
+    "activeArchitecture" : "arm64",
+    "activeRunDestination" : {
+      "disableOnlyActiveArch" : false,
+      "hostTargetedPlatform" : null,
+      "platform" : "iphonesimulator",
+      "sdk" : "iphonesimulator26.5",
+      "sdkVariant" : "iphonesimulator",
+      "supportedArchitectures" : [
+        "arm64"
+      ],
+      "targetArchitecture" : "arm64"
+    },
+    "arenaInfo" : {
+      "buildIntermediatesPath" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex",
+      "buildProductsPath" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Products",
+      "derivedDataPath" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe",
+      "indexDataStoreFolderPath" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Index.noindex/DataStore",
+      "indexEnableDataStore" : true,
+      "indexPCHPath" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Index.noindex/PrecompiledHeaders",
+      "pchPath" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/PrecompiledHeaders"
+    },
+    "configurationName" : "Debug",
+    "overrides" : {
+      "commandLine" : {
+        "table" : {
+
+        }
+      },
+      "synthesized" : {
+        "table" : {
+          "ASSETCATALOG_FILTER_FOR_DEVICE_MODEL" : "iPhone18,1",
+          "ASSETCATALOG_FILTER_FOR_DEVICE_OS_VERSION" : "26.5",
+          "ASSETCATALOG_FILTER_FOR_THINNING_DEVICE_CONFIGURATION" : "iPhone18,1",
+          "BUILD_ACTIVE_RESOURCES_ONLY" : "YES",
+          "CLANG_COVERAGE_MAPPING" : "YES",
+          "CLANG_PROFILE_DATA_DIRECTORY" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/ProfileData",
+          "ENABLE_PREVIEWS" : "NO",
+          "ENABLE_XOJIT_PREVIEWS" : "YES",
+          "ONLY_ACTIVE_ARCH" : "YES",
+          "TARGET_DEVICE_IDENTIFIER" : "9A8194CE-C14D-4965-AACC-51CD7C6E8FBF",
+          "TARGET_DEVICE_MODEL" : "iPhone18,1",
+          "TARGET_DEVICE_OS_VERSION" : "26.5",
+          "TARGET_DEVICE_PLATFORM_NAME" : "iphonesimulator"
+        }
+      }
+    }
+  },
+  "schemeCommand" : "test",
+  "showNonLoggedProgress" : true,
+  "useDryRun" : false,
+  "useImplicitDependencies" : true,
+  "useLegacyBuildLocations" : false,
+  "useParallelTargets" : true
+}

@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>colors</key>
+	<array>
+		<dict>
+			<key>catalogPath</key>
+			<string>/Users/joshua/Developer/Pace &amp; Plates/WorkingOut/Assets.xcassets</string>
+			<key>objcSymbol</key>
+			<string>ACColorNameAccentColor</string>
+			<key>relativePath</key>
+			<string>./AccentColor.colorset</string>
+			<key>swiftSymbol</key>
+			<string>accent</string>
+		</dict>
+		<dict>
+			<key>catalogPath</key>
+			<string>/Users/joshua/Developer/Pace &amp; Plates/WorkingOut/Assets.xcassets</string>
+			<key>objcSymbol</key>
+			<string>ACColorNameBackgroundColor</string>
+			<key>relativePath</key>
+			<string>./BackgroundColor.colorset</string>
+			<key>swiftSymbol</key>
+			<string>background</string>
+		</dict>
+		<dict>
+			<key>catalogPath</key>
+			<string>/Users/joshua/Developer/Pace &amp; Plates/WorkingOut/Assets.xcassets</string>
+			<key>objcSymbol</key>
+			<string>ACColorNameSecondaryBackgroundColor</string>
+			<key>relativePath</key>
+			<string>./SecondaryBackgroundColor.colorset</string>
+			<key>swiftSymbol</key>
+			<string>secondaryBackground</string>
+		</dict>
+		<dict>
+			<key>catalogPath</key>
+			<string>/Users/joshua/Developer/Pace &amp; Plates/WorkingOut/Assets.xcassets</string>
+			<key>objcSymbol</key>
+			<string>ACColorNameTextColor</string>
+			<key>relativePath</key>
+			<string>./TextColor.colorset</string>
+			<key>swiftSymbol</key>
+			<string>text</string>
+		</dict>
+	</array>
+	<key>images</key>
+	<array>
+		<dict>
+			<key>catalogPath</key>
+			<string>/Users/joshua/Developer/Pace &amp; Plates/WorkingOut/Assets.xcassets</string>
+			<key>objcSymbol</key>
+			<string>ACImageNameLaunchImage</string>
+			<key>relativePath</key>
+			<string>./LaunchImage.imageset</string>
+			<key>swiftSymbol</key>
+			<string>launch</string>
+		</dict>
+		<dict>
+			<key>catalogPath</key>
+			<string>/Users/joshua/Developer/Pace &amp; Plates/WorkingOut/Assets.xcassets</string>
+			<key>objcSymbol</key>
+			<string>ACImageNamePPWorkoutIcon</string>
+			<key>relativePath</key>
+			<string>./PPWorkoutIcon.imageset</string>
+			<key>swiftSymbol</key>
+			<string>ppWorkoutIcon</string>
+		</dict>
+	</array>
+	<key>symbols</key>
+	<array/>
+</dict>
+</plist>

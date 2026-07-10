@@ -1,0 +1,16 @@
+{
+  "source": "/Users/joshua/Developer/Pace & Plates/WorkingOut/Components/QuickActionSheet.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 74
+        }
+      }
+    ]
+  },
+  "version": 1
+}

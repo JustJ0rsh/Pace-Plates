@@ -1,0 +1,64 @@
+{
+  "source": "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Community/CommunityView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Community",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 30
+        }
+      },
+      {
+        "comment": "",
+        "key": "Notice",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 35
+        }
+      },
+      {
+        "comment": "",
+        "key": "Game Center",
+        "location": {
+          "startingColumn": 21,
+          "startingLine": 11
+        }
+      },
+      {
+        "comment": "",
+        "key": "Leaderboards",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 14
+        }
+      },
+      {
+        "comment": "",
+        "key": "Achievements",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 18
+        }
+      },
+      {
+        "comment": "",
+        "key": "Connecting to Game Center...",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 24
+        }
+      },
+      {
+        "comment": "",
+        "key": "OK",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 36
+        }
+      }
+    ]
+  },
+  "version": 1
+}

@@ -1,0 +1,51 @@
+{
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/DebugDataGenerator.swift" : {
+    "const-values" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/DebugDataGenerator.swiftconstvalues",
+    "dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/DebugDataGenerator.d",
+    "diagnostics" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/DebugDataGenerator.dia",
+    "object" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/DebugDataGenerator.o",
+    "swift-dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/DebugDataGenerator.swiftdeps"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/ExerciseRecommendationService.swift" : {
+    "const-values" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ExerciseRecommendationService.swiftconstvalues",
+    "dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ExerciseRecommendationService.d",
+    "diagnostics" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ExerciseRecommendationService.dia",
+    "object" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ExerciseRecommendationService.o",
+    "swift-dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ExerciseRecommendationService.swiftdeps"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/GameCenterService.swift" : {
+    "const-values" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/GameCenterService.swiftconstvalues",
+    "dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/GameCenterService.d",
+    "diagnostics" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/GameCenterService.dia",
+    "object" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/GameCenterService.o",
+    "swift-dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/GameCenterService.swiftdeps"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/HealthKitManager.swift" : {
+    "const-values" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/HealthKitManager.swiftconstvalues",
+    "dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/HealthKitManager.d",
+    "diagnostics" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/HealthKitManager.dia",
+    "object" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/HealthKitManager.o",
+    "swift-dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/HealthKitManager.swiftdeps"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/LiveActivityManager.swift" : {
+    "const-values" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/LiveActivityManager.swiftconstvalues",
+    "dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/LiveActivityManager.d",
+    "diagnostics" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/LiveActivityManager.dia",
+    "object" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/LiveActivityManager.o",
+    "swift-dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/LiveActivityManager.swiftdeps"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/MapSearchService.swift" : {
+    "const-values" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/MapSearchService.swiftconstvalues",
+    "dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/MapSearchService.d",
+    "diagnostics" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/MapSearchService.dia",
+    "object" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/MapSearchService.o",
+    "swift-dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/MapSearchService.swiftdeps"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Services/OpenRouterAIService.swift" : {
+    "const-values" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/OpenRouterAIService.swiftconstvalues",
+    "dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/OpenRouterAIService.d",
+    "diagnostics" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/OpenRouterAIService.dia",
+    "object" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/OpenRouterAIService.o",
+    "swift-dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/OpenRouterAIService.swiftdeps"
+  }
+}

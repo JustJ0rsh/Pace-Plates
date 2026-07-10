@@ -1,0 +1,58 @@
+{
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Workouts/EditExerciseLogView.swift" : {
+    "const-values" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/EditExerciseLogView.swiftconstvalues",
+    "dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/EditExerciseLogView.d",
+    "diagnostics" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/EditExerciseLogView.dia",
+    "object" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/EditExerciseLogView.o",
+    "swift-dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/EditExerciseLogView.swiftdeps"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Workouts/WorkoutImportView.swift" : {
+    "const-values" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutImportView.swiftconstvalues",
+    "dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutImportView.d",
+    "diagnostics" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutImportView.dia",
+    "object" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutImportView.o",
+    "swift-dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutImportView.swiftdeps"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Workouts/WorkoutLogView.swift" : {
+    "const-values" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutLogView.swiftconstvalues",
+    "dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutLogView.d",
+    "diagnostics" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutLogView.dia",
+    "object" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutLogView.o",
+    "swift-dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutLogView.swiftdeps"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Workouts/WorkoutSessionDetailView.swift" : {
+    "const-values" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutSessionDetailView.swiftconstvalues",
+    "dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutSessionDetailView.d",
+    "diagnostics" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutSessionDetailView.dia",
+    "object" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutSessionDetailView.o",
+    "swift-dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutSessionDetailView.swiftdeps"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Workouts/WorkoutSessionSubviews.swift" : {
+    "const-values" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutSessionSubviews.swiftconstvalues",
+    "dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutSessionSubviews.d",
+    "diagnostics" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutSessionSubviews.dia",
+    "object" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutSessionSubviews.o",
+    "swift-dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutSessionSubviews.swiftdeps"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Workouts/WorkoutTemplateListView.swift" : {
+    "const-values" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutTemplateListView.swiftconstvalues",
+    "dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutTemplateListView.d",
+    "diagnostics" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutTemplateListView.dia",
+    "object" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutTemplateListView.o",
+    "swift-dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/WorkoutTemplateListView.swiftdeps"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Models/AIConversation.swift" : {
+    "const-values" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIConversation.swiftconstvalues",
+    "dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIConversation.d",
+    "diagnostics" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIConversation.dia",
+    "object" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIConversation.o",
+    "swift-dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/AIConversation.swiftdeps"
+  },
+  "/Users/joshua/Developer/Pace & Plates/WorkingOut/Models/ExerciseDefinition.swift" : {
+    "const-values" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ExerciseDefinition.swiftconstvalues",
+    "dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ExerciseDefinition.d",
+    "diagnostics" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ExerciseDefinition.dia",
+    "object" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ExerciseDefinition.o",
+    "swift-dependencies" : "/Users/joshua/Developer/Pace & Plates/build/UISettingsProbe/Build/Intermediates.noindex/Pace & Plates.build/Debug-iphonesimulator/Pace & Plates.build/Objects-normal/arm64/ExerciseDefinition.swiftdeps"
+  }
+}

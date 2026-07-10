@@ -1,0 +1,24 @@
+{
+  "source": "/Users/joshua/Developer/Pace & Plates/WorkingOut/App/WorkingOutApp.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Import Failed",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 50
+        }
+      },
+      {
+        "comment": "",
+        "key": "OK",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 51
+        }
+      }
+    ]
+  },
+  "version": 1
+}

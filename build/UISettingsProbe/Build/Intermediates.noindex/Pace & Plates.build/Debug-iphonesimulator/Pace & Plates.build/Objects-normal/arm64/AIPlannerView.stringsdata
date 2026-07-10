@@ -1,0 +1,224 @@
+{
+  "source": "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/AI/AIPlannerView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "AI",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 57
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reset Model Context?",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 92
+        }
+      },
+      {
+        "comment": "",
+        "key": "Context Reset",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 104
+        }
+      },
+      {
+        "comment": "",
+        "key": "AI History",
+        "location": {
+          "startingColumn": 37,
+          "startingLine": 64
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 93
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reset",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 94
+        }
+      },
+      {
+        "comment": "",
+        "key": "This will clear the AI model's memory and free up resources. Your conversation history will be preserved but the model will start fresh.",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 102
+        }
+      },
+      {
+        "comment": "",
+        "key": "OK",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 105
+        }
+      },
+      {
+        "comment": "",
+        "key": "Model context has been successfully reset and offloaded.",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 107
+        }
+      },
+      {
+        "comment": "",
+        "key": "Training Details",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 155
+        }
+      },
+      {
+        "comment": "",
+        "key": "Equipment",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 170
+        }
+      },
+      {
+        "comment": "",
+        "key": "Output will open in a new window and stream live.",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 220
+        }
+      },
+      {
+        "comment": "",
+        "key": "Open structured Ask mode, then choose a health, strength, or endurance prompt.",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 221
+        }
+      },
+      {
+        "comment": "",
+        "key": "Using goal: **%@** (change in Settings)",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 163
+        }
+      },
+      {
+        "comment": "",
+        "key": "Mode",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 157
+        }
+      },
+      {
+        "comment": "",
+        "key": "Plan",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 158
+        }
+      },
+      {
+        "comment": "",
+        "key": "Ask",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 159
+        }
+      },
+      {
+        "comment": "",
+        "key": "Available equipment (optional)",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 172
+        }
+      },
+      {
+        "comment": "",
+        "key": "e.g., dumbbells, barbell, bench, bike",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 175
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cloud requests are sent through OpenRouter only while this provider is selected.",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 206
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reset Model Context",
+        "location": {
+          "startingColumn": 39,
+          "startingLine": 199
+        }
+      },
+      {
+        "comment": "",
+        "key": "Generating…",
+        "location": {
+          "startingColumn": 41,
+          "startingLine": 232
+        }
+      },
+      {
+        "comment": "",
+        "key": "Generate Weekly Plan",
+        "location": {
+          "startingColumn": 76,
+          "startingLine": 232
+        }
+      },
+      {
+        "comment": "",
+        "key": "Open Structured Ask",
+        "location": {
+          "startingColumn": 101,
+          "startingLine": 232
+        }
+      },
+      {
+        "comment": "",
+        "key": "Configure OpenRouter",
+        "location": {
+          "startingColumn": 62,
+          "startingLine": 268
+        }
+      },
+      {
+        "comment": "",
+        "key": "AI Provider Settings",
+        "location": {
+          "startingColumn": 87,
+          "startingLine": 268
+        }
+      },
+      {
+        "comment": "",
+        "key": "Open iPhone Settings",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 276
+        }
+      }
+    ]
+  },
+  "version": 1
+}

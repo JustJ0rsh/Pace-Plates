@@ -1,0 +1,168 @@
+{
+  "source": "/Users/joshua/Developer/Pace & Plates/WorkingOut/Features/Runs/PastRunLogView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Log Past Run",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 97
+        }
+      },
+      {
+        "comment": "",
+        "key": "Save Failed",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 117
+        }
+      },
+      {
+        "comment": "",
+        "key": "Activity",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 51
+        }
+      },
+      {
+        "comment": "",
+        "key": "Details",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 59
+        }
+      },
+      {
+        "comment": "",
+        "key": "Optional",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 81
+        }
+      },
+      {
+        "comment": "",
+        "key": "Type",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 52
+        }
+      },
+      {
+        "comment": "",
+        "key": "Date",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 60
+        }
+      },
+      {
+        "comment": "",
+        "key": "Hours: %lld",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 77
+        }
+      },
+      {
+        "comment": "",
+        "key": "Minutes: %lld",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 78
+        }
+      },
+      {
+        "comment": "",
+        "key": "Distance",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 63
+        }
+      },
+      {
+        "comment": "",
+        "key": "0.0",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 65
+        }
+      },
+      {
+        "comment": "",
+        "key": "Unit",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 69
+        }
+      },
+      {
+        "comment": "",
+        "key": "mi",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 70
+        }
+      },
+      {
+        "comment": "",
+        "key": "km",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 71
+        }
+      },
+      {
+        "comment": "",
+        "key": "Notes",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 90
+        }
+      },
+      {
+        "comment": "",
+        "key": "Calories",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 83
+        }
+      },
+      {
+        "comment": "",
+        "key": "kcal",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 85
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 101
+        }
+      },
+      {
+        "comment": "",
+        "key": "Save",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 107
+        }
+      },
+      {
+        "comment": "",
+        "key": "OK",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 121
+        }
+      }
+    ]
+  },
+  "version": 1
+}
