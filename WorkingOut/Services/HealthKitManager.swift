@@ -81,6 +81,7 @@ final class HealthKitManager: ObservableObject {
         set.insert(HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN)!)
         set.insert(HKObjectType.quantityType(forIdentifier: .oxygenSaturation)!)
         set.insert(HKObjectType.quantityType(forIdentifier: .bodyTemperature)!)
+        if let type = HKObjectType.quantityType(forIdentifier: .respiratoryRate) { set.insert(type) }
         set.insert(HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!)
         
         // Profile characteristics
@@ -748,6 +749,39 @@ final class HealthKitManager: ObservableObject {
         }
     }
 
+    func latestQuantitySample(
+        for id: HKQuantityTypeIdentifier,
+        matchingSourceHints sourceHints: [String]
+    ) async throws -> HKQuantitySample? {
+        guard !sourceHints.isEmpty else {
+            return try await latestQuantitySample(for: id)
+        }
+        guard let type = HKQuantityType.quantityType(forIdentifier: id) else { return nil }
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+        let predicate = HKQuery.predicateForSamples(withStart: .distantPast, end: Date(), options: [])
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: type,
+                predicate: predicate,
+                limit: 100,
+                sortDescriptors: [sort]
+            ) { _, samples, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+
+                let match = (samples as? [HKQuantitySample])?.first { sample in
+                    let sourceName = sample.sourceRevision.source.name.lowercased()
+                    return sourceHints.contains { sourceName.contains($0.lowercased()) }
+                }
+                continuation.resume(returning: match)
+            }
+            healthStore.execute(query)
+        }
+    }
+
     func todaySum(for id: HKQuantityTypeIdentifier, unit: HKUnit) async throws -> Double {
         guard let type = HKQuantityType.quantityType(forIdentifier: id) else { return 0 }
         let cal = Calendar.current
@@ -769,14 +803,18 @@ final class HealthKitManager: ObservableObject {
         return breakdown.sleepDurationSeconds
     }
 
-    func lastNightSleepScoreBreakdown() async throws -> SleepScoreBreakdown? {
+    func lastNightSleepScoreBreakdown(matchingSourceHints sourceHints: [String] = []) async throws -> SleepScoreBreakdown? {
         let calendar = Calendar.current
         let now = Date()
         let todayStart = calendar.startOfDay(for: now)
         guard let lookbackStart = calendar.date(byAdding: .day, value: -14, to: todayStart)?
             .addingTimeInterval(-6 * 3600) else { return nil }
 
-        let samples = try await fetchSleepSamples(from: lookbackStart, to: now)
+        let allSamples = try await fetchSleepSamples(from: lookbackStart, to: now)
+        let samples = sourceHints.isEmpty ? allSamples : allSamples.filter { sample in
+            let sourceName = sample.sourceRevision.source.name.lowercased()
+            return sourceHints.contains { sourceName.contains($0.lowercased()) }
+        }
         guard !samples.isEmpty else { return nil }
 
         let asleepValues: Set<Int> = [

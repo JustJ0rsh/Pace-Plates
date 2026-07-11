@@ -88,6 +88,7 @@ struct AppLaunchConfiguration {
             "experienceLevel": "experienced",
             AppTheme.storageKey: AppThemeOption.appDefault.rawValue,
             "showVitalsOnHome": false,
+            WearableDevicePreference.storageKey: WearableDevicePreference.none.rawValue,
             "enableWeeklyWeightReminder": false,
             "enableBackgroundRunTracking": false,
             "runsPendingHealthImport": false,

@@ -3,102 +3,90 @@ import HealthKit
 
 @MainActor
 final class VitalsModel: ObservableObject {
-    @Published var restingHeartRate: String = "—"
-    @Published var heartRate: String = "—"
-    @Published var stepsToday: String = "—"
-    @Published var activeEnergy: String = "—"
-    @Published var hrv: String = "—"
-    @Published var spo2: String = "—"
-    @Published var bodyTemp: String = "—"
-    @Published var sleepDuration: String = "—"
-    @Published var simpleSleepScore: String = "—" // optional (vs goal)
+    @Published private(set) var metrics: [VitalMetric] = []
+    @Published private(set) var wearablePreference: WearableDevicePreference = .none
 
-    private let hk = HealthKitManager.shared
+    private let healthKit = HealthKitManager.shared
 
-    // Unit preferences - imperial by default, user can change in settings
     private var useImperialUnits: Bool {
-        // Check user preference from Settings, default to imperial
-        UserDefaults.standard.string(forKey: "measurementSystem") == "imperial"
+        UserDefaults.standard.string(forKey: "measurementSystem") != "metric"
     }
 
+    func loadVitals(for preference: WearableDevicePreference? = nil) async {
+        let preference = preference ?? storedPreference
+        wearablePreference = preference
+        let sourceHints = preference.healthSourceNameHints
+        var values = VitalMetricValues()
 
-    func loadVitals() async {
-        // Store units preference at start to avoid main actor isolation issues
-        let useImperial = useImperialUnits
-
-        await withTaskGroup(of: Void.self) { group in
-            // Resting HR (fallback to latest HR)
-            group.addTask {
-                if let s = try? await self.hk.latestQuantitySample(for: .restingHeartRate) {
-                    let v = s.quantity.doubleValue(for: HKUnit(from: "count/min"))
-                    await MainActor.run { self.restingHeartRate = String(format: "%.0f bpm", v) }
-                } else if let s = try? await self.hk.latestQuantitySample(for: .heartRate) {
-                    let v = s.quantity.doubleValue(for: HKUnit(from: "count/min"))
-                    await MainActor.run { self.heartRate = String(format: "%.0f bpm", v) }
-                }
-            }
-
-            // Steps (today)
-            group.addTask {
-                if let val = try? await self.hk.todaySum(for: .stepCount, unit: .count()) {
-                    await MainActor.run { self.stepsToday = NumberFormatter.localizedString(from: NSNumber(value: Int(val)), number: .decimal) }
-                }
-            }
-
-            // Active energy (today, kcal)
-            group.addTask {
-                if let val = try? await self.hk.todaySum(for: .activeEnergyBurned, unit: .kilocalorie()) {
-                    await MainActor.run { self.activeEnergy = String(format: "%.0f kcal", val) }
-                }
-            }
-
-            // HRV (ms)
-            group.addTask {
-                if let s = try? await self.hk.latestQuantitySample(for: .heartRateVariabilitySDNN) {
-                    let v = s.quantity.doubleValue(for: .secondUnit(with: .milli))
-                    await MainActor.run { self.hrv = String(format: "%.0f ms", v) }
-                }
-            }
-
-            // SpO2 (%)
-            group.addTask {
-                if let s = try? await self.hk.latestQuantitySample(for: .oxygenSaturation) {
-                    let v = s.quantity.doubleValue(for: HKUnit.percent())
-                    await MainActor.run { self.spo2 = String(format: "%.0f%%", v * 100.0) }
-                }
-            }
-
-            // Body Temp (imperial by default, user can switch)
-            group.addTask {
-                if let s = try? await self.hk.latestQuantitySample(for: .bodyTemperature) {
-                    let celsius = s.quantity.doubleValue(for: .degreeCelsius())
-                    if useImperial {
-                        let fahrenheit = celsius * 9/5 + 32
-                        await MainActor.run { self.bodyTemp = String(format: "%.1f °F", fahrenheit) }
-                    } else {
-                        await MainActor.run { self.bodyTemp = String(format: "%.1f °C", celsius) }
-                    }
-                }
-            }
-
-            // Sleep (last night duration)
-            group.addTask {
-                if let breakdown = try? await self.hk.lastNightSleepScoreBreakdown() {
-                    let hours = breakdown.sleepDurationSeconds / 3600.0
-                    await MainActor.run {
-                        self.sleepDuration = String(format: "%.1f h", hours)
-                        self.simpleSleepScore = "\(breakdown.totalScore)"
-                    }
-                } else if let seconds = try? await self.hk.lastNightSleepDuration(), seconds > 0 {
-                    // Fallback when score breakdown is unavailable.
-                    let hours = seconds / 3600.0
-                    let score = max(0, min(100, (hours / 8.0) * 100.0))
-                    await MainActor.run {
-                        self.sleepDuration = String(format: "%.1f h", hours)
-                        self.simpleSleepScore = String(format: "%.0f", score)
-                    }
-                }
-            }
+        if let sample = try? await latestSample(for: .restingHeartRate, sourceHints: sourceHints) {
+            let value = sample.quantity.doubleValue(for: HKUnit(from: "count/min"))
+            values.restingHeartRate = String(format: "%.0f bpm", value)
+        } else if let sample = try? await latestSample(for: .heartRate, sourceHints: sourceHints) {
+            let value = sample.quantity.doubleValue(for: HKUnit(from: "count/min"))
+            values.heartRate = String(format: "%.0f bpm", value)
         }
+
+        if let value = try? await healthKit.todaySum(for: .stepCount, unit: .count()) {
+            values.stepsToday = NumberFormatter.localizedString(
+                from: NSNumber(value: Int(value)),
+                number: .decimal
+            )
+        }
+
+        if let value = try? await healthKit.todaySum(for: .activeEnergyBurned, unit: .kilocalorie()) {
+            values.activeEnergy = String(format: "%.0f kcal", value)
+        }
+
+        if let sample = try? await latestSample(for: .heartRateVariabilitySDNN, sourceHints: sourceHints) {
+            let value = sample.quantity.doubleValue(for: .secondUnit(with: .milli))
+            values.hrv = String(format: "%.0f ms", value)
+        }
+
+        if let sample = try? await latestSample(for: .oxygenSaturation, sourceHints: sourceHints) {
+            let value = sample.quantity.doubleValue(for: .percent())
+            values.spo2 = String(format: "%.0f%%", value * 100)
+        }
+
+        if let sample = try? await latestSample(for: .bodyTemperature, sourceHints: sourceHints) {
+            let celsius = sample.quantity.doubleValue(for: .degreeCelsius())
+            values.bodyTemp = useImperialUnits
+                ? String(format: "%.1f °F", celsius * 9 / 5 + 32)
+                : String(format: "%.1f °C", celsius)
+        }
+
+        if let sample = try? await latestSample(for: .respiratoryRate, sourceHints: sourceHints) {
+            let value = sample.quantity.doubleValue(for: .count().unitDivided(by: .minute()))
+            values.respiratoryRate = String(format: "%.0f br/min", value)
+        }
+
+        if let sample = try? await latestSample(for: .vo2Max, sourceHints: sourceHints) {
+            let value = sample.quantity.doubleValue(for: HKUnit(from: "ml/kg*min"))
+            values.vo2Max = String(format: "%.1f", value)
+        }
+
+        if let breakdown = try? await healthKit.lastNightSleepScoreBreakdown(matchingSourceHints: sourceHints) {
+            values.sleepDuration = String(format: "%.1f h", breakdown.sleepDurationSeconds / 3600)
+            values.sleepScore = "\(breakdown.totalScore)"
+        }
+
+        metrics = VitalMetric.metrics(for: preference, values: values)
+    }
+
+    private var storedPreference: WearableDevicePreference {
+        let rawValue = UserDefaults.standard.string(forKey: WearableDevicePreference.storageKey) ?? ""
+        return WearableDevicePreference(rawValue: rawValue) ?? .none
+    }
+
+    private func latestSample(
+        for identifier: HKQuantityTypeIdentifier,
+        sourceHints: [String]
+    ) async throws -> HKQuantitySample? {
+        guard !sourceHints.isEmpty else {
+            return try await healthKit.latestQuantitySample(for: identifier)
+        }
+        return try await healthKit.latestQuantitySample(
+            for: identifier,
+            matchingSourceHints: sourceHints
+        )
     }
 }

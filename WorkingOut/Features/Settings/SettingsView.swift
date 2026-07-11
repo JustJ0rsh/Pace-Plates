@@ -22,6 +22,7 @@ struct SettingsView: View {
     @AppStorage("useStructuredPlanView") private var useStructuredPlanView: Bool = false
     @AppStorage("enableWeeklyWeightReminder") private var enableWeeklyWeightReminder: Bool = false
     @AppStorage("showVitalsOnHome") private var showVitalsOnHome: Bool = true
+    @AppStorage(WearableDevicePreference.storageKey) private var preferredWearableRaw = WearableDevicePreference.none.rawValue
     @AppStorage("enableBackgroundRunTracking") private var enableBackgroundRunTracking: Bool = true
     @AppStorage("runsLastHealthImportAt") private var runsLastHealthImportAt: Double = 0
     @AppStorage("weightLastHealthImportAt") private var weightLastHealthImportAt: Double = 0
@@ -304,6 +305,38 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            Picker("Wearable", selection: preferredWearableBinding) {
+                ForEach(WearableDevicePreference.allCases) { wearable in
+                    Text(wearable.displayName).tag(wearable)
+                }
+            }
+            .pickerStyle(.menu)
+            .accessibilityHint("Changes which Apple Health vitals appear on the Home screen")
+
+            Text(wearableVitalsDescription)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var preferredWearableBinding: Binding<WearableDevicePreference> {
+        Binding(
+            get: { WearableDevicePreference(rawValue: preferredWearableRaw) ?? .none },
+            set: { preferredWearableRaw = $0.rawValue }
+        )
+    }
+
+    private var wearableVitalsDescription: String {
+        switch preferredWearableBinding.wrappedValue {
+        case .none:
+            return "Shows general activity and sleep data available in Apple Health."
+        case .appleWatch:
+            return "Prioritizes heart rate, HRV, respiratory rate, blood oxygen, temperature, sleep, steps, and VO2 Max when your Watch provides them."
+        case .ouraRing:
+            return "Prioritizes Oura-synced heart rate, respiratory rate, sleep, steps, and active energy. Sleep Score is estimated from Apple Health sleep data."
+        case .fitbit:
+            return "Shows Fitbit-attributed activity, heart, sleep, oxygen, and respiratory data when Fitbit or a compatible sync app writes it to Apple Health."
         }
     }
 
