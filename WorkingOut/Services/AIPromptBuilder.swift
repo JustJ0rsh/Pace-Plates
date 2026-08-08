@@ -20,38 +20,91 @@ enum AIPromptBuilder {
         distanceUnit: String,
         userStats: WorkoutPlanGenerator.UserStats,
         equipment: String? = nil,
-        conversationContext: String? = nil
+        conversationContext: String? = nil,
+        maxChars: Int = maxPromptChars
     ) -> String {
-        var lines: [String] = []
-        
-        lines.append(baseCoachInstructions())
-        lines.append("Goal: \(goal) | Units: \(weightUnit), \(distanceUnit)")
-        lines.append("")
+        let cleanedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        let questionBlock = "Question: \(cleanedQuestion)"
+        let requiredHeader = [
+            baseCoachInstructions(),
+            "Goal: \(goal) | Units: \(weightUnit), \(distanceUnit)"
+        ]
 
-        // Equipment (single line)
+        // Optional sections are kept in reader-friendly order. When the prompt
+        // needs to shrink, low-priority history is removed before current stats
+        // or the user's question.
+        var optionalSections: [(key: String, lines: [String])] = []
+
         if let eq = equipment?.trimmingCharacters(in: .whitespacesAndNewlines), !eq.isEmpty {
-            lines.append("Equipment: \(eq)")
+            optionalSections.append(("equipment", ["Equipment: \(eq)"]))
         }
 
-        // User stats summary (compact for Ask mode)
-        lines.append(contentsOf: formatUserStats(userStats, compact: true))
-        lines.append("Nutrition math rule: if using g/kg and body weight is in lb, convert lb ÷ 2.20462 first. Never treat lb as kg.")
+        optionalSections.append(("stats", formatUserStats(userStats, compact: true)))
+        optionalSections.append((
+            "nutrition",
+            ["Nutrition math rule: if using g/kg and body weight is in lb, convert lb ÷ 2.20462 first. Never treat lb as kg."]
+        ))
         if let base = userStats.typicalRunDistance {
-            lines.append("Typical run distance: \(String(format: "%.1f", base)) \(distanceUnit)")
+            optionalSections.append((
+                "typicalRun",
+                ["Typical run distance: \(String(format: "%.1f", base)) \(distanceUnit)"]
+            ))
         }
         if let longTarget = userStats.suggestedLongRunDistance {
-            lines.append("Long run target this week: ~\(String(format: "%.1f", longTarget)) \(distanceUnit)")
+            optionalSections.append((
+                "longRun",
+                ["Long run target this week: ~\(String(format: "%.1f", longTarget)) \(distanceUnit)"]
+            ))
         }
-        lines.append("For strength suggestions: list 5–6 distinct exercises with 'sets x reps @ weight \(weightUnit)'. Use last working weight when available; otherwise use conservative e1RM-derived loads. Round to \(weightUnit == "kg" ? "2.5 kg" : "5 lb") and keep first-week increases ≤5%.")
+        optionalSections.append((
+            "strength",
+            ["For strength suggestions: list 5–6 distinct exercises with 'sets x reps @ weight \(weightUnit)'. Use last working weight when available; otherwise use conservative e1RM-derived loads. Round to \(weightUnit == "kg" ? "2.5 kg" : "5 lb") and keep first-week increases ≤5%."]
+        ))
         if let conversationContext, !conversationContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            lines.append("Conversation context:")
-            lines.append(conversationContext)
-            lines.append("Stay consistent with that prior context. Avoid repeating the entire history unless it changes the answer.")
+            optionalSections.append((
+                "conversation",
+                [
+                    "Conversation context:",
+                    conversationContext,
+                    "Stay consistent with that prior context. Avoid repeating the entire history unless it changes the answer."
+                ]
+            ))
         }
-        
-        lines.append("\nQuestion: \(question)")
-        
-        return clamp(lines.joined(separator: "\n"))
+
+        func renderedPrompt() -> String {
+            let optionalLines = optionalSections.flatMap { $0.lines }
+            return (requiredHeader + optionalLines + ["", questionBlock]).joined(separator: "\n")
+        }
+
+        let limit = max(256, maxChars)
+        let trimOrder = [
+            "conversation",
+            "longRun",
+            "typicalRun",
+            "strength",
+            "nutrition",
+            "stats",
+            "equipment"
+        ]
+
+        var prompt = renderedPrompt()
+        for key in trimOrder where prompt.count > limit {
+            optionalSections.removeAll(where: { $0.key == key })
+            prompt = renderedPrompt()
+        }
+
+        if prompt.count <= limit {
+            return prompt
+        }
+
+        // The current question is the highest-priority content. If it alone is
+        // unusually long, return it intact and let the model-context guard apply
+        // only its much larger global cap.
+        let compact = ([requiredHeader.last ?? ""] + ["", questionBlock]).joined(separator: "\n")
+        if compact.count <= limit {
+            return compact
+        }
+        return questionBlock
     }
     
     // MARK: - Plan Generation Prompts

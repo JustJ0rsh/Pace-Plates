@@ -20,6 +20,9 @@ struct WeightLogView: View {
     @State private var hasScheduledInitialImport = false
     @State private var saveErrorMessage: String? = nil
     @State private var quickViewEntry: WeightEntry? = nil
+    @State private var historySearchText: String = ""
+    @State private var historyRange: HistoryRange = .all
+    @State private var historyCategory: String? = nil
 
     // Time filter
     private enum TimeRange: String, CaseIterable, Identifiable {
@@ -48,8 +51,34 @@ struct WeightLogView: View {
         let end = cal.date(byAdding: .day, value: 1, to: todayStart) ?? todayStart
         return start...end
     }
+
+    private var filteredWeightEntries: [WeightEntry] {
+        let query = historySearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return weightEntries.filter { entry in
+            guard historyRange.contains(entry.date) else { return false }
+            guard !query.isEmpty else { return true }
+
+            let convertedWeight = UnitConverter.weight(
+                entry.weight,
+                from: entry.weightUnit,
+                to: preferredWeightUnit
+            )
+            let searchableValues = [
+                String(format: "%.1f", convertedWeight),
+                String(format: "%.0f", convertedWeight),
+                "\(String(format: "%.1f", convertedWeight)) \(preferredWeightUnit)",
+                entry.date.formatted(date: .numeric, time: .omitted),
+                entry.date.formatted(date: .abbreviated, time: .omitted),
+                entry.date.formatted(date: .long, time: .omitted)
+            ]
+            return searchableValues.contains { $0.localizedCaseInsensitiveContains(query) }
+        }
+    }
     
     var body: some View {
+        let historyEntries = filteredWeightEntries
+
         ScrollView {
             VStack(spacing: 16) {
                     // Chart Tile (unified header style)
@@ -123,38 +152,77 @@ struct WeightLogView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("History")
                                 .font(.headline)
-                            LazyVStack(spacing: 0) {
-                                ForEach(weightEntries) { entry in
-                                    WeightEntryRowContent(
-                                        entry: entry,
-                                        preferredWeightUnit: preferredWeightUnit,
-                                        isEditing: isEditing,
-                                        onDelete: {
-                                            pendingDeleteEntry = entry
-                                            showDeleteConfirm = true
-                                        }
-                                    )
-                                    .padding(.vertical, 8)
-                                    .contextMenu {
-                                        Button {
-                                            quickViewEntry = entry
-                                        } label: {
-                                            Label("Quick View", systemImage: "eye")
-                                        }
 
-                                        Button(role: .destructive) {
-                                            pendingDeleteEntry = entry
-                                            showDeleteConfirm = true
-                                        } label: {
-                                            Label("Delete", systemImage: "trash")
+                            HistoryFilterBar(
+                                searchText: $historySearchText,
+                                selectedRange: $historyRange,
+                                selectedCategory: $historyCategory,
+                                resultCount: historyEntries.count,
+                                searchPrompt: "Search dates or weights",
+                                accessibilityIdentifier: "weight.history.filters"
+                            )
+
+                            if historyEntries.isEmpty {
+                                HistoryNoResultsView(
+                                    title: "No Matching Weight Entries",
+                                    message: "Try another weight, date, or date range.",
+                                    accessibilityIdentifier: "weight.history.no_results",
+                                    clearFilters: clearWeightHistoryFilters
+                                )
+                            } else {
+                                LazyVStack(spacing: 0) {
+                                    ForEach(historyEntries) { entry in
+                                        Group {
+                                            if isEditing {
+                                                WeightEntryRowContent(
+                                                    entry: entry,
+                                                    preferredWeightUnit: preferredWeightUnit,
+                                                    isEditing: true,
+                                                    onDelete: {
+                                                        pendingDeleteEntry = entry
+                                                        showDeleteConfirm = true
+                                                    }
+                                                )
+                                            } else {
+                                                Button {
+                                                    quickViewEntry = entry
+                                                } label: {
+                                                    WeightEntryRowContent(
+                                                        entry: entry,
+                                                        preferredWeightUnit: preferredWeightUnit,
+                                                        isEditing: false,
+                                                        onDelete: {
+                                                            pendingDeleteEntry = entry
+                                                            showDeleteConfirm = true
+                                                        }
+                                                    )
+                                                }
+                                                .buttonStyle(.plain)
+                                                .accessibilityHint("Opens weight details")
+                                            }
                                         }
-                                    }
-                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                        Button(role: .destructive) {
-                                            pendingDeleteEntry = entry
-                                            showDeleteConfirm = true
-                                        } label: {
-                                            Label("Delete", systemImage: "trash")
+                                        .padding(.vertical, 8)
+                                        .contextMenu {
+                                            Button {
+                                                quickViewEntry = entry
+                                            } label: {
+                                                Label("Quick View", systemImage: "eye")
+                                            }
+
+                                            Button(role: .destructive) {
+                                                pendingDeleteEntry = entry
+                                                showDeleteConfirm = true
+                                            } label: {
+                                                Label("Delete", systemImage: "trash")
+                                            }
+                                        }
+                                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                            Button(role: .destructive) {
+                                                pendingDeleteEntry = entry
+                                                showDeleteConfirm = true
+                                            } label: {
+                                                Label("Delete", systemImage: "trash")
+                                            }
                                         }
                                     }
                                 }
@@ -190,8 +258,9 @@ struct WeightLogView: View {
                     Image(systemName: "plus")
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(AppTheme.toolbarButtonColor)
-                        .accessibilityLabel("Log Weight")
                 }
+                .accessibilityLabel("Log Weight")
+                .accessibilityIdentifier("weight.toolbar.actions")
             }
         }
         .sheet(isPresented: $showingLogWeightSheet) {
@@ -268,9 +337,19 @@ struct WeightLogView: View {
         .id(appTheme) // Force rebuild when theme changes
     }
 
+    private func clearWeightHistoryFilters() {
+        historySearchText = ""
+        historyRange = .all
+        historyCategory = nil
+    }
+
     /// Silent auto-import on view appear (like runs/hikes/walks)
     private func importHealthWeightsSilently(force: Bool = false) {
         guard shouldImportHealthWeights(force: force) else { return }
+        let expectedPurgeGeneration =
+            WearableWorkoutInboxService.localDataPurgeGeneration
+        let purgeCutoff =
+            WearableWorkoutInboxService.localDataPurgeCutoffDate
 
         Task(priority: .utility) {
             do {
@@ -282,17 +361,40 @@ struct WeightLogView: View {
 
                 // Get existing entry dates (start of day) to avoid duplicates
                 let existingDates = await MainActor.run {
-                    Set(weightEntries.map { Calendar.current.startOfDay(for: $0.date) })
+                    () -> Set<Date>? in
+                    guard WearableWorkoutInboxService
+                        .isCurrentLocalDataPurgeGeneration(
+                            expectedPurgeGeneration
+                        ) else {
+                        return nil
+                    }
+                    return Set(
+                        weightEntries.map {
+                            Calendar.current.startOfDay(for: $0.date)
+                        }
+                    )
                 }
+                guard let existingDates else { return }
 
                 // Collapse to the LATEST sample per day within this batch (same rule
                 // as the manual import path), then drop days that already exist locally.
-                let newWeights = HealthKitManager.latestWeightSamplesPerDay(healthWeights).filter { entry in
-                    !existingDates.contains(Calendar.current.startOfDay(for: entry.date))
-                }
+                let newWeights = HealthKitManager
+                    .latestWeightSamplesPerDay(healthWeights)
+                    .filter { entry in
+                        (purgeCutoff.map { entry.date > $0 } ?? true) &&
+                        !existingDates.contains(
+                            Calendar.current.startOfDay(for: entry.date)
+                        )
+                    }
 
                 guard !newWeights.isEmpty else {
                     await MainActor.run {
+                        guard WearableWorkoutInboxService
+                            .isCurrentLocalDataPurgeGeneration(
+                                expectedPurgeGeneration
+                            ) else {
+                            return
+                        }
                         weightLastHealthImportAt = Date().timeIntervalSince1970
                     }
                     return
@@ -300,6 +402,12 @@ struct WeightLogView: View {
 
                 // Import new entries silently
                 await MainActor.run {
+                    guard WearableWorkoutInboxService
+                        .isCurrentLocalDataPurgeGeneration(
+                            expectedPurgeGeneration
+                        ) else {
+                        return
+                    }
                     for entry in newWeights {
                         let unit = UnitConverter.canonicalWeightUnit(preferredWeightUnit)
                         let weight = UnitConverter.weight(entry.weightInPounds, from: "lbs", to: unit)

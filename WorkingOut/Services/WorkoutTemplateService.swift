@@ -25,63 +25,68 @@ final class WorkoutTemplateService {
 
     #if canImport(FoundationModels)
     private func createTemplatesFromStructuredPlan(plan: WorkoutPlan, conversation: AIConversation, context: ModelContext) -> [WorkoutTemplate] {
-        guard let week = plan.weeks.first else { return [] }
+        guard !plan.weeks.isEmpty else { return [] }
 
         let planHash = stablePlanHash(structuredPlanJSON: conversation.structuredPlanJSON, markdown: conversation.response)
         let planTitle = plan.title
 
         var result: [WorkoutTemplate] = []
-        for (dayIndex, day) in week.days.enumerated() {
-            let title = prefixedDayTitle(day.title, dayIndex: dayIndex)
-            let existing = findExistingTemplate(planHash: planHash, dayIndex: dayIndex, context: context)
+        var globalDayIndex = 0
+        for week in plan.weeks {
+            for day in week.days {
+                let dayIndex = globalDayIndex
+                let title = prefixedDayTitle(day.title, dayIndex: dayIndex)
+                let existing = findExistingTemplate(planHash: planHash, dayIndex: dayIndex, context: context)
 
-            let template = existing ?? WorkoutTemplate(
-                title: title,
-                notes: nil,
-                sourceAIConversationId: conversation.id,
-                aiPlanHash: planHash,
-                aiPlanTitle: planTitle,
-                aiWeekTitle: week.title,
-                aiDayIndex: dayIndex,
-                aiDayType: day.type.rawValue,
-                aiDayTitle: day.title,
-                isBuiltIn: false
-            )
-
-            template.title = title
-            template.sourceAIConversationId = conversation.id
-            template.aiPlanHash = planHash
-            template.aiPlanTitle = planTitle
-            template.aiWeekTitle = week.title
-            template.aiDayIndex = dayIndex
-            template.aiDayType = day.type.rawValue
-            template.aiDayTitle = day.title
-            template.isBuiltIn = false
-            template.templateDescription = templateDescription(for: day)
-            template.notes = notesSummary(for: day)
-
-            if existing == nil { context.insert(template) }
-            deleteTemplateExercises(template, context: context)
-
-            var createdExercises = 0
-            for (index, item) in day.items.enumerated() {
-                let mapped = mapItemToTemplateExercise(item, order: index, defaultWeightUnit: plan.unit)
-                let templateExercise = TemplateExercise(
-                    name: mapped.name,
-                    order: mapped.order,
-                    sets: mapped.sets,
-                    reps: mapped.reps,
-                    suggestedWeight: mapped.suggestedWeight,
-                    weightUnit: mapped.weightUnit,
-                    notes: mapped.notes
+                let template = existing ?? WorkoutTemplate(
+                    title: title,
+                    notes: nil,
+                    sourceAIConversationId: conversation.id,
+                    aiPlanHash: planHash,
+                    aiPlanTitle: planTitle,
+                    aiWeekTitle: week.title,
+                    aiDayIndex: dayIndex,
+                    aiDayType: day.type.rawValue,
+                    aiDayTitle: day.title,
+                    isBuiltIn: false
                 )
-                templateExercise.template = template
-                context.insert(templateExercise)
-                if mapped.countsTowardExerciseCount { createdExercises += 1 }
-            }
 
-            template.exerciseCount = createdExercises
-            result.append(template)
+                template.title = title
+                template.sourceAIConversationId = conversation.id
+                template.aiPlanHash = planHash
+                template.aiPlanTitle = planTitle
+                template.aiWeekTitle = week.title
+                template.aiDayIndex = dayIndex
+                template.aiDayType = day.type.rawValue
+                template.aiDayTitle = day.title
+                template.isBuiltIn = false
+                template.templateDescription = templateDescription(for: day)
+                template.notes = notesSummary(for: day)
+
+                if existing == nil { context.insert(template) }
+                deleteTemplateExercises(template, context: context)
+
+                var createdExercises = 0
+                for (index, item) in day.items.enumerated() {
+                    let mapped = mapItemToTemplateExercise(item, order: index, defaultWeightUnit: plan.unit)
+                    let templateExercise = TemplateExercise(
+                        name: mapped.name,
+                        order: mapped.order,
+                        sets: mapped.sets,
+                        reps: mapped.reps,
+                        suggestedWeight: mapped.suggestedWeight,
+                        weightUnit: mapped.weightUnit,
+                        notes: mapped.notes
+                    )
+                    templateExercise.template = template
+                    context.insert(templateExercise)
+                    if mapped.countsTowardExerciseCount { createdExercises += 1 }
+                }
+
+                template.exerciseCount = createdExercises
+                result.append(template)
+                globalDayIndex += 1
+            }
         }
 
         _ = PersistenceSave.commit(context, action: "save changes")
@@ -204,7 +209,7 @@ final class WorkoutTemplateService {
         let template = WorkoutTemplate(
             title: session.title.isEmpty ? "Custom Workout" : session.title,
             notes: session.notes,
-            isBuiltIn: true, // Treat as built-in to show in the main list
+            isBuiltIn: false,
             experienceLevel: "Custom",
             goal: "Custom",
             difficulty: 3, // Default to Medium
@@ -228,18 +233,17 @@ final class WorkoutTemplateService {
         }
         
         for (index, name) in sortedNames.enumerated() {
-            guard let exerciseLogs = groups[name], let firstLog = exerciseLogs.first else { continue }
-            
-            let sets = exerciseLogs.count
+            guard let exerciseLogs = groups[name] else { continue }
+            let values = templateValues(from: exerciseLogs)
             
             let templateExercise = TemplateExercise(
                 name: name,
                 order: index,
-                sets: sets,
-                reps: firstLog.effectiveReps,
-                suggestedWeight: firstLog.weight,
-                weightUnit: firstLog.weightUnit,
-                notes: firstLog.notes
+                sets: values.sets,
+                reps: values.reps,
+                suggestedWeight: values.weight,
+                weightUnit: values.weightUnit,
+                notes: values.notes
             )
             
             templateExercise.template = template
@@ -276,18 +280,17 @@ final class WorkoutTemplateService {
         }
         
         for (index, name) in sortedNames.enumerated() {
-            guard let exerciseLogs = groups[name], let firstLog = exerciseLogs.first else { continue }
-            
-            let sets = exerciseLogs.count
+            guard let exerciseLogs = groups[name] else { continue }
+            let values = templateValues(from: exerciseLogs)
             
             let templateExercise = TemplateExercise(
                 name: name,
                 order: index,
-                sets: sets,
-                reps: firstLog.effectiveReps,
-                suggestedWeight: firstLog.weight,
-                weightUnit: firstLog.weightUnit,
-                notes: firstLog.notes
+                sets: values.sets,
+                reps: values.reps,
+                suggestedWeight: values.weight,
+                weightUnit: values.weightUnit,
+                notes: values.notes
             )
             
             templateExercise.template = template
@@ -315,16 +318,17 @@ final class WorkoutTemplateService {
         context.insert(session)
         
         // Create exercise logs from template exercises
-        guard let exercises = template.exercises?.sorted(by: { $0.order < $1.order }) else {
-            return session
-        }
+        let exercises = template.exercises?.sorted(by: { $0.order < $1.order }) ?? []
         
         for templateExercise in exercises {
             // Check if notes contain detailed per-set data (from imported workouts)
             let perSetData = parsePerSetData(from: templateExercise.notes)
             
             // Detect exercise type (cardio if notes contain duration/distance data)
-            let isCardio = perSetData.first?.durationSeconds != nil || perSetData.first?.distance != nil
+            let isCardio = perSetData.first?.durationSeconds != nil
+                || perSetData.first?.distance != nil
+                || perSetData.first?.caloriesBurned != nil
+                || perSetData.first?.avgHeartRate != nil
             
             if !perSetData.isEmpty {
                 // Use the detailed per-set data
@@ -340,6 +344,8 @@ final class WorkoutTemplateService {
                         durationSeconds: setData.durationSeconds,
                         distance: setData.distance,
                         distanceUnit: setData.distanceUnit,
+                        caloriesBurned: setData.caloriesBurned,
+                        avgHeartRate: setData.avgHeartRate,
                         notes: setData.notes
                     )
                     
@@ -348,6 +354,7 @@ final class WorkoutTemplateService {
                 }
             } else {
                 // Use the template's suggested values (standard template behavior)
+                guard templateExercise.sets > 0 else { continue }
                 for setNumber in 1...templateExercise.sets {
                     let log = ExerciseLog(
                         reps: templateExercise.reps,
@@ -371,15 +378,15 @@ final class WorkoutTemplateService {
     
     /// Parses per-set data from notes string
     /// Format: "Set 1: 34 reps @ 110.0 lbs\nSet 2: 20 reps @ 160.0 lbs"
-    private func parsePerSetData(from notes: String?) -> [(reps: Int, weight: Double, weightUnit: String, durationSeconds: Int?, distance: Double?, distanceUnit: String?, notes: String?)] {
+    private func parsePerSetData(from notes: String?) -> [(reps: Int, weight: Double, weightUnit: String, durationSeconds: Int?, distance: Double?, distanceUnit: String?, caloriesBurned: Int?, avgHeartRate: Int?, notes: String?)] {
         guard let notes = notes, !notes.isEmpty else { return [] }
         
-        var result: [(Int, Double, String, Int?, Double?, String?, String?)] = []
+        var result: [(Int, Double, String, Int?, Double?, String?, Int?, Int?, String?)] = []
         let lines = notes.components(separatedBy: .newlines)
         
         for line in lines {
-            // Parse strength format: "Set 1: 34 reps @ 110.0 lbs"
-            if let match = try? NSRegularExpression(pattern: "Set\\s+(\\d+):\\s+(\\d+)\\s+reps\\s+@\\s+([0-9.]+)\\s+(lbs|kg)", options: [])
+            // Parse strength format: "Set 1: 34 reps @ 110.0 lbs | optional notes"
+            if let match = try? NSRegularExpression(pattern: "^Set\\s+(\\d+):\\s+(\\d+)\\s+reps\\s+@\\s+([0-9.]+)\\s+([^\\s|]+)(?:\\s+\\|\\s*(.*))?$", options: [])
                 .firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) {
                 
                 if let repsRange = Range(match.range(at: 2), in: line),
@@ -389,12 +396,15 @@ final class WorkoutTemplateService {
                     let reps = Int(String(line[repsRange])) ?? 0
                     let weight = Double(String(line[weightRange])) ?? 0
                     let unit = String(line[unitRange])
+                    let setNotes = capturedString(at: 5, from: match, in: line)
                     
-                    result.append((reps, weight, unit, nil, nil, nil, nil))
+                    result.append((reps, weight, unit, nil, nil, nil, nil, nil, setNotes))
                 }
             }
-            // Parse cardio format: "Set 1: 30:00 5.0 mi" (duration and distance)
-            else if let match = try? NSRegularExpression(pattern: "Set\\s+(\\d+):\\s+(\\d+):(\\d+)(?:\\s+([0-9.]+)\\s+(mi|km))?", options: [])
+            // Parse cardio format:
+            // "Set 1: 30:00 5.0 mi ; calories=250 ; avgHR=145 | optional notes"
+            // Metric annotations are optional, so existing template notes still parse.
+            else if let match = try? NSRegularExpression(pattern: "^Set\\s+(\\d+):\\s+(\\d+):(\\d+)(?:\\s+([0-9.]+)(?:\\s+([^\\s;|]+))?)?(?:\\s*;\\s*calories=(\\d+))?(?:\\s*;\\s*avgHR=(\\d+))?(?:\\s+\\|\\s*(.*))?$", options: [])
                 .firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) {
                 
                 if let minRange = Range(match.range(at: 2), in: line),
@@ -412,14 +422,94 @@ final class WorkoutTemplateService {
                        let unitRange = Range(match.range(at: 5), in: line) {
                         distance = Double(String(line[distRange]))
                         distanceUnit = String(line[unitRange])
+                    } else if let distRange = Range(match.range(at: 4), in: line) {
+                        distance = Double(String(line[distRange]))
                     }
                     
-                    result.append((0, 0, "lbs", totalSeconds, distance, distanceUnit, nil))
+                    let calories = capturedInt(at: 6, from: match, in: line)
+                    let avgHeartRate = capturedInt(at: 7, from: match, in: line)
+                    let setNotes = capturedString(at: 8, from: match, in: line)
+                    result.append((0, 0, "lbs", totalSeconds, distance, distanceUnit, calories, avgHeartRate, setNotes))
                 }
             }
         }
         
         return result
+    }
+
+    private func capturedString(
+        at index: Int,
+        from match: NSTextCheckingResult,
+        in source: String
+    ) -> String? {
+        guard index < match.numberOfRanges,
+              let range = Range(match.range(at: index), in: source)
+        else {
+            return nil
+        }
+        let value = String(source[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+
+    private func capturedInt(
+        at index: Int,
+        from match: NSTextCheckingResult,
+        in source: String
+    ) -> Int? {
+        capturedString(at: index, from: match, in: source).flatMap(Int.init)
+    }
+
+    private func templateValues(
+        from logs: [ExerciseLog]
+    ) -> (sets: Int, reps: Int, weight: Double, weightUnit: String, notes: String?) {
+        let sortedLogs = logs.sorted {
+            if $0.setNumber != $1.setNumber { return $0.setNumber < $1.setNumber }
+            return $0.id.uuidString < $1.id.uuidString
+        }
+        guard let firstLog = sortedLogs.first else {
+            return (0, 0, 0, "lbs", nil)
+        }
+
+        let lines = sortedLogs.map { log -> String in
+            let isCardio = log.isCardio || log.durationSeconds != nil || log.distance != nil
+            let base: String
+            if isCardio {
+                let totalSeconds = max(log.durationSeconds ?? 0, 0)
+                let minutes = totalSeconds / 60
+                let seconds = totalSeconds % 60
+                var cardio = "Set \(log.setNumber): \(minutes):\(String(format: "%02d", seconds))"
+                if let distance = log.distance {
+                    cardio += " \(String(format: "%.6g", distance))"
+                    if let unit = log.distanceUnit, !unit.isEmpty {
+                        cardio += " \(unit)"
+                    }
+                }
+                if let calories = log.caloriesBurned {
+                    cardio += " ; calories=\(calories)"
+                }
+                if let avgHeartRate = log.avgHeartRate {
+                    cardio += " ; avgHR=\(avgHeartRate)"
+                }
+                base = cardio
+            } else {
+                base = "Set \(log.setNumber): \(log.effectiveReps) reps @ \(String(format: "%.6g", log.weight)) \(log.weightUnit)"
+            }
+
+            guard let notes = log.notes?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !notes.isEmpty
+            else {
+                return base
+            }
+            return "\(base) | \(notes.replacingOccurrences(of: "\n", with: " "))"
+        }
+
+        return (
+            sortedLogs.count,
+            firstLog.effectiveReps,
+            firstLog.weight,
+            firstLog.weightUnit,
+            lines.joined(separator: "\n")
+        )
     }
     
     /// Creates templates from markdown-based AI plan (creates a template for each workout day)

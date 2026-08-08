@@ -11,9 +11,10 @@ struct RunAssistantDashboardView: View {
     }
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @Binding var profile: RunAssistantProfile
-    let onStartRun: () -> Void
+    let onStartRun: (ScheduledRunTarget) -> Void
     let onEditProfile: () -> Void
 
     @Query(sort: [SortDescriptor<RunningPlan>(\.updatedAt, order: .reverse)])
@@ -39,6 +40,12 @@ struct RunAssistantDashboardView: View {
 
     private var activePlan: RunningPlan? {
         plans.first(where: { $0.isActive && !$0.isArchived })
+    }
+
+    private var sessionActionsLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 8))
     }
 
     var body: some View {
@@ -164,11 +171,14 @@ struct RunAssistantDashboardView: View {
             if let session = today {
                 sessionSummary(session)
 
-                HStack {
+                sessionActionsLayout {
                     Button("Start Run") {
-                        onStartRun()
+                        onStartRun(ScheduledRunTarget(session: session))
                     }
                     .buttonStyle(.borderedProminent)
+                    .accessibilityLabel("Start planned \(session.sessionType) run")
+                    .accessibilityHint("Opens live tracking with this session's targets")
+                    .accessibilityIdentifier("runAssistant.startPlannedRun")
 
                     if session.status == "completed" {
                         Button("Undo Complete") {
@@ -216,6 +226,7 @@ struct RunAssistantDashboardView: View {
                         .buttonStyle(.bordered)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             } else if let session = upcoming {
                 Text("Rest day — nothing scheduled today.")
                     .foregroundStyle(AppTheme.secondaryTextColor)
@@ -230,9 +241,12 @@ struct RunAssistantDashboardView: View {
                 // omit "Complete"/"Skip" here so a session on another day is never
                 // silently marked done from the today card.
                 Button("Start Run") {
-                    onStartRun()
+                    onStartRun(ScheduledRunTarget(session: session))
                 }
                 .buttonStyle(.borderedProminent)
+                .accessibilityLabel("Start planned \(session.sessionType) run")
+                .accessibilityHint("Opens live tracking with this session's targets")
+                .accessibilityIdentifier("runAssistant.startPlannedRun")
             } else {
                 Text("No upcoming sessions scheduled.")
                     .foregroundStyle(AppTheme.secondaryTextColor)
@@ -1111,10 +1125,21 @@ private struct RunAssistantAIGenerationSheet: View {
     private func savePlan(activate: Bool) {
         guard let draft else { return }
         isSaving = true
-        _ = RunAssistantAIService.shared.saveDraft(draft, profile: profile, context: modelContext, activate: activate)
-        isSaving = false
-        onFinished(.success(activate ? .started : .saved))
-        dismiss()
+        do {
+            _ = try RunAssistantAIService.shared.saveDraft(
+                draft,
+                profile: profile,
+                context: modelContext,
+                activate: activate
+            )
+            isSaving = false
+            onFinished(.success(activate ? .started : .saved))
+            dismiss()
+        } catch {
+            isSaving = false
+            localError = error.localizedDescription
+            onFinished(.failure(error))
+        }
     }
 
     private var loadingPromptText: String {

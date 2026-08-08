@@ -26,10 +26,8 @@ struct SettingsView: View {
     @AppStorage("enableBackgroundRunTracking") private var enableBackgroundRunTracking: Bool = true
     @AppStorage("runsLastHealthImportAt") private var runsLastHealthImportAt: Double = 0
     @AppStorage("weightLastHealthImportAt") private var weightLastHealthImportAt: Double = 0
-    @FocusState private var ageFocused: Bool
-    @FocusState private var heightFocused: Bool
-    @FocusState private var goalWeightFocused: Bool
     @State private var showHeightPicker: Bool = false
+    @State private var showGoalWeightPicker: Bool = false
     // Reminder prefs
     @AppStorage("reminderWeekday") private var reminderWeekday: Int = 2
     @AppStorage("reminderHour") private var reminderHour: Int = 9
@@ -41,7 +39,7 @@ struct SettingsView: View {
     @State private var isRefreshingHealthData: Bool = false
     @State private var showHealthSyncResult: Bool = false
     @State private var healthSyncResultMessage: String = ""
-    @State private var locationAuthorizationStatus: CLAuthorizationStatus = CLLocationManager().authorizationStatus
+    @State private var locationAuthorizationStatus: CLAuthorizationStatus = .notDetermined
     private let locationManager = CLLocationManager()
     #if DEBUG
     @State private var confirmAddSampleData: Bool = false
@@ -108,73 +106,32 @@ struct SettingsView: View {
         }
         .alert("Delete All Data?", isPresented: $confirmDeleteAll) {
             Button("Cancel", role: .cancel) {}
-            Button("Delete", role: .destructive) { deleteAllEverywhere() }
+            Button("Delete", role: .destructive) { deleteAllAppData() }
         } message: {
             let cloud = PersistenceController.shared.isCloudBacked
-            Text(cloud ? "This will remove all data from this device and iCloud for your account. This action cannot be undone." : "This will remove all data on this device. This action cannot be undone.")
+            Text(
+                cloud
+                    ? "This removes Pace & Plates data from this device and the app's iCloud store. It does not delete workouts or measurements from Apple Health. This action cannot be undone."
+                    : "This removes Pace & Plates data from this device. It does not delete workouts or measurements from Apple Health. This action cannot be undone."
+            )
         }
         #if DEBUG
-        .alert("Add Sample Data?", isPresented: $confirmAddSampleData) {
-            Button("Cancel", role: .cancel) {}
-            Button("Add Data") {
-                DebugDataGenerator.generateSampleData(context: modelContext)
-            }
-        } message: {
-            Text("This will add 1 month of realistic sample data including workouts and cardio sessions (no weight entries).")
-        }
-        .alert("Remove Sample Data?", isPresented: $confirmRemoveSampleData) {
-            Button("Cancel", role: .cancel) {}
-            Button("Remove", role: .destructive) {
-                DebugDataGenerator.removeSampleData(context: modelContext)
-            }
-        } message: {
-            Text("This will remove only the sample data that was added via 'Add Sample Data'. Your real data will not be affected.")
-        }
+        .modifier(DebugSampleDataAlerts(
+            confirmAddSampleData: $confirmAddSampleData,
+            confirmRemoveSampleData: $confirmRemoveSampleData,
+            modelContext: modelContext
+        ))
         #endif
-        .ignoresSafeArea(.keyboard)
-        // Provide a keyboard toolbar for numeric fields with back/next navigation
-        .toolbar { 
-            ToolbarItemGroup(placement: .keyboard) {
-                // Back button - go to previous field
-                Button {
-                    if goalWeightFocused {
-                        goalWeightFocused = false
-                        ageFocused = true
-                    }
-                } label: {
-                    Image(systemName: "chevron.up")
-                }
-                .disabled(ageFocused)
-                
-                // Next button - go to next field
-                Button {
-                    if ageFocused {
-                        ageFocused = false
-                        goalWeightFocused = true
-                    }
-                } label: {
-                    Image(systemName: "chevron.down")
-                }
-                .disabled(goalWeightFocused)
-                
-                Spacer()
-                
-                Button("Done") {
-                    ageFocused = false
-                    heightFocused = false
-                    goalWeightFocused = false
-                    dismissKeyboard()
-                }
-            }
-        }
         .onAppear {
             if !launchConfiguration.shouldSkipAutomationSideEffects {
                 loadProfileFromHealthKit()
+                refreshLocationAuthorizationStatus()
             }
-            refreshLocationAuthorizationStatus()
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-            refreshLocationAuthorizationStatus()
+            if !launchConfiguration.shouldSkipAutomationSideEffects {
+                refreshLocationAuthorizationStatus()
+            }
         }
     }
 
@@ -240,15 +197,13 @@ struct SettingsView: View {
     }
 
     private var ageRow: some View {
-        HStack {
-            Text("Age")
-            Spacer()
-            TextField("0", value: $age, format: .number)
-                .keyboardType(.numberPad)
-                .multilineTextAlignment(.trailing)
-                .frame(maxWidth: 100)
-                .focused($ageFocused)
+        Picker("Age", selection: $age) {
+            Text("Not Set").tag(0)
+            ForEach(13...120, id: \.self) { value in
+                Text("\(value)").tag(value)
+            }
         }
+        .pickerStyle(.menu)
     }
 
     private var heightRow: some View {
@@ -271,16 +226,24 @@ struct SettingsView: View {
     }
 
     private var goalWeightRow: some View {
-        HStack {
-            Text("Goal Weight")
-            Spacer()
-            TextField("0", value: $targetWeight, format: .number.precision(.fractionLength(0...1)))
-                .keyboardType(.decimalPad)
-                .multilineTextAlignment(.trailing)
-                .frame(maxWidth: 100)
-                .focused($goalWeightFocused)
-            Text(weightUnit)
-                .foregroundStyle(.secondary)
+        Button {
+            showGoalWeightPicker = true
+        } label: {
+            HStack {
+                Text("Goal Weight")
+                Spacer()
+                Text(goalWeightDisplayValue)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: $showGoalWeightPicker) {
+            GoalWeightPickerSheet(
+                weightUnit: weightUnit,
+                targetWeight: $targetWeight
+            )
+            .presentationDetents([.height(340), .medium])
+            .presentationDragIndicator(.visible)
         }
     }
 
@@ -605,7 +568,7 @@ struct SettingsView: View {
             }
 
             Section("Privacy") {
-                Link(destination: URL(string: "https://github.com/JustJ0rsh/Pace-Plates/blob/main/Privacy%20Policy.md")!) {
+                Link(destination: URL(string: "https://paceandplates.com/privacy")!) {
                     Label("Privacy Policy", systemImage: "doc.text")
                 }
             }
@@ -641,6 +604,14 @@ struct SettingsView: View {
         }
 
         return String(format: "%.1f cm", heightValue)
+    }
+
+    private var goalWeightDisplayValue: String {
+        guard targetWeight > 0 else { return "Not set" }
+        let value = targetWeight.formatted(
+            .number.precision(.fractionLength(0...1))
+        )
+        return "\(value) \(weightUnit)"
     }
 
     // MARK: - Backup actions
@@ -721,19 +692,39 @@ struct SettingsView: View {
     private func refreshHealthDataNow() {
         guard !isRefreshingHealthData else { return }
         isRefreshingHealthData = true
+        let expectedPurgeGeneration =
+            WearableWorkoutInboxService.localDataPurgeGeneration
 
         Task { @MainActor in
             do {
                 try await HealthKitManager.shared.requestAuthorization()
+                try ensureHealthImportIsCurrent(expectedPurgeGeneration)
 
-                let runSummary = try await importRunsFromHealth()
-                let weightsInserted = try await importWeightsFromHealth()
+                let cardioResult = await CardioWorkoutInboxService.sync(
+                    context: modelContext,
+                    pageLimit: 100
+                )
+                if let errorMessage = cardioResult.errorMessage {
+                    throw NSError(
+                        domain: "CardioWorkoutInbox",
+                        code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: errorMessage]
+                    )
+                }
+                try ensureHealthImportIsCurrent(expectedPurgeGeneration)
+                let weightsInserted = try await importWeightsFromHealth(
+                    expectedPurgeGeneration: expectedPurgeGeneration
+                )
+                try ensureHealthImportIsCurrent(expectedPurgeGeneration)
 
                 let now = Date().timeIntervalSince1970
                 runsLastHealthImportAt = now
                 weightLastHealthImportAt = now
 
-                healthSyncResultMessage = "Runs: +\(runSummary.inserted) imported, \(runSummary.linked) linked, \(runSummary.skipped) skipped, \(runSummary.deleted) removed. Weights: +\(weightsInserted) imported."
+                healthSyncResultMessage = "Cardio inbox: +\(cardioResult.inserted) ready to review. Weights: +\(weightsInserted) imported."
+            } catch is CancellationError {
+                isRefreshingHealthData = false
+                return
             } catch {
                 healthSyncResultMessage = "Health refresh failed: \(error.localizedDescription)"
             }
@@ -744,8 +735,25 @@ struct SettingsView: View {
     }
 
     @MainActor
-    private func importRunsFromHealth(limit: Int = 100) async throws -> (inserted: Int, linked: Int, skipped: Int, deleted: Int) {
+    private func ensureHealthImportIsCurrent(_ generation: Int) throws {
+        guard WearableWorkoutInboxService
+            .isCurrentLocalDataPurgeGeneration(generation) else {
+            throw CancellationError()
+        }
+    }
+
+    @MainActor
+    private func importRunsFromHealth(
+        limit: Int = 100,
+        expectedPurgeGeneration: Int
+    ) async throws -> (
+        inserted: Int,
+        linked: Int,
+        skipped: Int,
+        unlinked: Int
+    ) {
         let changes = try await HealthKitManager.shared.fetchCardioWorkoutChanges(resetAnchor: false, limit: limit)
+        try ensureHealthImportIsCurrent(expectedPurgeGeneration)
         let workouts = changes.added
         var allRuns = try modelContext.fetch(FetchDescriptor<RunningSession>())
         var existingUUIDs = Set(allRuns.compactMap(\.healthWorkoutUUID).filter { !$0.isEmpty })
@@ -754,17 +762,41 @@ struct SettingsView: View {
         var inserted = 0
         var linked = 0
         var skipped = 0
-        var deleted = 0
+        var unlinked = 0
 
-        if !changes.deletedUUIDs.isEmpty {
-            let deletedSet = Set(changes.deletedUUIDs)
-            for run in allRuns where (run.healthWorkoutUUID.map { deletedSet.contains($0) } ?? false) {
-                modelContext.delete(run)
-                deleted += 1
+        let replacements = SameBatchCardioReplacementReconciler.matches(
+            changes: changes,
+            addedWorkouts: workouts,
+            existingSessions: allRuns.compactMap {
+                run -> CardioReplacementSessionSnapshot? in
+                guard let healthWorkoutUUID = run.healthWorkoutUUID,
+                      !healthWorkoutUUID.isEmpty else { return nil }
+                return CardioReplacementSessionSnapshot(
+                    healthWorkoutUUID: healthWorkoutUUID,
+                    sessionID: run.id,
+                    date: run.date,
+                    distance: run.distance,
+                    distanceUnit: run.distanceUnit,
+                    duration: run.duration,
+                    activityType: run.activityType
+                )
             }
-            allRuns.removeAll { run in
-                guard let uuid = run.healthWorkoutUUID else { return false }
-                return deletedSet.contains(uuid)
+        )
+        let replacementByAddedUUID = Dictionary(
+            uniqueKeysWithValues: replacements.map {
+                ($0.addedWorkoutUUID, $0)
+            }
+        )
+        let replacedDeletedUUIDs = Set(replacements.map(\.deletedUUID))
+
+        let deletedSet = Set(changes.deletedUUIDs)
+            .subtracting(replacedDeletedUUIDs)
+        if !deletedSet.isEmpty {
+            for run in allRuns where (run.healthWorkoutUUID.map { deletedSet.contains($0) } ?? false) {
+                // Preserve the app-local activity and its notes/route. Health
+                // deletion only removes the link; it never deletes app data.
+                run.healthWorkoutUUID = nil
+                unlinked += 1
             }
             existingUUIDs = Set(allRuns.compactMap(\.healthWorkoutUUID).filter { !$0.isEmpty })
         }
@@ -786,8 +818,86 @@ struct SettingsView: View {
             let endDate = workout.endDate
             let duration = workout.duration
             let calories = try? await HealthKitManager.shared.activeEnergyKilocalories(for: workout)
+            try ensureHealthImportIsCurrent(expectedPurgeGeneration)
 
-            if let similar = findSimilarRun(
+            if let replacement = replacementByAddedUUID[uuidStr],
+               let existing = allRuns.first(where: {
+                   $0.id == replacement.sessionID
+               }) {
+                existing.healthWorkoutUUID = uuidStr
+                existing.date = endDate
+                existing.distance = distanceValue
+                existing.distanceUnit = unit
+                existing.duration = duration
+                existing.activityType = activityType
+                if let calories, calories > 0 {
+                    existing.calories = calories
+                }
+
+                // A Health replacement is authoritative. Refresh corrected
+                // metrics while retaining old values when Health omits one.
+                let averageHeartRate = try? await HealthKitManager.shared
+                    .averageHeartRate(for: workout)
+                try ensureHealthImportIsCurrent(expectedPurgeGeneration)
+                if let value = averageHeartRate {
+                    existing.avgHeartRate = value
+                }
+                let maxHeartRate = try? await HealthKitManager.shared
+                    .maxHeartRate(for: workout)
+                try ensureHealthImportIsCurrent(expectedPurgeGeneration)
+                if let value = maxHeartRate {
+                    existing.maxHeartRate = value
+                }
+                let minHeartRate = try? await HealthKitManager.shared
+                    .minHeartRate(for: workout)
+                try ensureHealthImportIsCurrent(expectedPurgeGeneration)
+                if let value = minHeartRate {
+                    existing.minHeartRate = value
+                }
+                let averageCadence = try? await HealthKitManager.shared
+                    .averageCadence(for: workout)
+                try ensureHealthImportIsCurrent(expectedPurgeGeneration)
+                if let value = averageCadence {
+                    existing.avgCadence = value
+                }
+                let maxCadence = try? await HealthKitManager.shared
+                    .maxCadence(for: workout)
+                try ensureHealthImportIsCurrent(expectedPurgeGeneration)
+                if let value = maxCadence {
+                    existing.maxCadence = value
+                }
+                let averageStrideLength = try? await HealthKitManager.shared
+                    .averageStrideLength(for: workout)
+                try ensureHealthImportIsCurrent(expectedPurgeGeneration)
+                if let value = averageStrideLength {
+                    existing.avgStrideLength = value
+                }
+                let averageVerticalOscillation = try? await HealthKitManager
+                    .shared.averageVerticalOscillation(for: workout)
+                try ensureHealthImportIsCurrent(expectedPurgeGeneration)
+                if let value = averageVerticalOscillation {
+                    existing.verticalOscillation = value
+                }
+                let averageGroundContactTime = try? await HealthKitManager
+                    .shared.averageGroundContactTime(for: workout)
+                try ensureHealthImportIsCurrent(expectedPurgeGeneration)
+                if let value = averageGroundContactTime {
+                    existing.groundContactTime = value
+                }
+                let averagePower = try? await HealthKitManager.shared
+                    .averagePower(for: workout)
+                try ensureHealthImportIsCurrent(expectedPurgeGeneration)
+                if let value = averagePower {
+                    existing.avgPower = value
+                }
+                let maxPower = try? await HealthKitManager.shared
+                    .maxPower(for: workout)
+                try ensureHealthImportIsCurrent(expectedPurgeGeneration)
+                if let value = maxPower {
+                    existing.maxPower = value
+                }
+                linked += 1
+            } else if let similar = findSimilarRun(
                 in: allRuns,
                 endDate: endDate,
                 duration: duration,
@@ -820,24 +930,35 @@ struct SettingsView: View {
             existingUUIDs.insert(uuidStr)
         }
 
-        if inserted > 0 || linked > 0 || deleted > 0 {
+        try ensureHealthImportIsCurrent(expectedPurgeGeneration)
+        if inserted > 0 || linked > 0 || unlinked > 0 {
             try modelContext.save()
         }
 
+        try ensureHealthImportIsCurrent(expectedPurgeGeneration)
         HealthKitManager.shared.persistCardioWorkoutAnchor(changes.newAnchor)
 
-        return (inserted, linked, skipped, deleted)
+        return (inserted, linked, skipped, unlinked)
     }
 
     @MainActor
-    private func importWeightsFromHealth() async throws -> Int {
+    private func importWeightsFromHealth(
+        expectedPurgeGeneration: Int
+    ) async throws -> Int {
         let history = try await HealthKitManager.shared.getWeightHistory()
+        try ensureHealthImportIsCurrent(expectedPurgeGeneration)
         let existing = try modelContext.fetch(FetchDescriptor<WeightEntry>())
         var existingDays = Set(existing.map { Calendar.current.startOfDay(for: $0.date) })
 
         // Keep only the LATEST sample per day within the imported batch so an
         // evening correction wins over a morning weigh-in (getWeightHistory is oldest-first).
-        let latestPerDay = HealthKitManager.latestWeightSamplesPerDay(history)
+        let purgeCutoff =
+            WearableWorkoutInboxService.localDataPurgeCutoffDate
+        let latestPerDay = HealthKitManager.latestWeightSamplesPerDay(
+            history.filter { item in
+                purgeCutoff.map { item.date > $0 } ?? true
+            }
+        )
 
         var inserted = 0
         for item in latestPerDay {
@@ -859,6 +980,7 @@ struct SettingsView: View {
             inserted += 1
         }
 
+        try ensureHealthImportIsCurrent(expectedPurgeGeneration)
         if inserted > 0 {
             try modelContext.save()
         }
@@ -938,17 +1060,7 @@ struct SettingsView: View {
             
             for run in allRuns {
                 let isDuplicate = runsToKeep.contains { existing in
-                    if let uuid1 = existing.healthWorkoutUUID, !uuid1.isEmpty,
-                       let uuid2 = run.healthWorkoutUUID, !uuid2.isEmpty {
-                        return uuid1 == uuid2
-                    }
-
-                    return HealthKitManager.runsAreSimilar(
-                        aDate: existing.date, aDuration: existing.duration,
-                        aDistance: existing.distance, aUnit: existing.distanceUnit,
-                        bDate: run.date, bDuration: run.duration,
-                        bDistance: run.distance, bUnit: run.distanceUnit
-                    )
+                    DataBackupService.areRunningSessionsDefiniteDuplicates(existing, run)
                 }
                 
                 if isDuplicate {
@@ -964,15 +1076,10 @@ struct SettingsView: View {
             let allWeights = try modelContext.fetch(FetchDescriptor<WeightEntry>(sortBy: [SortDescriptor(\.date, order: .forward)]))
             var weightsToKeep: [WeightEntry] = []
             var duplicateWeights: [WeightEntry] = []
-            let calendar = Calendar.current
             
             for weight in allWeights {
                 let isDuplicate = weightsToKeep.contains { existing in
-                    let sameDay = calendar.isDate(existing.date, inSameDayAs: weight.date)
-                    let weightDiff = abs(existing.weight - weight.weight)
-                    return sameDay &&
-                           existing.weightUnit == weight.weightUnit &&
-                           weightDiff < 0.5
+                    DataBackupService.areWeightEntriesDefiniteDuplicates(existing, weight)
                 }
                 
                 if isDuplicate {
@@ -991,8 +1098,7 @@ struct SettingsView: View {
             
             for session in allSessions {
                 let isDuplicate = sessionsToKeep.contains { existing in
-                    let timeDiff = abs(existing.date.timeIntervalSince(session.date))
-                    return timeDiff < 120 // within 2 minutes
+                    DataBackupService.areWorkoutSessionsDefiniteDuplicates(existing, session)
                 }
                 
                 if isDuplicate {
@@ -1026,7 +1132,7 @@ struct SettingsView: View {
     private func deleteAllLocal() {
         do {
             try deleteAllEntities()
-            alertMessage = "All data on this device has been removed."
+            alertMessage = "All Pace & Plates data has been removed. Apple Health data was not changed."
             showAlert = true
         } catch {
             alertMessage = "Delete failed: \(error.localizedDescription)"
@@ -1034,12 +1140,16 @@ struct SettingsView: View {
         }
     }
 
-    private func deleteAllEverywhere() {
+    private func deleteAllAppData() {
         // With Cloud Sync enabled, deleting from the context propagates to iCloud.
         deleteAllLocal()
     }
 
     private func deleteAllEntities() throws {
+        // Prevent a Health query that is currently suspended on metric reads
+        // from repopulating SwiftData after this app-local purge completes.
+        WearableWorkoutInboxService.prepareForLocalDataPurge()
+
         // Delete children first, then parents
         let logItems = try modelContext.fetch(FetchDescriptor<ExerciseLog>())
         logItems.forEach { modelContext.delete($0) }
@@ -1047,6 +1157,10 @@ struct SettingsView: View {
         runPlanSessions.forEach { modelContext.delete($0) }
         let templateExercises = try modelContext.fetch(FetchDescriptor<TemplateExercise>())
         templateExercises.forEach { modelContext.delete($0) }
+        let inboxItems = try modelContext.fetch(FetchDescriptor<HealthWorkoutInboxItem>())
+        inboxItems.forEach { modelContext.delete($0) }
+        let cardioInboxItems = try modelContext.fetch(FetchDescriptor<CardioWorkoutInboxItem>())
+        cardioInboxItems.forEach { modelContext.delete($0) }
 
         let sessions = try modelContext.fetch(FetchDescriptor<WorkoutSession>())
         sessions.forEach { modelContext.delete($0) }
@@ -1065,8 +1179,37 @@ struct SettingsView: View {
         let weights = try modelContext.fetch(FetchDescriptor<WeightEntry>())
         weights.forEach { modelContext.delete($0) }
         try modelContext.save()
+        WearableWorkoutInboxService.completeLocalDataPurge()
     }
 }
+
+#if DEBUG
+private struct DebugSampleDataAlerts: ViewModifier {
+    @Binding var confirmAddSampleData: Bool
+    @Binding var confirmRemoveSampleData: Bool
+    let modelContext: ModelContext
+
+    func body(content: Content) -> some View {
+        content
+            .alert("Add Sample Data?", isPresented: $confirmAddSampleData) {
+                Button("Cancel", role: .cancel) {}
+                Button("Add Data") {
+                    DebugDataGenerator.generateSampleData(context: modelContext)
+                }
+            } message: {
+                Text("This will add 1 month of realistic sample data including workouts and cardio sessions (no weight entries).")
+            }
+            .alert("Remove Sample Data?", isPresented: $confirmRemoveSampleData) {
+                Button("Cancel", role: .cancel) {}
+                Button("Remove", role: .destructive) {
+                    DebugDataGenerator.removeSampleData(context: modelContext)
+                }
+            } message: {
+                Text("This will remove only the sample data that was added via 'Add Sample Data'. Your real data will not be affected.")
+            }
+    }
+}
+#endif
 
 private struct LazySettingsDestination<Content: View>: View {
     let content: () -> Content
@@ -1132,6 +1275,79 @@ extension SettingsView {
     }
 
     // MARK: - Height Picker
+    private struct GoalWeightPickerSheet: View {
+        let weightUnit: String
+        @Binding var targetWeight: Double
+        @Environment(\.dismiss) private var dismiss
+        @State private var wholeValue: Int = 180
+        @State private var decimalValue: Int = 0
+
+        private var allowedWholeValues: ClosedRange<Int> {
+            weightUnit == "kg" ? 25...320 : 55...700
+        }
+
+        var body: some View {
+            NavigationStack {
+                HStack(spacing: 0) {
+                    Picker("Weight", selection: $wholeValue) {
+                        ForEach(allowedWholeValues, id: \.self) { value in
+                            Text("\(value) \(weightUnit)").tag(value)
+                        }
+                    }
+                    .pickerStyle(.wheel)
+
+                    Picker("Decimal", selection: $decimalValue) {
+                        ForEach(0...9, id: \.self) { value in
+                            Text(".\(value)").tag(value)
+                        }
+                    }
+                    .pickerStyle(.wheel)
+                }
+                .frame(height: 220)
+                .onAppear(perform: loadValue)
+                .onChange(of: wholeValue) { _, _ in applyValue() }
+                .onChange(of: decimalValue) { _, _ in applyValue() }
+                .navigationTitle("Goal Weight")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { dismiss() }
+                    }
+                }
+            }
+        }
+
+        private func loadValue() {
+            let fallback = weightUnit == "kg" ? 82.0 : 180.0
+            let rawValue = targetWeight > 0 ? targetWeight : fallback
+            let lower = Double(allowedWholeValues.lowerBound)
+            let upper = Double(allowedWholeValues.upperBound) + 0.9
+            let clamped = min(max(rawValue, lower), upper)
+            let rounded = (clamped * 10).rounded() / 10
+            let wholePart = Int(floor(rounded))
+            wholeValue = min(
+                max(wholePart, allowedWholeValues.lowerBound),
+                allowedWholeValues.upperBound
+            )
+            decimalValue = min(
+                max(
+                    Int(
+                        ((rounded - Double(wholeValue)) * 10)
+                            .rounded()
+                    ),
+                    0
+                ),
+                9
+            )
+            applyValue()
+        }
+
+        private func applyValue() {
+            targetWeight =
+                Double(wholeValue) + (Double(decimalValue) / 10)
+        }
+    }
+
     private struct HeightPickerSheet: View {
         @Binding var heightUnit: String
         @Binding var heightValue: Double

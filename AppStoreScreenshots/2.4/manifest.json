@@ -1,0 +1,50 @@
+{
+  "app": "Pace & Plates",
+  "version": "2.4",
+  "device_class": "iPhone 6.9-inch",
+  "dimensions": [
+    1320,
+    2868
+  ],
+  "format": "PNG, RGB, no alpha",
+  "hardware_model": "assets/iphone-model.png",
+  "composition": "Generated iPhone hardware asset with deterministic, unmodified Simulator UI compositing",
+  "screenshots": [
+    {
+      "file": "01-your-fitness.png",
+      "source": "raw/01-home.png",
+      "headline": "Your fitness,\nall in one place.",
+      "subhead": "Workouts, cardio, weight and progress\u2014together."
+    },
+    {
+      "file": "02-every-rep.png",
+      "source": "raw/02-workouts.png",
+      "headline": "See every rep\nadd up.",
+      "subhead": "Log sets, review volume and stay consistent."
+    },
+    {
+      "file": "03-every-workout.png",
+      "source": "raw/04-runs.png",
+      "headline": "Every workout\ncounts.",
+      "subhead": "Track runs, walks, rides and more in one history."
+    },
+    {
+      "file": "04-progress-visible.png",
+      "source": "raw/05-weight.png",
+      "headline": "Make progress\nvisible.",
+      "subhead": "Follow your trend without losing sight of the work."
+    },
+    {
+      "file": "05-plan-smarter.png",
+      "source": "raw/03-ai.png",
+      "headline": "Plan smarter.\nTrain your way.",
+      "subhead": "Build weekly plans with on-device Apple Intelligence."
+    },
+    {
+      "file": "06-run-plan.png",
+      "source": "raw/06-running-assistant.png",
+      "headline": "A run plan that\nfits your life.",
+      "subhead": "Choose a goal, follow each session and build momentum."
+    }
+  ]
+}

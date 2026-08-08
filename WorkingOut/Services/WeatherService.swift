@@ -65,8 +65,8 @@ final class WeatherViewModel: NSObject, ObservableObject, @MainActor CLLocationM
             return
         }
         isFetching = true
-        if let coord = manager.location?.coordinate {
-            Task { await load(for: coord) }
+        if let location = manager.location, isUsableRecentLocation(location) {
+            Task { await load(for: location.coordinate) }
         } else {
             manager.requestLocation()
         }
@@ -84,13 +84,19 @@ final class WeatherViewModel: NSObject, ObservableObject, @MainActor CLLocationM
         }
     }
 
+    private func isUsableRecentLocation(_ location: CLLocation) -> Bool {
+        location.horizontalAccuracy >= 0
+            && location.horizontalAccuracy <= 1_000
+            && abs(location.timestamp.timeIntervalSinceNow) <= 300
+    }
+
     // CLLocationManagerDelegate
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        if let loc = locations.last?.coordinate {
-            Task { await load(for: loc) }
+        if let location = locations.last(where: isUsableRecentLocation) {
+            Task { await load(for: location.coordinate) }
         } else {
             isFetching = false
-            errorText = "Location not available"
+            errorText = "Current location not available"
         }
     }
 

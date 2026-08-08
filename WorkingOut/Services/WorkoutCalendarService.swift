@@ -10,6 +10,7 @@ final class WorkoutCalendarService {
     private init() {}
     
     private let eventStore = EKEventStore()
+    private let eventIdentifiersKeyPrefix = "WorkoutCalendarService.eventIdentifiers."
     
     enum CalendarError: LocalizedError {
         case accessDenied
@@ -113,12 +114,22 @@ final class WorkoutCalendarService {
         // Create events starting tomorrow
         let startDate = Calendar.current.startOfDay(for: Date().addingTimeInterval(86400)) // Tomorrow
         
-        var createdCount = 0
+        var scheduledEvents: [Int: EKEvent] = [:]
+        let storedIdentifiers = storedEventIdentifiers(for: conversation.id)
         for (dayIndex, workoutInfo) in workoutDays.enumerated() {
             let dayDate = Calendar.current.date(byAdding: .day, value: dayIndex, to: startDate)!
-            
-            // Create event
-            let event = EKEvent(eventStore: eventStore)
+
+            // Reuse the previously scheduled event for this plan/day. This makes
+            // tapping Schedule again idempotent while still allowing changed
+            // times, notes, or calendars to update the existing event.
+            let event: EKEvent
+            if let identifier = storedIdentifiers[String(dayIndex)],
+               let existing = eventStore.event(withIdentifier: identifier) {
+                event = existing
+            } else {
+                event = EKEvent(eventStore: eventStore)
+            }
+
             // Title/emoji hint for rest vs training
             let lowerTitle = workoutInfo.title.lowercased()
             let lowerDetails = workoutInfo.details.lowercased()
@@ -140,22 +151,42 @@ final class WorkoutCalendarService {
             event.endDate = eventStart.addingTimeInterval(TimeInterval(duration * 60))
             
             // Add reminder 30 minutes before
-            let alarm = EKAlarm(relativeOffset: -1800) // 30 minutes before
-            event.addAlarm(alarm)
+            let hasThirtyMinuteAlarm = (event.alarms ?? []).contains {
+                $0.absoluteDate == nil && $0.relativeOffset == -1800
+            }
+            if !hasThirtyMinuteAlarm {
+                let alarm = EKAlarm(relativeOffset: -1800) // 30 minutes before
+                event.addAlarm(alarm)
+            }
             
             // Save event
             try eventStore.save(event, span: .thisEvent, commit: false)
-            createdCount += 1
+            scheduledEvents[dayIndex] = event
         }
         
         // Commit all changes at once
         try eventStore.commit()
-        
-        guard createdCount > 0 else {
+
+        guard !scheduledEvents.isEmpty else {
             throw CalendarError.failedToCreateEvents
         }
-        
-        print("✅ Successfully created \(createdCount) workout events in calendar")
+
+        let identifiers: [String: String] = Dictionary(uniqueKeysWithValues: scheduledEvents.compactMap { dayIndex, event in
+            guard let identifier = event.eventIdentifier else { return nil }
+            return (String(dayIndex), identifier)
+        })
+        UserDefaults.standard.set(
+            identifiers,
+            forKey: eventIdentifiersKeyPrefix + conversation.id.uuidString
+        )
+
+        print("✅ Successfully scheduled \(scheduledEvents.count) workout events in calendar")
+    }
+
+    private func storedEventIdentifiers(for conversationID: UUID) -> [String: String] {
+        UserDefaults.standard.dictionary(
+            forKey: eventIdentifiersKeyPrefix + conversationID.uuidString
+        ) as? [String: String] ?? [:]
     }
     
     /// Parse workout days from structured JSON plan

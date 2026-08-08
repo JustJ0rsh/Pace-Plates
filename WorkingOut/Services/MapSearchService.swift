@@ -1,5 +1,6 @@
 import Foundation
 import MapKit
+import CoreLocation
 
 // Global throttled MapKit search helper to avoid PlaceRequest throttling.
 // Serializes MKLocalSearch calls and enforces a minimum delay between requests.
@@ -37,36 +38,45 @@ actor MapSearchService {
             return cached
         }
 
-        // Throttle: wait if last request was too recent
-        if let last = lastRequestAt {
-            let elapsed = Date().timeIntervalSince(last)
-            if elapsed < minDelay {
-                let wait = minDelay - elapsed
-                try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+        // Reserve a request slot before suspending. Actors are reentrant, so
+        // updating this only after the network call lets concurrent callers all
+        // pass the throttle together.
+        let now = Date()
+        let requestAt = max(now, lastRequestAt?.addingTimeInterval(minDelay) ?? now)
+        lastRequestAt = requestAt
+        let wait = requestAt.timeIntervalSince(now)
+        if wait > 0 {
+            do {
+                try await Task.sleep(for: .seconds(wait))
+            } catch {
+                return nil
             }
         }
 
-        // Prepare MapKit search for nearest address within a small region
-        let span = MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.12)
-        let region = MKCoordinateRegion(center: coordinate, span: span)
-        let request = MKLocalSearch.Request()
-        request.resultTypes = .address
-        request.region = region
-        let search = MKLocalSearch(request: request)
+        guard let request = MKReverseGeocodingRequest(
+            location: CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        ) else {
+            return nil
+        }
 
         do {
-            let response = try await search.start()
-            lastRequestAt = Date()
-            if let item = response.mapItems.first, let name = item.name, !name.isEmpty {
+            let mapItems: [MKMapItem] = try await withCheckedThrowingContinuation { continuation in
+                request.getMapItems { items, error in
+                    if let error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume(returning: items ?? [])
+                    }
+                }
+            }
+            if let item = mapItems.first, let name = item.name, !name.isEmpty {
                 cache[key] = name
                 var persistent = persistentCache
                 persistent[key] = name
                 self.persistentCache = persistent
                 return name
             }
-        } catch {
-            lastRequestAt = Date()
-        }
+        } catch { }
 
         return nil
     }
@@ -78,4 +88,3 @@ actor MapSearchService {
         return String(format: "%.4f,%.4f", lat, lon)
     }
 }
-

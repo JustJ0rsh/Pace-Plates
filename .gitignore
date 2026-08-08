@@ -13,6 +13,7 @@ AuthKey_*.p8
 # Local build/test artifacts
 .tmp/
 .swift-module-cache/
+build/
 DerivedData/
 xcuserdata/
 *.xcuserstate

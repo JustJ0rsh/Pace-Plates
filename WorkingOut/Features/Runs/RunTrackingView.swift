@@ -46,6 +46,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
     
     // Activity type: "running", "walking", or "hiking"
     var activityType: String = "running"
+    var plannedTarget: ScheduledRunTarget? = nil
     
     // Throttle for map follow updates
     var lastFollowUpdate: Date? = nil
@@ -92,6 +93,8 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
     }
     
     func requestAuthorization(startAfterAuth: Bool = false) {
+        guard !AppLaunchConfiguration.current.isUITest else { return }
+
         switch manager.authorizationStatus {
         case .notDetermined:
             pendingStartAfterAuth = startAfterAuth
@@ -106,11 +109,24 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
     }
     
     func requestCurrentLocation() {
+        guard !AppLaunchConfiguration.current.isUITest else { return }
+
         // One-time location request to populate last known location without continuous updates
         manager.requestLocation()
     }
 
-    func clearCurrentRun(resetActivityType: Bool = false) {
+    var hasRecoverableActivity: Bool {
+        isRunning
+            || startDate != nil
+            || duration > 0
+            || distance > 0
+            || !route.isEmpty
+    }
+
+    func clearCurrentRun(
+        resetActivityType: Bool = false,
+        resetPlannedTarget: Bool = true
+    ) {
         route.removeAll()
         distance = 0.0
         duration = 0.0
@@ -130,14 +146,21 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         if resetActivityType {
             activityType = "running"
         }
+        if resetPlannedTarget {
+            plannedTarget = nil
+        }
     }
 
     func startRun() {
-        clearCurrentRun()
+        // The target is selected before location authorization may be granted.
+        // Preserve it while clearing metrics for a fresh run.
+        clearCurrentRun(resetPlannedTarget: false)
         startDate = Date()
-        maybeRequestAlwaysAuthorizationUpgradeIfNeeded()
-        updateBackgroundLocationMode(isActiveRun: true)
-        manager.startUpdatingLocation()
+        if !AppLaunchConfiguration.current.isUITest {
+            maybeRequestAlwaysAuthorizationUpgradeIfNeeded()
+            updateBackgroundLocationMode(isActiveRun: true)
+            manager.startUpdatingLocation()
+        }
         startTimer()
         isRunning = true
         // Start Live Activity (if available)
@@ -241,7 +264,9 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         return RunningSession(distance: distance / (distanceUnit == "km" ? 1000 : 1609.34), // Convert meters to selected unit
                               distanceUnit: distanceUnit,
                               duration: duration,
+                              notes: plannedTarget?.notes,
                               locations: locationsData,
+                              plannedSessionID: plannedTarget?.sessionID,
                               activityType: activityType,
                               totalAscent: elevationMetrics?.ascent,
                               totalDescent: elevationMetrics?.descent,
@@ -484,9 +509,19 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
 
 struct RunTrackingProView: View {
     let activityType: String
+    let plannedTarget: ScheduledRunTarget?
+
+    init(
+        activityType: String,
+        plannedTarget: ScheduledRunTarget? = nil
+    ) {
+        self.activityType = activityType
+        self.plannedTarget = plannedTarget
+    }
     
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     
     @State private var runTracker = RunTracker.shared
     @State private var showingAlert = false
@@ -505,6 +540,12 @@ struct RunTrackingProView: View {
     
     // Throttle interval to reduce choppy re-centering
     private let followThrottle: TimeInterval = 1.0
+
+    private var controlsLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 12))
+            : AnyLayout(HStackLayout(spacing: 12))
+    }
     
     // Formatter for distance
     private var distanceFormatter: NumberFormatter {
@@ -558,8 +599,16 @@ struct RunTrackingProView: View {
         }
     }
 
+    private var effectiveActivityType: String {
+        runTracker.hasRecoverableActivity ? runTracker.activityType : activityType
+    }
+
+    private var effectivePlannedTarget: ScheduledRunTarget? {
+        runTracker.hasRecoverableActivity ? runTracker.plannedTarget : plannedTarget
+    }
+
     private var activityDisplayName: String {
-        switch activityType.lowercased() {
+        switch effectiveActivityType.lowercased() {
         case "run", "running":
             return "Run"
         case "walk", "walking":
@@ -571,7 +620,7 @@ struct RunTrackingProView: View {
         case "swim", "swimming":
             return "Swim"
         default:
-            return activityType
+            return effectiveActivityType
                 .replacingOccurrences(of: "_", with: " ")
                 .replacingOccurrences(of: "-", with: " ")
                 .split(separator: " ")
@@ -579,50 +628,244 @@ struct RunTrackingProView: View {
                 .joined(separator: " ")
         }
     }
+
+    private var metersPerDistanceUnit: Double {
+        runTracker.distanceUnit == "km" ? 1000 : 1609.34
+    }
+
+    private var currentPaceSecondsPerUnit: Double? {
+        if let smoothed = runTracker.smoothedPaceSecondsPerUnit,
+           smoothed.isFinite,
+           smoothed > 0 {
+            return smoothed
+        }
+        guard runTracker.distance >= 25, runTracker.duration > 0 else { return nil }
+        return runTracker.duration / (runTracker.distance / metersPerDistanceUnit)
+    }
+
+    private func targetPaceSecondsPerUnit(_ target: ScheduledRunTarget) -> Double? {
+        guard let minutesPerMile = target.targetPaceMinPerMile,
+              minutesPerMile.isFinite,
+              minutesPerMile > 0 else {
+            return nil
+        }
+        let secondsPerMile = minutesPerMile * 60
+        return runTracker.distanceUnit == "km"
+            ? secondsPerMile / 1.60934
+            : secondsPerMile
+    }
+
+    private func paceGuidance(for target: ScheduledRunTarget) -> String? {
+        guard let targetPace = targetPaceSecondsPerUnit(target) else { return nil }
+        guard let currentPace = currentPaceSecondsPerUnit else {
+            return "Target pace: \(formatDuration(targetPace)) per \(runTracker.distanceUnit)"
+        }
+
+        let difference = currentPace - targetPace
+        let tolerance = max(10, targetPace * 0.03)
+        if abs(difference) <= tolerance {
+            return "On target pace at \(formatDuration(currentPace)) per \(runTracker.distanceUnit)"
+        } else if difference < 0 {
+            return "Ease back slightly — current pace is \(formatDuration(currentPace)) per \(runTracker.distanceUnit)"
+        } else {
+            return "Build pace gradually — current pace is \(formatDuration(currentPace)) per \(runTracker.distanceUnit)"
+        }
+    }
+
+    private func intensityGuidance(for intensity: String) -> String {
+        switch intensity.lowercased() {
+        case "easy":
+            return "Easy effort · relaxed and conversational"
+        case "hard":
+            return "Hard effort · strong and controlled"
+        default:
+            return "Moderate effort · steady, with short phrases possible"
+        }
+    }
+
+    @ViewBuilder
+    private func plannedRunGuidanceCard(_ target: ScheduledRunTarget) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "target")
+                    .foregroundStyle(AppTheme.accentColor)
+                    .accessibilityHidden(true)
+                Text("Planned \(target.sessionType.capitalized) Run")
+                    .font(.headline)
+            }
+
+            if let targetDistance = target.targetDistanceMeters, targetDistance > 0 {
+                let current = runTracker.distance / metersPerDistanceUnit
+                let goal = targetDistance / metersPerDistanceUnit
+                targetProgressRow(
+                    label: "Distance",
+                    detail: "\(formattedDistance(current)) of \(formattedDistance(goal)) \(runTracker.distanceUnit)",
+                    progress: runTracker.distance / targetDistance
+                )
+            }
+
+            if let targetDuration = target.targetDurationSeconds, targetDuration > 0 {
+                targetProgressRow(
+                    label: "Duration",
+                    detail: "\(formatDuration(runTracker.duration)) of \(formatDuration(targetDuration))",
+                    progress: runTracker.duration / targetDuration
+                )
+            }
+
+            Text(intensityGuidance(for: target.intensityLevel))
+                .font(.subheadline.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel("Intensity guidance: \(intensityGuidance(for: target.intensityLevel))")
+
+            if let guidance = paceGuidance(for: target) {
+                Label(guidance, systemImage: "speedometer")
+                    .font(.subheadline)
+                    .foregroundStyle(AppTheme.secondaryTextColor)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel("Pace guidance: \(guidance)")
+            }
+
+            if let notes = target.notes?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !notes.isEmpty {
+                Text(notes)
+                    .font(.footnote)
+                    .foregroundStyle(AppTheme.secondaryTextColor)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel("Coach note: \(notes)")
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.secondaryBackgroundColor, in: RoundedRectangle(cornerRadius: 14))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("runTracking.plannedTarget")
+    }
+
+    @ViewBuilder
+    private func targetProgressRow(
+        label: String,
+        detail: String,
+        progress: Double
+    ) -> some View {
+        let normalizedProgress = min(max(progress, 0), 1)
+        VStack(alignment: .leading, spacing: 5) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(label)
+                        .font(.subheadline.weight(.semibold))
+                    Spacer(minLength: 8)
+                    Text(detail)
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(AppTheme.secondaryTextColor)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(label)
+                        .font(.subheadline.weight(.semibold))
+                    Text(detail)
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(AppTheme.secondaryTextColor)
+                }
+            }
+            ProgressView(value: normalizedProgress)
+                .tint(AppTheme.accentColor)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(label) target progress")
+        .accessibilityValue("\(detail), \(Int((normalizedProgress * 100).rounded())) percent")
+    }
+
+    private func formattedDistance(_ value: Double) -> String {
+        distanceFormatter.string(from: NSNumber(value: value)) ?? "0"
+    }
+
+    @ViewBuilder
+    private func trackingStat(label: String, value: String) -> some View {
+        VStack(spacing: 3) {
+            Text(value)
+                .font(.title2.monospacedDigit())
+                .minimumScaleFactor(0.75)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue(value)
+    }
     
     var body: some View {
         VStack(spacing: 0) {
-            // Permission status banner
-            if runTracker.authorizationStatus == .notDetermined {
-                HStack(spacing: 12) {
-                    Image(systemName: "location.fill")
-                        .foregroundStyle(.yellow)
-                    Text("We need your location to track this \(activityDisplayName.lowercased()).")
-                        .font(.callout)
-                    Spacer()
-                    Button("Allow") {
-                        runTracker.requestAuthorization()
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .padding(12)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                .padding([.horizontal, .top])
-            } else if runTracker.authorizationStatus == .denied || runTracker.authorizationStatus == .restricted {
-                HStack(spacing: 12) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                    Text("Location access is off. Enable it in Settings to start this \(activityDisplayName.lowercased()).")
-                        .font(.callout)
-                    Spacer()
-                    Button("Open Settings") {
-                        #if os(iOS)
-                        if let url = URL(string: UIApplication.openSettingsURLString) {
-                            UIApplication.shared.open(url)
+            ScrollView {
+                VStack(spacing: 0) {
+                    // Permission status banner
+                    if runTracker.authorizationStatus == .notDetermined {
+                        HStack(spacing: 12) {
+                            Image(systemName: "location.fill")
+                                .foregroundStyle(.yellow)
+                            Text("We need your location to track this \(activityDisplayName.lowercased()).")
+                                .font(.callout)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer()
+                            Button("Allow") {
+                                runTracker.requestAuthorization()
+                            }
+                            .buttonStyle(.borderedProminent)
                         }
-                        #endif
+                        .padding(12)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                        .padding([.horizontal, .top])
+                    } else if runTracker.authorizationStatus == .denied || runTracker.authorizationStatus == .restricted {
+                        HStack(spacing: 12) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                            Text("Location access is off. Enable it in Settings to start this \(activityDisplayName.lowercased()).")
+                                .font(.callout)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer()
+                            Button("Open Settings") {
+                                #if os(iOS)
+                                if let url = URL(string: UIApplication.openSettingsURLString) {
+                                    UIApplication.shared.open(url)
+                                }
+                                #endif
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                        .padding(12)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                        .padding([.horizontal, .top])
                     }
-                    .buttonStyle(.bordered)
-                }
-                .padding(12)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                .padding([.horizontal, .top])
-            }
             
             // Interactive Map
             ZStack(alignment: .topTrailing) {
                 Map(position: $cameraPosition, interactionModes: .all) {
-                    UserAnnotation()
+                    // RunTracker already owns Core Location authorization and
+                    // updates. Render its location directly instead of asking
+                    // MapKit to create a second location provider for
+                    // UserAnnotation.
+                    if let coordinate = runTracker.location?.coordinate {
+                        Annotation(
+                            "Current location",
+                            coordinate: coordinate,
+                            anchor: .center
+                        ) {
+                            Circle()
+                                .fill(.blue)
+                                .overlay {
+                                    Circle()
+                                        .stroke(.white, lineWidth: 3)
+                                }
+                                .frame(width: 20, height: 20)
+                                .shadow(
+                                    color: .black.opacity(0.25),
+                                    radius: 2,
+                                    y: 1
+                                )
+                                .accessibilityHidden(true)
+                        }
+                    }
                 }
                 .onMapCameraChange { context in
                     region = context.region
@@ -666,8 +909,12 @@ struct RunTrackingProView: View {
                     runTracker.requestCurrentLocation()
                 }
                 .onAppear {
-                    // Set the activity type from the parameter
-                    runTracker.activityType = activityType
+                    // Opening another tracking entry point must never relabel or
+                    // replace an activity that is already running or paused.
+                    if !runTracker.hasRecoverableActivity {
+                        runTracker.activityType = activityType
+                        runTracker.plannedTarget = plannedTarget
+                    }
                     
                     // Initial center if we already have a location
                     if let coord = runTracker.location?.coordinate {
@@ -681,53 +928,71 @@ struct RunTrackingProView: View {
                 }
             }
             
-            // Stats Display
-            HStack(spacing: 20) {
-                VStack {
-                    Text(formatDuration(runTracker.duration))
-                        .font(.largeTitle)
-                    Text("Duration")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                VStack {
-                    let distanceInUnit = runTracker.distance / (runTracker.distanceUnit == "km" ? 1000 : 1609.34)
-                    Text(distanceFormatter.string(from: NSNumber(value: distanceInUnit)) ?? "0.00")
-                        .font(.largeTitle)
-                    Text("Distance (\(runTracker.distanceUnit))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                VStack {
-                    Text(pace)
-                        .font(.largeTitle)
-                    Text("Pace (/\(runTracker.distanceUnit))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if let target = effectivePlannedTarget {
+                        plannedRunGuidanceCard(target)
+                            .padding([.horizontal, .top])
+                    }
+
+                    // Stats Display
+                    let distanceInUnit = runTracker.distance / metersPerDistanceUnit
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 20) {
+                            trackingStat(
+                                label: "Duration",
+                                value: formatDuration(runTracker.duration)
+                            )
+                            trackingStat(
+                                label: "Distance (\(runTracker.distanceUnit))",
+                                value: formattedDistance(distanceInUnit)
+                            )
+                            trackingStat(
+                                label: "Pace per \(runTracker.distanceUnit)",
+                                value: pace
+                            )
+                        }
+                        VStack(spacing: 12) {
+                            trackingStat(
+                                label: "Duration",
+                                value: formatDuration(runTracker.duration)
+                            )
+                            trackingStat(
+                                label: "Distance (\(runTracker.distanceUnit))",
+                                value: formattedDistance(distanceInUnit)
+                            )
+                            trackingStat(
+                                label: "Pace per \(runTracker.distanceUnit)",
+                                value: pace
+                            )
+                        }
+                    }
+                    .padding()
                 }
             }
-            .padding()
-            
-            Spacer()
             
             // Control Buttons
-            HStack(spacing: 12) {
+            controlsLayout {
                 if !runTracker.isRunning {
                     Button {
                         #if os(iOS)
-                        switch runTracker.authorizationStatus {
-                        case .authorizedAlways, .authorizedWhenInUse:
+                        if AppLaunchConfiguration.current.isUITest {
                             if runTracker.duration == 0 { runTracker.startRun() } else { runTracker.resumeRun() }
                             shouldFollowUser = true
-                            recenterOnUser()
                             runTracker.lastFollowUpdate = nil
-                        case .notDetermined:
-                            runTracker.requestAuthorization(startAfterAuth: true)
-                        case .denied, .restricted:
-                            alertMessage = "Location access is required to start this \(activityDisplayName.lowercased()). Please enable it in Settings > Privacy > Location Services."
-                            showingAlert = true
-                        @unknown default:
-                            runTracker.requestAuthorization(startAfterAuth: false)
+                        } else {
+                            switch runTracker.authorizationStatus {
+                            case .authorizedAlways, .authorizedWhenInUse:
+                                if runTracker.duration == 0 { runTracker.startRun() } else { runTracker.resumeRun() }
+                                shouldFollowUser = true
+                                recenterOnUser()
+                                runTracker.lastFollowUpdate = nil
+                            case .notDetermined:
+                                runTracker.requestAuthorization(startAfterAuth: true)
+                            case .denied, .restricted:
+                                alertMessage = "Location access is required to start this \(activityDisplayName.lowercased()). Please enable it in Settings > Privacy > Location Services."
+                                showingAlert = true
+                            @unknown default:
+                                runTracker.requestAuthorization(startAfterAuth: false)
+                            }
                         }
                         #else
                         if runTracker.duration == 0 { runTracker.startRun() } else { runTracker.resumeRun() }
@@ -739,7 +1004,8 @@ struct RunTrackingProView: View {
                         Label(runTracker.duration == 0 ? "Start" : "Resume", systemImage: runTracker.duration == 0 ? "play.fill" : "arrow.clockwise")
                             .font(.headline)
                             .frame(maxWidth: .infinity)
-                            .frame(height: 48)
+                            .frame(minHeight: 48)
+                            .padding(.vertical, 4)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.borderedProminent)
@@ -755,7 +1021,8 @@ struct RunTrackingProView: View {
                                 Label("Stop & Save", systemImage: "stop.fill")
                                     .font(.headline)
                                     .frame(maxWidth: .infinity)
-                                    .frame(height: 48)
+                                    .frame(minHeight: 48)
+                                    .padding(.vertical, 4)
                                     .contentShape(Rectangle())
                                 if isSavingRun {
                                     ProgressView()
@@ -775,7 +1042,8 @@ struct RunTrackingProView: View {
                             Label("Stop & Save", systemImage: "stop.fill")
                                 .font(.headline)
                                 .frame(maxWidth: .infinity)
-                                .frame(height: 48)
+                                .frame(minHeight: 48)
+                                .padding(.vertical, 4)
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.borderedProminent)
@@ -791,7 +1059,8 @@ struct RunTrackingProView: View {
                         Label("Pause", systemImage: "pause.fill")
                             .font(.headline)
                             .frame(maxWidth: .infinity)
-                            .frame(height: 48)
+                            .frame(minHeight: 48)
+                            .padding(.vertical, 4)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.borderedProminent)
@@ -806,7 +1075,8 @@ struct RunTrackingProView: View {
                             Label("Stop & Save", systemImage: "stop.fill")
                                 .font(.headline)
                                 .frame(maxWidth: .infinity)
-                                .frame(height: 48)
+                                .frame(minHeight: 48)
+                                .padding(.vertical, 4)
                                 .contentShape(Rectangle())
                             if isSavingRun {
                                 ProgressView()
@@ -886,7 +1156,6 @@ struct RunTrackingProView: View {
             }
         }
         #endif
-        .interactiveDismissDisabled(false)
         .onDisappear {
             // Intentionally do not stop tracking on dismiss; tracking persists via shared RunTracker
         }
@@ -938,10 +1207,13 @@ struct RunTrackingProView: View {
         isSavingRun = true
         
 
-        // Capture end timestamp and route snapshot for HealthKit before any resets
+        // Capture wall-clock boundaries and route data before stopRun clears the
+        // tracker's start date.
         let endTime = Date()
+        let wallClockStartTime = runTracker.startDate
         let routeSnapshot: [CLLocation] = runTracker.route
         let distanceMeters: Double = runTracker.distance
+        let completedPlannedTarget = runTracker.plannedTarget
 
         guard let session = runTracker.stopRun() else {
             
@@ -956,11 +1228,24 @@ struct RunTrackingProView: View {
 
         modelContext.insert(session)
         do {
+            if let completedPlannedTarget {
+                _ = RunAssistantService.shared.completeScheduledSession(
+                    completedPlannedTarget.sessionID,
+                    with: session,
+                    context: modelContext
+                )
+            }
             try modelContext.save()
 
-
-            // Fire-and-forget: write to HealthKit (if authorized). We derive start from end - duration.
-            let startTime = endTime.addingTimeInterval(-session.duration)
+            // Active duration excludes pauses, so deriving the start from
+            // `end - duration` shifts paused workouts forward and places early
+            // route samples outside the Health workout interval.
+            let fallbackStartTime = routeSnapshot.map(\.timestamp).min()
+                ?? endTime.addingTimeInterval(-session.duration)
+            let startTime = min(wallClockStartTime ?? fallbackStartTime, endTime)
+            let healthRouteSnapshot = routeSnapshot.filter {
+                $0.timestamp >= startTime && $0.timestamp <= endTime
+            }
             let activityType = session.activityType
             Task { @MainActor in
                 do {
@@ -969,7 +1254,8 @@ struct RunTrackingProView: View {
                         end: endTime,
                         distanceMeters: distanceMeters,
                         energyBurned: nil,
-                        activityType: activityType
+                        activityType: activityType,
+                        localSessionID: session.id
                     )
                     session.healthWorkoutUUID = workout.uuid.uuidString
                     if !PersistenceSave.commit(modelContext, action: "link saved run with Health workout UUID") {
@@ -979,7 +1265,7 @@ struct RunTrackingProView: View {
                     }
 
                     do {
-                        try await HealthKitManager.shared.saveRunRoute(routeSnapshot, for: workout)
+                        try await HealthKitManager.shared.saveRunRoute(healthRouteSnapshot, for: workout)
                     } catch {
                         alertMessage = "Run saved and linked to Apple Health, but route sync failed: \(error.localizedDescription)"
                         showingAlert = true

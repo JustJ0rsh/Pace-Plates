@@ -25,6 +25,7 @@ struct AppLaunchConfiguration {
     let fixtureName: String?
     let shouldResetState: Bool
     let startTab: UITestStartTab?
+    let shouldShowOnboardingForTesting: Bool
 
     init(processInfo: ProcessInfo) {
         let environment = processInfo.environment
@@ -38,6 +39,7 @@ struct AppLaunchConfiguration {
         fixtureName = environment["UITEST_FIXTURE"]
         shouldResetState = environment["UITEST_RESET_STATE"] == "1"
         startTab = environment["UITEST_START_TAB"].flatMap(UITestStartTab.init(rawValue:))
+        shouldShowOnboardingForTesting = environment["UITEST_SHOW_ONBOARDING"] == "1"
     }
 
     var shouldSkipAutomationSideEffects: Bool {
@@ -96,6 +98,20 @@ struct AppLaunchConfiguration {
 
         for (key, value) in defaults {
             UserDefaults.standard.set(value, forKey: key)
+        }
+
+        if shouldShowOnboardingForTesting {
+            for key in [
+                "onboardingPrimaryGoal",
+                "age",
+                "heightValue",
+                "targetWeight",
+                "sex",
+                "experienceLevel",
+                "weightGoal"
+            ] {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
         }
     }
 }

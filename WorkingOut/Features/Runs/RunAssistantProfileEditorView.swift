@@ -3,13 +3,20 @@ import SwiftUI
 struct RunAssistantProfileEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @Binding var profile: RunAssistantProfile
+    @State private var draft: RunAssistantProfile
     let onSave: () -> Void
+
+    init(profile: Binding<RunAssistantProfile>, onSave: @escaping () -> Void) {
+        _profile = profile
+        _draft = State(initialValue: profile.wrappedValue)
+        self.onSave = onSave
+    }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Goal") {
-                    Picker("Focus", selection: $profile.goalFocus) {
+                    Picker("Focus", selection: $draft.goalFocus) {
                         Text("Endurance").tag("endurance")
                         Text("Speed").tag("speed")
                         Text("Hybrid").tag("hybrid")
@@ -18,14 +25,14 @@ struct RunAssistantProfileEditorView: View {
                 }
 
                 Section("Target") {
-                    Picker("Distance", selection: $profile.targetDistanceMiles) {
+                    Picker("Distance", selection: $draft.targetDistanceMiles) {
                         Text("1 Mile").tag(1.0)
                         Text("2 Miles").tag(2.0)
                         Text("3 Miles").tag(3.0)
                     }
                     .pickerStyle(.segmented)
 
-                    Picker("Ability", selection: $profile.abilityLevel) {
+                    Picker("Ability", selection: $draft.abilityLevel) {
                         Text("Brand New").tag("brand_new")
                         Text("Run/Walk").tag("run_walk")
                         Text("Continuous").tag("continuous")
@@ -36,7 +43,7 @@ struct RunAssistantProfileEditorView: View {
                         Text("Running Days Per Week")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-                        Picker("Running Days Per Week", selection: $profile.daysPerWeek) {
+                        Picker("Running Days Per Week", selection: $draft.daysPerWeek) {
                             Text("3").tag(3)
                             Text("4").tag(4)
                             Text("5").tag(5)
@@ -48,28 +55,28 @@ struct RunAssistantProfileEditorView: View {
                     HStack {
                         Text("Current Average Pace")
                         Spacer()
-                        Text(formatPace(profile.currentAveragePaceMinPerMile))
+                        Text(formatPace(draft.currentAveragePaceMinPerMile))
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
                     }
-                    Stepper(value: $profile.currentAveragePaceMinPerMile, in: 5.0...20.0, step: 0.1) {
+                    Stepper(value: $draft.currentAveragePaceMinPerMile, in: 5.0...20.0, step: 0.1) {
                         Text("Adjust Current Average Pace")
                     }
 
                     HStack {
                         Text("Pace Goal")
                         Spacer()
-                        Text(formatPace(profile.paceGoalMinPerMile))
+                        Text(formatPace(draft.paceGoalMinPerMile))
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
                     }
-                    Stepper(value: $profile.paceGoalMinPerMile, in: 5.0...20.0, step: 0.1) {
+                    Stepper(value: $draft.paceGoalMinPerMile, in: 5.0...20.0, step: 0.1) {
                         Text("Adjust Pace Goal")
                     }
                 }
 
                 Section("Schedule") {
-                    Picker("Long Run Day", selection: $profile.longRunWeekday) {
+                    Picker("Long Run Day", selection: $draft.longRunWeekday) {
                         Text("Sunday").tag(1)
                         Text("Monday").tag(2)
                         Text("Tuesday").tag(3)
@@ -79,19 +86,19 @@ struct RunAssistantProfileEditorView: View {
                         Text("Saturday").tag(7)
                     }
 
-                    Toggle("Enable reminders", isOn: $profile.reminderEnabled)
+                    Toggle("Enable reminders", isOn: $draft.reminderEnabled)
 
-                    if profile.reminderEnabled {
+                    if draft.reminderEnabled {
                         DatePicker(
                             "Reminder Time",
                             selection: Binding(
                                 get: {
-                                    Calendar.current.date(bySettingHour: profile.reminderHour, minute: profile.reminderMinute, second: 0, of: Date()) ?? Date()
+                                    Calendar.current.date(bySettingHour: draft.reminderHour, minute: draft.reminderMinute, second: 0, of: Date()) ?? Date()
                                 },
                                 set: { newValue in
                                     let comps = Calendar.current.dateComponents([.hour, .minute], from: newValue)
-                                    profile.reminderHour = comps.hour ?? 7
-                                    profile.reminderMinute = comps.minute ?? 0
+                                    draft.reminderHour = comps.hour ?? 7
+                                    draft.reminderMinute = comps.minute ?? 0
                                 }
                             ),
                             displayedComponents: .hourAndMinute
@@ -107,6 +114,7 @@ struct RunAssistantProfileEditorView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
+                        profile = draft
                         onSave()
                         dismiss()
                     }

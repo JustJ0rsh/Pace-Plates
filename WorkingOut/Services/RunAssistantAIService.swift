@@ -26,6 +26,8 @@ final class RunAssistantAIService {
         case unavailable(String)
         case invalidResponse
         case invalidSchema(String)
+        case saveFailed
+        case activationFailed
 
         var errorDescription: String? {
             switch self {
@@ -35,6 +37,10 @@ final class RunAssistantAIService {
                 return "The generated response could not be parsed as plan JSON."
             case let .invalidSchema(message):
                 return message
+            case .saveFailed:
+                return "The running plan couldn’t be saved. Please try again."
+            case .activationFailed:
+                return "The running plan was saved, but it couldn’t be activated. Please try starting it again."
             }
         }
     }
@@ -148,7 +154,8 @@ final class RunAssistantAIService {
         profile: RunAssistantProfile,
         context: ModelContext,
         activate: Bool
-    ) -> RunningPlan {
+    ) throws -> RunningPlan {
+        let startDate = Calendar.current.startOfDay(for: Date())
         let plan = RunningPlan(
             name: draft.name,
             source: "ai",
@@ -157,7 +164,7 @@ final class RunAssistantAIService {
             primaryGoal: draft.primaryGoal,
             durationWeeks: draft.durationWeeks,
             daysPerWeek: draft.daysPerWeek,
-            startDate: Date(),
+            startDate: startDate,
             isActive: false,
             isArchived: false,
             createdAt: Date(),
@@ -192,10 +199,15 @@ final class RunAssistantAIService {
             context.insert(session)
         }
 
-        _ = PersistenceSave.commit(context, action: "save changes")
+        guard PersistenceSave.commit(context, action: "save running plan") else {
+            context.rollback()
+            throw AIError.saveFailed
+        }
 
         if activate {
-            RunAssistantService.shared.setActivePlan(plan.id, context: context)
+            guard RunAssistantService.shared.setActivePlan(plan.id, context: context) else {
+                throw AIError.activationFailed
+            }
         }
 
         return plan
@@ -502,6 +514,7 @@ Rules:
                 """
             )
             var previousPreview = ""
+            var emittedPreview = ""
             var streamedAny = false
             var lastRawContent: GeneratedContent? = nil
 
@@ -520,11 +533,12 @@ Rules:
 
                 guard let onStreamChunk else { continue }
                 let preview = runPlanStreamPreview(from: snapshot.rawContent, fallback: previousPreview)
-                let delta = AIStreamSmoothing.appendableDelta(previous: previousPreview, current: preview)
+                let delta = AIStreamSmoothing.appendableDelta(previous: emittedPreview, current: preview)
                 previousPreview = preview
                 guard !delta.isEmpty else { continue }
 
                 streamedAny = true
+                emittedPreview += delta
                 for piece in AIStreamSmoothing.wordChunked(delta, maxChunkChars: 50) {
                     onStreamChunk(piece)
                 }

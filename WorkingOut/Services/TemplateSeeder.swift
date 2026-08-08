@@ -24,6 +24,10 @@ class TemplateSeeder {
     
     /// Seed all built-in templates into the database
     func seedBuiltInTemplates(context: ModelContext) async throws {
+        // Older app versions incorrectly marked user-created templates as built-in.
+        // Repair them before built-in cleanup so a title collision cannot delete
+        // the user's template.
+        _ = migrateLegacyCustomTemplates(context: context)
         // Run idempotent rename/migration pass for advanced template names
         try? await renameAdvancedTemplateTitlesIfNeeded(context: context)
         // Remove any previously-created duplicates before we decide what to insert
@@ -92,6 +96,9 @@ class TemplateSeeder {
     
     /// Force reseed (for development/testing)
     func forceSeed(context: ModelContext) async throws {
+        // Protect legacy user-created templates before deleting built-ins.
+        _ = migrateLegacyCustomTemplates(context: context)
+
         // Delete all built-in templates
         let descriptor = FetchDescriptor<WorkoutTemplate>(
             predicate: #Predicate<WorkoutTemplate> { $0.isBuiltIn == true }
@@ -114,6 +121,27 @@ class TemplateSeeder {
 
 // MARK: - Lightweight migrations
 extension TemplateSeeder {
+    /// User-created templates were labeled built-in in older releases. Reclassify
+    /// only the legacy Custom category, which is not used by the built-in library.
+    @discardableResult
+    func migrateLegacyCustomTemplates(context: ModelContext) -> Int {
+        let fetch = FetchDescriptor<WorkoutTemplate>(
+            predicate: #Predicate {
+                $0.isBuiltIn == true &&
+                $0.experienceLevel == "Custom"
+            }
+        )
+        guard let templates = try? context.fetch(fetch), !templates.isEmpty else {
+            return 0
+        }
+
+        for template in templates {
+            template.isBuiltIn = false
+        }
+        _ = PersistenceSave.commit(context, action: "save changes")
+        return templates.count
+    }
+
     /// Rename advanced template titles to clearer names. Safe to call multiple times.
     func renameAdvancedTemplateTitlesIfNeeded(context: ModelContext) async throws {
         let mapping: [String: String] = [

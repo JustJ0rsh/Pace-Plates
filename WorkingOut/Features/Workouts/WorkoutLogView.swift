@@ -13,7 +13,9 @@ struct WorkoutLogView: View {
     @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
     @Query(sort: [SortDescriptor<WorkoutSession>(\.date, order: .reverse)]) private var workoutSessions: [WorkoutSession]
     @Query(sort: [SortDescriptor<ExerciseDefinition>(\.name)]) private var exerciseDefinitions: [ExerciseDefinition]
-    @Query(filter: #Predicate<HealthWorkoutInboxItem> { $0.statusRaw == "pending" })
+    @Query(filter: #Predicate<HealthWorkoutInboxItem> {
+        $0.statusRaw == "pending" && $0.healthDeletionObservedAt == nil
+    })
     private var pendingInboxItems: [HealthWorkoutInboxItem]
     @State private var newSessionToOpen: WorkoutSession? = nil
     @State private var pastSessionID: UUID? = nil
@@ -47,6 +49,9 @@ struct WorkoutLogView: View {
     @State private var showDeleteConfirm: Bool = false
     @State private var saveErrorMessage: String? = nil
     @State private var quickViewSession: WorkoutSession? = nil
+    @State private var historySearchText: String = ""
+    @State private var historyRange: HistoryRange = .all
+    @State private var historyCategory: String? = nil
     
     // Dynamic chart domain
     private var last7DaysDomain: ClosedRange<Date> {
@@ -61,6 +66,8 @@ struct WorkoutLogView: View {
     // MARK: Body
 
     var body: some View {
+        let historySessions = filteredWorkoutSessions
+
         ScrollView {
             VStack(spacing: 16) {
                     // Empty-state tile similar to Weight tab
@@ -153,57 +160,76 @@ struct WorkoutLogView: View {
                             HStack(spacing: 8) {
                                 Image(systemName: "figure.strengthtraining.traditional")
                                     .foregroundStyle(AppTheme.textColor)
-                                Text("Workouts")
+                                Text("Workout History")
                                     .font(.headline)
                             }
-                            LazyVStack(spacing: 0) {
-                                ForEach(workoutSessions) { session in
-                                    Group {
-                                        if isEditing {
-                                            WorkoutSessionRowContent(
-                                                session: session,
-                                                isEditing: true,
-                                                onDelete: {
-                                                    pendingDeleteSession = session
-                                                    showDeleteConfirm = true
-                                                }
-                                            )
-                                        } else {
-                                            NavigationLink {
-                                                WorkoutSessionDetailView(session: session)
-                                            } label: {
+
+                            HistoryFilterBar(
+                                searchText: $historySearchText,
+                                selectedRange: $historyRange,
+                                selectedCategory: $historyCategory,
+                                resultCount: historySessions.count,
+                                searchPrompt: "Search workouts or exercises",
+                                accessibilityIdentifier: "workouts.history.filters"
+                            )
+
+                            if historySessions.isEmpty {
+                                HistoryNoResultsView(
+                                    title: "No Matching Workouts",
+                                    message: "Try another exercise, title, or date range.",
+                                    accessibilityIdentifier: "workouts.history.no_results",
+                                    clearFilters: clearWorkoutHistoryFilters
+                                )
+                            } else {
+                                LazyVStack(spacing: 0) {
+                                    ForEach(historySessions) { session in
+                                        Group {
+                                            if isEditing {
                                                 WorkoutSessionRowContent(
                                                     session: session,
-                                                    isEditing: false,
+                                                    isEditing: true,
                                                     onDelete: {
                                                         pendingDeleteSession = session
                                                         showDeleteConfirm = true
                                                     }
                                                 )
+                                            } else {
+                                                NavigationLink {
+                                                    WorkoutSessionDetailView(session: session)
+                                                } label: {
+                                                    WorkoutSessionRowContent(
+                                                        session: session,
+                                                        isEditing: false,
+                                                        onDelete: {
+                                                            pendingDeleteSession = session
+                                                            showDeleteConfirm = true
+                                                        }
+                                                    )
+                                                }
                                             }
                                         }
-                                    }
-                                    .padding(.vertical, 8)
-                                    .contextMenu {
-                                        Button {
-                                            quickViewSession = session
-                                        } label: {
-                                            Label("Quick View", systemImage: "eye")
-                                        }
+                                        .padding(.vertical, 8)
+                                        .contextMenu {
+                                            Button {
+                                                quickViewSession = session
+                                            } label: {
+                                                Label("Quick View", systemImage: "eye")
+                                            }
 
-                                        Button(role: .destructive) {
-                                            pendingDeleteSession = session
-                                            showDeleteConfirm = true
-                                        } label: {
-                                            Label("Delete", systemImage: "trash")
+                                            Button(role: .destructive) {
+                                                pendingDeleteSession = session
+                                                showDeleteConfirm = true
+                                            } label: {
+                                                Label("Delete", systemImage: "trash")
+                                            }
                                         }
-                                    }
-                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                        Button(role: .destructive) {
-                                            pendingDeleteSession = session
-                                            showDeleteConfirm = true
-                                        } label: {
-                                            Label("Delete", systemImage: "trash")
+                                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                            Button(role: .destructive) {
+                                                pendingDeleteSession = session
+                                                showDeleteConfirm = true
+                                            } label: {
+                                                Label("Delete", systemImage: "trash")
+                                            }
                                         }
                                     }
                                 }
@@ -253,6 +279,7 @@ struct WorkoutLogView: View {
                                     ? "Workout Inbox"
                                     : "Workout Inbox, \(pendingInboxItems.count) pending")
                         }
+                        .accessibilityIdentifier("workouts.wearableInbox")
 
                         Button(action: { showTemplates = true }) {
                             Label("Templates", systemImage: "doc.text.fill")
@@ -414,6 +441,33 @@ struct WorkoutLogView: View {
 
     // MARK: Helpers
 
+    private var filteredWorkoutSessions: [WorkoutSession] {
+        let query = historySearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return workoutSessions.filter { session in
+            guard historyRange.contains(session.date) else { return false }
+            guard !query.isEmpty else { return true }
+
+            if session.title.localizedCaseInsensitiveContains(query) ||
+                (session.notes?.localizedCaseInsensitiveContains(query) ?? false)
+            {
+                return true
+            }
+
+            return (session.exerciseLogs ?? []).contains { log in
+                (log.exerciseName?.localizedCaseInsensitiveContains(query) ?? false) ||
+                    (log.exerciseDefinition?.name.localizedCaseInsensitiveContains(query) ?? false) ||
+                    (log.notes?.localizedCaseInsensitiveContains(query) ?? false)
+            }
+        }
+    }
+
+    private func clearWorkoutHistoryFilters() {
+        historySearchText = ""
+        historyRange = .all
+        historyCategory = nil
+    }
+
     private var chartData: (dailyVolume: [(date: Date, value: Double)], groupedVolume: [Date: Double]) {
         let calendar = Calendar.current
         let domain = last7DaysDomain
@@ -475,19 +529,40 @@ private struct WorkoutSessionRowContent: View {
     let session: WorkoutSession
     let isEditing: Bool
     let onDelete: () -> Void
+
+    private var exerciseCount: Int {
+        let names = (session.exerciseLogs ?? []).compactMap { log -> String? in
+            let snapshot = (log.exerciseName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !snapshot.isEmpty { return snapshot }
+
+            let definition = (log.exerciseDefinition?.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return definition.isEmpty ? nil : definition
+        }
+        return Set(names).count
+    }
+
+    private var setCount: Int {
+        session.exerciseLogs?.count ?? 0
+    }
     
     var body: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(session.title.isEmpty ? session.date.formatted(date: .abbreviated, time: .shortened) : session.title)
+                Text(session.title.isEmpty ? "Workout" : session.title)
                     .font(.headline)
+                Text(session.date.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.secondaryTextColor)
                 if let notes = session.notes, !notes.isEmpty {
                     Text(notes)
                         .font(.subheadline)
                         .foregroundStyle(AppTheme.secondaryTextColor)
                         .lineLimit(1)
                 }
-                Text("\(session.exerciseLogs?.count ?? 0) sets")
+                Text(
+                    "\(exerciseCount) exercise\(exerciseCount == 1 ? "" : "s") • " +
+                        "\(setCount) set\(setCount == 1 ? "" : "s")"
+                )
                     .font(.caption)
                     .foregroundStyle(AppTheme.secondaryTextColor)
             }
@@ -713,7 +788,12 @@ private struct WorkoutVolumeChartSection: View {
         var setCount = 0
         for s in sessions {
             let logs = s.exerciseLogs ?? []
-            exerciseCount += logs.count
+            let exerciseNames = Set(logs.map {
+                ($0.exerciseName ?? $0.exerciseDefinition?.name ?? "Exercise")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+            })
+            exerciseCount += exerciseNames.count
             // Each ExerciseLog represents a single set
             setCount += logs.count
         }

@@ -23,8 +23,10 @@ struct AIChatSheet: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var messages: [Message] = []
+    @State private var draftQuestion: String = ""
     @State private var isStreaming: Bool = false
     @State private var errorText: String? = nil
     @State private var showSaved: Bool = false
@@ -32,6 +34,7 @@ struct AIChatSheet: View {
     @State private var streamingOpacity: Double = 0.5
     @State private var lastStreamedAssistantID: UUID? = nil
     @State private var streamTask: Task<Void, Never>? = nil
+    @State private var activeStreamToken: UUID? = nil
     @State private var waitingForFirstChunk: Bool = false
     @State private var showClearConfirmation: Bool = false
     @State private var displayedText: String = ""
@@ -43,13 +46,13 @@ struct AIChatSheet: View {
     @State private var scrollViewHeight: CGFloat = 0
     @State private var autoFollow: Bool = true
     @State private var userIsDragging: Bool = false
-    @State private var floatingPromptAnimation: Bool = false
+    @FocusState private var draftQuestionFocused: Bool
 
     private let quickPrompts: [QuickAskPrompt] = [
         QuickAskPrompt(
             id: "strength-block",
             icon: "dumbbell.fill",
-            title: "Strength Focus Plan",
+            title: "Build Strength",
             subtitle: "Get stronger with clear progressions",
             userMessage: "Build me a strength-focused training plan.",
             prompt: """
@@ -65,7 +68,7 @@ struct AIChatSheet: View {
         QuickAskPrompt(
             id: "endurance-build",
             icon: "figure.run.circle",
-            title: "Endurance Build",
+            title: "Improve Endurance",
             subtitle: "Improve aerobic base and long-run stamina",
             userMessage: "Create an endurance-focused progression.",
             prompt: """
@@ -80,7 +83,7 @@ struct AIChatSheet: View {
         QuickAskPrompt(
             id: "hybrid-strength-cardio",
             icon: "flame.fill",
-            title: "Hybrid Training Week",
+            title: "Hybrid Training",
             subtitle: "Balance strength and cardio together",
             userMessage: "Give me a balanced strength + cardio week.",
             prompt: """
@@ -95,7 +98,7 @@ struct AIChatSheet: View {
         QuickAskPrompt(
             id: "health-recovery-audit",
             icon: "heart.text.square.fill",
-            title: "Recovery & Health Audit",
+            title: "Check Recovery",
             subtitle: "Sleep, stress, soreness, and readiness",
             userMessage: "Audit my recovery and health habits for training.",
             prompt: """
@@ -110,7 +113,7 @@ struct AIChatSheet: View {
         QuickAskPrompt(
             id: "muscle-gain-nutrition",
             icon: "fork.knife.circle.fill",
-            title: "Muscle Gain Nutrition",
+            title: "Fuel Muscle Gain",
             subtitle: "Fuel strength and recovery better",
             userMessage: "Create nutrition guidelines to gain muscle.",
             prompt: """
@@ -125,7 +128,7 @@ struct AIChatSheet: View {
         QuickAskPrompt(
             id: "running-speed-endurance",
             icon: "figure.run",
-            title: "Run Faster + Longer",
+            title: "Run Faster",
             subtitle: "Build pace and endurance safely",
             userMessage: "Help me improve both running speed and endurance.",
             prompt: """
@@ -145,11 +148,7 @@ struct AIChatSheet: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 10) {
                         if messages.isEmpty && !isStreaming {
-                            Text("Pick a guided prompt to generate focused coaching for strength, endurance, and overall fitness.")
-                                .font(.footnote)
-                                .foregroundStyle(AppTheme.secondaryTextColor)
-                                .padding(.bottom, 8)
-                            floatingPromptRows
+                            starterContent
                         }
 
                         ForEach(messages) { msg in
@@ -220,6 +219,23 @@ struct AIChatSheet: View {
                 }
                 .contentShape(Rectangle())
                 .onTapGesture { dismissKeyboard() }
+                .scrollDismissesKeyboard(.interactively)
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 1)
+                        .onChanged { _ in
+                            dismissKeyboard()
+                            if isStreaming {
+                                userIsDragging = true
+                                autoFollow = false
+                            }
+                        }
+                        .onEnded { _ in
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                                userIsDragging = false
+                                if isStreaming { autoFollow = isPinnedToBottom }
+                            }
+                        }
+                )
                 .onChange(of: messages.count) { _, _ in
                     // Only auto-scroll when new messages are added, not during streaming
                     if !isStreaming {
@@ -229,7 +245,13 @@ struct AIChatSheet: View {
                 .onChange(of: displayedText) { _, _ in
                     // While streaming, follow new content until user scrolls up
                     if isStreaming && autoFollow {
-                        withAnimation(.linear(duration: 0.12)) { proxy.scrollTo("progress", anchor: .bottom) }
+                        withAnimation(.linear(duration: 0.12)) {
+                            if let streamingID = lastStreamedAssistantID {
+                                proxy.scrollTo(streamingID, anchor: .bottom)
+                            } else {
+                                proxy.scrollTo("progress", anchor: .bottom)
+                            }
+                        }
                     }
                 }
                 .onChange(of: isStreaming) { wasStreaming, nowStreaming in
@@ -244,46 +266,8 @@ struct AIChatSheet: View {
                 // Web search disabled – no source auto-scroll
             }
         }
-        .safeAreaInset(edge: .bottom) {
-            if shouldShowBottomPromptBar {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Text("Training Prompt Packs")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(AppTheme.secondaryTextColor)
-                        Spacer()
-                        if waitingForFirstChunk {
-                            HStack(spacing: 6) {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.secondaryTextColor))
-                                    .scaleEffect(0.75)
-                                Text("Generating…")
-                                    .font(.caption2)
-                                    .foregroundStyle(AppTheme.secondaryTextColor)
-                            }
-                        }
-                    }
-
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            ForEach(quickPrompts) { template in
-                                promptCard(template)
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 10)
-                .padding(.bottom, 12)
-                .background(
-                    VStack(spacing: 0) {
-                        Divider()
-                        Rectangle()
-                            .fill(.ultraThinMaterial)
-                    }
-                    .ignoresSafeArea()
-                )
-            }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            composerBar
         }
         .navigationTitle("AI Assistant")
         .navigationBarTitleDisplayMode(.inline)
@@ -308,28 +292,11 @@ struct AIChatSheet: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button { save() } label: { Image(systemName: "tray.and.arrow.down") }
                     .accessibilityLabel("Save")
-                    .disabled(messages.isEmpty)
+                    .disabled(messages.isEmpty || isStreaming)
             }
         }
         .appBackground(AppTheme.gradientRuns)
         .foregroundColor(AppTheme.textColor)
-        .scrollDismissesKeyboard(.interactively)
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 1)
-                .onChanged { _ in
-                    dismissKeyboard()
-                    if isStreaming {
-                        userIsDragging = true
-                        autoFollow = false
-                    }
-                }
-                .onEnded { _ in
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                        userIsDragging = false
-                        if isStreaming { autoFollow = isPinnedToBottom }
-                    }
-                }
-        )
         .alert("Error", isPresented: .constant(errorText != nil)) { Button("OK", role: .cancel) { errorText = nil } } message: { Text(errorText ?? "") }
         .alert("Saved", isPresented: $showSaved) {
             Button("OK", role: .cancel) {}
@@ -345,13 +312,13 @@ struct AIChatSheet: View {
             Text("This will clear the current conversation and start fresh. The AI will lose all context from this session.")
         }
         .task {
-            floatingPromptAnimation = true
             await prewarm()
         }
         .onDisappear {
             // Cancel any ongoing streaming when the view disappears
             streamTask?.cancel()
             streamTask = nil
+            activeStreamToken = nil
             isStreaming = false
             waitingForFirstChunk = false
         }
@@ -375,6 +342,19 @@ struct AIChatSheet: View {
         )
     }
 
+    private func sendDraftQuestion() {
+        let question = draftQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !question.isEmpty, !isStreaming else { return }
+
+        draftQuestion = ""
+        draftQuestionFocused = false
+        send(
+            question: question,
+            userMessage: question,
+            appendUserMessage: true
+        )
+    }
+
     // `contextRetryCount` tracks automatic retries after a context-overflow reset. It is 0 for every
     // user-initiated send (the default) and is only incremented by the internal auto-retry below, so
     // the counter naturally resets on the next user send.
@@ -389,9 +369,13 @@ struct AIChatSheet: View {
                 messages.append(.init(role: .user, text: userMessage))
             }
         }
+
+        let requestToken = UUID()
+        activeStreamToken = requestToken
         isStreaming = true
         waitingForFirstChunk = true
         autoFollow = true
+
         let req = WorkoutPlanRequest(
             goal: requestBase.goal,
             extraContext: question,
@@ -400,83 +384,94 @@ struct AIChatSheet: View {
             modelContext: modelContext,
             mode: .ask
         )
+
         streamTask?.cancel()
-        streamTask = Task {
+        streamTask = Task { @MainActor in
+            var assistantID: UUID?
+
             do {
+                try Task.checkCancellation()
+                guard activeStreamToken == requestToken else { return }
+
                 var isFirstChunk = true
-                
+                let generationHistory = messages.map {
+                    ($0.role == .user ? "User" : "Assistant", $0.text)
+                }
+
                 // Start clear and gradually become visible
-                await MainActor.run {
-                    streamingOpacity = 0.2
-                    displayedText = ""
-                    fullBufferedText = ""
-                    let placeholder = Message(role: .assistant, text: "Generating…")
-                    withAnimation(.snappy) { messages.append(placeholder) }
-                    lastStreamedAssistantID = placeholder.id
-                    withAnimation(.easeInOut(duration: 0.25)) {
-                        streamingOpacity = 1.0
-                    }
+                streamingOpacity = 0.2
+                displayedText = ""
+                fullBufferedText = ""
+                let placeholder = Message(role: .assistant, text: "Generating…")
+                assistantID = placeholder.id
+                withAnimation(.snappy) { messages.append(placeholder) }
+                lastStreamedAssistantID = placeholder.id
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    streamingOpacity = 1.0
                 }
 
                 // Web search disabled: no searching indicator
 
-                for try await chunk in WorkoutPlanGenerator.shared.generateAskStream(request: req, history: messages.map { ($0.role == .user ? "User" : "Assistant", $0.text) }) {
-                    // Check for cancellation
-                    if Task.isCancelled { break }
+                for try await chunk in WorkoutPlanGenerator.shared.generateAskStream(
+                    request: req,
+                    history: generationHistory
+                ) {
+                    guard !Task.isCancelled else { return }
+                    guard activeStreamToken == requestToken else { return }
 
                     // Web search/tool indicators removed
 
-                    await MainActor.run {
-                        if isFirstChunk {
-                            waitingForFirstChunk = false
-                            fullBufferedText = chunk
-                            displayedText = fullBufferedText
-                            if let streamingID = lastStreamedAssistantID,
-                               let idx = messages.lastIndex(where: { $0.id == streamingID }) {
-                                messages[idx].text = displayedText
-                            }
-                            isFirstChunk = false
-                        } else {
-                            fullBufferedText += chunk
-                            displayedText = fullBufferedText
-                            if let streamingID = lastStreamedAssistantID,
-                               let idx = messages.lastIndex(where: { $0.id == streamingID }) {
-                                messages[idx].text = displayedText
-                            }
+                    if isFirstChunk {
+                        waitingForFirstChunk = false
+                        fullBufferedText = chunk
+                        displayedText = fullBufferedText
+                        if let assistantID,
+                           let idx = messages.lastIndex(where: { $0.id == assistantID }) {
+                            messages[idx].text = displayedText
+                        }
+                        isFirstChunk = false
+                    } else {
+                        fullBufferedText += chunk
+                        displayedText = fullBufferedText
+                        if let assistantID,
+                           let idx = messages.lastIndex(where: { $0.id == assistantID }) {
+                            messages[idx].text = displayedText
                         }
                     }
                 }
 
+                try Task.checkCancellation()
+                guard activeStreamToken == requestToken else { return }
+
                 // Ensure final text is fully displayed
-                await MainActor.run {
-                    if let streamingID = lastStreamedAssistantID,
-                       let idx = messages.lastIndex(where: { $0.id == streamingID }) {
-                        displayedText = fullBufferedText
-                        messages[idx].text = fullBufferedText.isEmpty ? "No response generated. Please try again." : fullBufferedText
-                    }
+                if let assistantID,
+                   let idx = messages.lastIndex(where: { $0.id == assistantID }) {
+                    displayedText = fullBufferedText
+                    messages[idx].text = fullBufferedText.isEmpty
+                        ? "No response generated. Please try again."
+                        : fullBufferedText
                 }
             } catch is CancellationError {
-                // Silently handle cancellation
-                await MainActor.run { }
+                return
             } catch {
+                guard activeStreamToken == requestToken else { return }
+
                 // Check if this is a context overflow error
                 let errorMessage = error.localizedDescription.lowercased()
-                let isContextOverflow = errorMessage.contains("context") && 
-                                       (errorMessage.contains("length") || 
-                                        errorMessage.contains("limit") || 
-                                        errorMessage.contains("overflow") ||
-                                        errorMessage.contains("too long") ||
-                                        errorMessage.contains("maximum"))
+                let isContextOverflow = errorMessage.contains("context") &&
+                    (errorMessage.contains("length") ||
+                     errorMessage.contains("limit") ||
+                     errorMessage.contains("overflow") ||
+                     errorMessage.contains("too long") ||
+                     errorMessage.contains("maximum"))
                 
                 if isContextOverflow && contextRetryCount >= 1 {
                     // Already retried once and still overflowing — stop looping and tell the user.
                     print("🛑 Context overflow persisted after retry - surfacing to user")
-                    await MainActor.run {
-                        errorText = "This conversation is too long for me to process, even after refreshing. Please start a new chat or ask a shorter question."
-                        if let streamingID = lastStreamedAssistantID,
-                           let idx = messages.lastIndex(where: { $0.id == streamingID }) {
-                            messages[idx].text = "That was too long for me to process. Try a shorter question or clear the chat to start fresh."
-                        }
+                    errorText = "This conversation is too long for me to process, even after refreshing. Please start a new chat or ask a shorter question."
+                    if let assistantID,
+                       let idx = messages.lastIndex(where: { $0.id == assistantID }) {
+                        messages[idx].text = "That was too long for me to process. Try a shorter question or clear the chat to start fresh."
                     }
                 } else if isContextOverflow {
                     // Auto-reset with conversation summary
@@ -484,66 +479,76 @@ struct AIChatSheet: View {
 
                     // Summarize recent conversation
                     let summary = await WorkoutPlanGenerator.summarizeConversation(
-                        messages.map { ($0.role == .user ? "User" : "Assistant", $0.text) }
+                        messages
+                            .filter { $0.id != assistantID }
+                            .map { ($0.role == .user ? "User" : "Assistant", $0.text) }
+                    )
+
+                    guard !Task.isCancelled else { return }
+                    guard activeStreamToken == requestToken else { return }
+
+                    let resetText = "💡 **Context refreshed**: The conversation was getting long, so I've refreshed my memory to keep responses fast and accurate. I still remember the key points from our discussion and we can continue seamlessly!"
+                    if let assistantID,
+                       let idx = messages.lastIndex(where: { $0.id == assistantID }) {
+                        messages[idx].text = resetText
+                    } else {
+                        withAnimation(.snappy) {
+                            messages.append(Message(role: .assistant, text: resetText))
+                        }
+                    }
+
+                    // Store summary for next request
+                    WorkoutPlanGenerator.lastConversationSummary = summary
+                    Haptics.notify(.success)
+
+                    // Reset the session while retaining the compact handoff
+                    // prepared specifically for the retry.
+                    WorkoutPlanGenerator.shared.resetModelContext(
+                        preserveConversationSummary: true
                     )
                     
-                    await MainActor.run {
-                        // Add system message about reset
-                        let resetMessage = Message(
-                            role: .assistant, 
-                            text: "💡 **Context refreshed**: The conversation was getting long, so I've refreshed my memory to keep responses fast and accurate. I still remember the key points from our discussion and we can continue seamlessly!"
-                        )
-                        withAnimation(.snappy) {
-                            messages.append(resetMessage)
-                        }
-                        
-                        // Store summary for next request
-                        WorkoutPlanGenerator.lastConversationSummary = summary
-                        
-                        Haptics.notify(.success)
-                    }
-                    
-                    // Reset the model context
-                    Task { @MainActor in
-                        WorkoutPlanGenerator.shared.resetModelContext()
-                    }
-                    
                     // Retry the question automatically
-                    await MainActor.run {
-                        isStreaming = false
-                        waitingForFirstChunk = false
-                    }
+                    isStreaming = false
+                    waitingForFirstChunk = false
+                    lastStreamedAssistantID = nil
                     
-                    // Small delay then retry
-                    try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
-                    await MainActor.run {
-                        send(
-                            question: question,
-                            userMessage: userMessage,
-                            appendUserMessage: false,
-                            contextRetryCount: contextRetryCount + 1
-                        )
+                    // Small delay then retry. Do not resurrect a request after
+                    // the view's stream task has been cancelled.
+                    do {
+                        try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                    } catch {
+                        return
                     }
+                    guard !Task.isCancelled else { return }
+                    guard activeStreamToken == requestToken else { return }
+
+                    activeStreamToken = nil
+                    streamTask = nil
+                    send(
+                        question: question,
+                        userMessage: userMessage,
+                        appendUserMessage: false,
+                        contextRetryCount: contextRetryCount + 1
+                    )
                     return
                 } else {
                     // Other errors - show to user
-                    await MainActor.run {
-                        errorText = error.localizedDescription
-                        if let streamingID = lastStreamedAssistantID,
-                           let idx = messages.lastIndex(where: { $0.id == streamingID }) {
-                            messages[idx].text = "Unable to generate response. Please try again."
-                        }
+                    errorText = error.localizedDescription
+                    if let assistantID,
+                       let idx = messages.lastIndex(where: { $0.id == assistantID }) {
+                        messages[idx].text = "Unable to generate response. Please try again."
                     }
                 }
             }
-            await MainActor.run {
-                isStreaming = false
-                waitingForFirstChunk = false
-                lastStreamedAssistantID = nil
-                streamingOpacity = 1.0
-                streamTask = nil
-                autoFollow = false
-            }
+
+            guard activeStreamToken == requestToken else { return }
+            isStreaming = false
+            waitingForFirstChunk = false
+            lastStreamedAssistantID = nil
+            streamingOpacity = 1.0
+            activeStreamToken = nil
+            streamTask = nil
+            autoFollow = false
         }
     }
 
@@ -572,6 +577,7 @@ struct AIChatSheet: View {
     
     private func performClear() {
         // Cancel any ongoing streaming
+        activeStreamToken = nil
         streamTask?.cancel()
         streamTask = nil
         isStreaming = false
@@ -597,99 +603,130 @@ struct AIChatSheet: View {
 
     // Search results UI removed
 
-    private var shouldShowBottomPromptBar: Bool {
-        messages.contains(where: { $0.role == .user })
+    private var canSendDraftQuestion: Bool {
+        !isStreaming && !draftQuestion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     @ViewBuilder
-    private var floatingPromptRows: some View {
-        VStack(spacing: 14) {
-            floatingPromptRow(
-                prompts: [quickPrompts[0], quickPrompts[3], quickPrompts[1]],
-                xShift: floatingPromptAnimation ? -10 : 10
-            )
-            floatingPromptRow(
-                prompts: [quickPrompts[2], quickPrompts[5], quickPrompts[4]],
-                xShift: floatingPromptAnimation ? 8 : -8
-            )
-            floatingPromptRow(
-                prompts: [quickPrompts[1], quickPrompts[4], quickPrompts[0]],
-                xShift: floatingPromptAnimation ? -6 : 6
-            )
-            .padding(.bottom, 8)
-        }
-        .onAppear {
-            floatingPromptAnimation = true
-        }
-    }
+    private var starterContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("How can I help?")
+                    .font(.title3.weight(.semibold))
+                Text("Choose a suggestion or ask anything about your training.")
+                    .font(.subheadline)
+                    .foregroundStyle(AppTheme.secondaryTextColor)
+            }
 
-    @ViewBuilder
-    private func floatingPromptRow(prompts: [QuickAskPrompt], xShift: CGFloat) -> some View {
-        HStack(spacing: 10) {
-            ForEach(prompts) { template in
-                floatingQuestionChip(template)
+            LazyVGrid(columns: starterGridColumns, alignment: .leading, spacing: 10) {
+                ForEach(quickPrompts) { template in
+                    starterPromptCard(template)
+                }
             }
         }
-        .padding(.horizontal, 8)
-        .offset(x: xShift)
-        .animation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true), value: floatingPromptAnimation)
     }
 
-    @ViewBuilder
-    private func floatingQuestionChip(_ template: QuickAskPrompt) -> some View {
-        Button {
-            send(template: template)
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: template.icon)
-                    .font(.caption.weight(.semibold))
-                Text(template.title)
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(AppTheme.secondaryBackgroundColor.opacity(0.92))
-            .clipShape(Capsule())
-            .overlay(
-                Capsule()
-                    .strokeBorder(AppTheme.textColor.opacity(0.12), lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.18), radius: 8, x: 0, y: 4)
+    private var starterGridColumns: [GridItem] {
+        if dynamicTypeSize.isAccessibilitySize {
+            return [GridItem(.flexible())]
         }
-        .buttonStyle(.plain)
-        .disabled(isStreaming)
-        .opacity(isStreaming ? 0.65 : 1.0)
+        return [
+            GridItem(.flexible(), spacing: 10),
+            GridItem(.flexible())
+        ]
+    }
+
+    private var composerBar: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if messages.contains(where: { $0.role == .user }) {
+                Menu {
+                    ForEach(quickPrompts) { template in
+                        Button {
+                            send(template: template)
+                        } label: {
+                            Label(template.title, systemImage: template.icon)
+                        }
+                    }
+                } label: {
+                    Label("Prompt ideas", systemImage: "sparkles")
+                        .font(.caption.weight(.semibold))
+                        .frame(minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .disabled(isStreaming)
+                .accessibilityIdentifier("ai.promptIdeas.menu")
+            }
+
+            HStack(alignment: .bottom, spacing: 10) {
+                TextField("Ask a question…", text: $draftQuestion, axis: .vertical)
+                    .lineLimit(1...4)
+                    .submitLabel(.send)
+                    .focused($draftQuestionFocused)
+                    .onSubmit(sendDraftQuestion)
+                    .disabled(isStreaming)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(AppTheme.secondaryBackgroundColor.opacity(0.92))
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(AppTheme.textColor.opacity(0.12), lineWidth: 1)
+                    }
+                    .accessibilityLabel("Training question")
+                    .accessibilityIdentifier("ai.question.field")
+
+                Button(action: sendDraftQuestion) {
+                    Image(systemName: "arrow.up")
+                        .font(.body.weight(.bold))
+                        .foregroundStyle(canSendDraftQuestion ? Color.white : AppTheme.secondaryTextColor)
+                        .frame(width: 44, height: 44)
+                        .background(
+                            canSendDraftQuestion
+                                ? AppTheme.accentColor
+                                : AppTheme.secondaryBackgroundColor.opacity(0.92)
+                        )
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!canSendDraftQuestion)
+                .accessibilityLabel("Send question")
+                .accessibilityIdentifier("ai.question.send")
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 12)
+        .background(
+            VStack(spacing: 0) {
+                Divider()
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+            }
+            .ignoresSafeArea()
+        )
     }
 
     @ViewBuilder
-    private func promptCard(_ template: QuickAskPrompt) -> some View {
+    private func starterPromptCard(_ template: QuickAskPrompt) -> some View {
         Button {
             send(template: template)
         } label: {
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Image(systemName: template.icon)
-                        .font(.caption.weight(.semibold))
-                        .frame(width: 22, height: 22)
-                        .background(AppTheme.accentColor.opacity(0.14))
-                        .clipShape(Circle())
-                    Text(template.title)
-                        .font(.caption.weight(.semibold))
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                }
+                Image(systemName: template.icon)
+                    .font(.subheadline.weight(.semibold))
+                    .frame(width: 30, height: 30)
+                    .background(AppTheme.accentColor.opacity(0.14))
+                    .clipShape(Circle())
+                Text(template.title)
+                    .font(.subheadline.weight(.semibold))
+                    .multilineTextAlignment(.leading)
                 Text(template.subtitle)
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(AppTheme.secondaryTextColor)
-                    .lineLimit(2)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
                 Spacer(minLength: 0)
-                Text("Tap to ask")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(AppTheme.accentColor)
             }
-            .frame(width: 208, height: 120, alignment: .topLeading)
+            .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
             .padding(12)
             .background(AppTheme.secondaryBackgroundColor.opacity(0.92))
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -701,6 +738,9 @@ struct AIChatSheet: View {
         .buttonStyle(.plain)
         .disabled(isStreaming)
         .opacity(isStreaming ? 0.65 : 1.0)
+        .accessibilityLabel("\(template.title). \(template.subtitle)")
+        .accessibilityHint("Sends this guided question")
+        .accessibilityIdentifier("ai.quickPrompt.\(template.id)")
     }
 
     @ViewBuilder

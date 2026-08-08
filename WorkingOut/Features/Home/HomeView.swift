@@ -24,8 +24,10 @@ struct HomeView: View {
     @State private var showWorkoutTemplates: Bool = false
     @State private var showQuickRunTracking: Bool = false
     @State private var quickCardioActivityType: String = "running"
+    @State private var quickPlannedRunTarget: ScheduledRunTarget? = nil
     @State private var showQuickWeightLog: Bool = false
     @State private var saveErrorMessage: String? = nil
+    @State private var runTracker = RunTracker.shared
 
     private enum ChartTab: Hashable { case volume, runs, weight }
     
@@ -321,12 +323,18 @@ struct HomeView: View {
         let workoutDays = workoutSessions.map { calendar.startOfDay(for: $0.date) }
         let activityDays = Set(runDays + workoutDays)
         guard !activityDays.isEmpty else { return 0 }
-        // Start from today if active today, otherwise from the most recent activity day
-        let startAnchor: Date = {
-            let today = calendar.startOfDay(for: Date())
-            if activityDays.contains(today) { return today }
-            return activityDays.max() ?? today
-        }()
+        let today = calendar.startOfDay(for: Date())
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today) ?? today
+        // A daily streak remains current through the day after the last
+        // activity, but older streaks have expired.
+        let startAnchor: Date
+        if activityDays.contains(today) {
+            startAnchor = today
+        } else if activityDays.contains(yesterday) {
+            startAnchor = yesterday
+        } else {
+            return 0
+        }
         var streak = 0
         var day = startAnchor
         while activityDays.contains(day) {
@@ -342,9 +350,18 @@ struct HomeView: View {
         let allDates = runningSessions.map { $0.date } + workoutSessions.map { $0.date }
         guard !allDates.isEmpty else { return 0 }
         let weeksWithActivity: Set<Date> = Set(allDates.map { calendar.startOfWeek(for: $0) })
-        // Start from this week if active, else from most recent week with activity
         let thisWeek = calendar.startOfWeek(for: Date())
-        let startAnchor: Date = weeksWithActivity.contains(thisWeek) ? thisWeek : (weeksWithActivity.max() ?? thisWeek)
+        let previousWeek = calendar.date(byAdding: .weekOfYear, value: -1, to: thisWeek) ?? thisWeek
+        // As with daily streaks, the immediately previous period can still be
+        // extended; a gap longer than that expires the current streak.
+        let startAnchor: Date
+        if weeksWithActivity.contains(thisWeek) {
+            startAnchor = thisWeek
+        } else if weeksWithActivity.contains(previousWeek) {
+            startAnchor = previousWeek
+        } else {
+            return 0
+        }
         var streak = 0
         var week = startAnchor
         while weeksWithActivity.contains(week) {
@@ -419,54 +436,145 @@ struct HomeView: View {
                 .foregroundColor(AppTheme.textColor)
 
             if let lastWorkout = workoutSessions.first {
-                HStack(spacing: 10) {
-                    Image(systemName: "figure.strengthtraining.traditional")
-                        .foregroundColor(AppTheme.accentColor)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Last Workout")
-                            .font(.caption)
-                            .foregroundStyle(AppTheme.secondaryTextColor)
-                        Text(lastWorkout.date.formatted(date: .abbreviated, time: .shortened))
-                            .font(.subheadline)
-                    }
+                NavigationLink {
+                    WorkoutSessionDetailView(session: lastWorkout)
+                } label: {
+                    HomeRecentActivityRow(
+                        icon: "figure.strengthtraining.traditional",
+                        title: lastWorkout.title.isEmpty ? "Workout" : lastWorkout.title,
+                        subtitle: recentWorkoutSubtitle(lastWorkout)
+                    )
                 }
-            } else {
-                Text("No workouts logged yet")
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.secondaryTextColor)
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens workout details.")
+                .accessibilityIdentifier("home.recentActivity.workout")
             }
 
             if let lastRun = runningSessions.first {
-                Divider().opacity(0.2)
-                HStack(spacing: 10) {
-                    Image(systemName: "figure.run")
-                        .foregroundColor(AppTheme.accentColor)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Last Run")
-                            .font(.caption)
-                            .foregroundStyle(AppTheme.secondaryTextColor)
-                        Text(lastRun.date.formatted(date: .abbreviated, time: .shortened))
-                            .font(.subheadline)
-                    }
+                if workoutSessions.first != nil {
+                    Divider().opacity(0.2)
                 }
-            } else {
-                // Placeholder to maintain consistent height
-                Divider().hidden()
-                HStack(spacing: 10) {
-                    Image(systemName: "figure.run")
-                        .hidden()
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Last Run")
-                            .font(.caption)
-                            .hidden()
-                        Text("Placeholder")
-                            .font(.subheadline)
-                            .hidden()
-                    }
+
+                NavigationLink {
+                    RunSessionDetailView(session: lastRun)
+                } label: {
+                    HomeRecentActivityRow(
+                        icon: activityIcon(for: lastRun.activityType),
+                        title: activityDisplayName(for: lastRun.activityType),
+                        subtitle: recentRunSubtitle(lastRun)
+                    )
                 }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens activity details.")
+                .accessibilityIdentifier("home.recentActivity.run")
+            }
+
+            if let lastWeight = weightEntries.first {
+                if workoutSessions.first != nil || runningSessions.first != nil {
+                    Divider().opacity(0.2)
+                }
+
+                NavigationLink {
+                    HomeWeightEntryDetailView(
+                        entry: lastWeight,
+                        comparisonEntry: weightEntries.dropFirst().first,
+                        preferredWeightUnit: preferredWeightUnit
+                    )
+                } label: {
+                    HomeRecentActivityRow(
+                        icon: "scalemass",
+                        title: "Weight",
+                        subtitle: recentWeightSubtitle(lastWeight)
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens weight entry details.")
+                .accessibilityIdentifier("home.recentActivity.weight")
+            }
+
+            if workoutSessions.isEmpty && runningSessions.isEmpty && weightEntries.isEmpty {
+                Text("Your latest workout, cardio, and weight entries will appear here.")
+                    .font(.subheadline)
+                    .foregroundStyle(AppTheme.secondaryTextColor)
             }
         }
         .floatingTile()
+    }
+
+    private func recentWorkoutSubtitle(_ session: WorkoutSession) -> String {
+        let exerciseCount = Set((session.exerciseLogs ?? []).compactMap(\.exerciseName)).count
+        let exerciseText = exerciseCount == 1 ? "1 exercise" : "\(exerciseCount) exercises"
+        return "\(exerciseText) • \(session.date.formatted(date: .abbreviated, time: .shortened))"
+    }
+
+    private func recentRunSubtitle(_ session: RunningSession) -> String {
+        let convertedDistance = UnitConverter.distance(
+            session.distance,
+            from: session.distanceUnit,
+            to: distanceUnit
+        )
+        let distance = convertedDistance.formatted(.number.precision(.fractionLength(2)))
+        return "\(distance) \(distanceUnit) • \(formatActivityDuration(session.duration)) • \(session.date.formatted(date: .abbreviated, time: .omitted))"
+    }
+
+    private func recentWeightSubtitle(_ entry: WeightEntry) -> String {
+        let convertedWeight = UnitConverter.weight(
+            entry.weight,
+            from: entry.weightUnit,
+            to: preferredWeightUnit
+        )
+        let weight = convertedWeight.formatted(.number.precision(.fractionLength(1)))
+        return "\(weight) \(preferredWeightUnit) • \(entry.date.formatted(date: .abbreviated, time: .shortened))"
+    }
+
+    private func activityDisplayName(for activityType: String) -> String {
+        switch activityType {
+        case "walking":
+            return "Walk"
+        case "hiking":
+            return "Hike"
+        case "cycling":
+            return "Ride"
+        case "rowing":
+            return "Row"
+        case "elliptical":
+            return "Elliptical"
+        case "stairStepper", "stairClimbing":
+            return "Stair Climb"
+        default:
+            return "Run"
+        }
+    }
+
+    private func activityIcon(for activityType: String) -> String {
+        switch activityType {
+        case "walking":
+            return "figure.walk"
+        case "hiking":
+            return "figure.hiking"
+        case "cycling":
+            return "bicycle"
+        case "rowing":
+            return "figure.rower"
+        case "elliptical":
+            return "figure.core.training"
+        case "stairStepper", "stairClimbing":
+            return "figure.stairs"
+        default:
+            return "figure.run"
+        }
+    }
+
+    private func formatActivityDuration(_ duration: TimeInterval) -> String {
+        let totalSeconds = max(0, Int(duration))
+        let hours = totalSeconds / 3_600
+        let minutes = totalSeconds / 60 % 60
+        let seconds = totalSeconds % 60
+
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        }
+        return String(format: "%02d:%02d", minutes, seconds)
     }
 
     @ViewBuilder
@@ -502,21 +610,23 @@ struct HomeView: View {
                 }
             }
 
-            Button {
-                startQuickCardio(activityType: "running")
-            } label: {
-                Label("Start Run", systemImage: "figure.run")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.borderedProminent)
-            .accessibilityIdentifier("home.quickActions.startRun")
-            .id("home.quickActions.startRun")
-            .contextMenu {
-                ForEach(quickCardioOptions, id: \.activityType) { option in
-                    Button {
-                        startQuickCardio(activityType: option.activityType)
-                    } label: {
-                        Label(option.title, systemImage: option.icon)
+            if !runTracker.hasRecoverableActivity {
+                Button {
+                    startQuickCardio(activityType: "running")
+                } label: {
+                    Label("Start Run", systemImage: "figure.run")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("home.quickActions.startRun")
+                .id("home.quickActions.startRun")
+                .contextMenu {
+                    ForEach(quickCardioOptions, id: \.activityType) { option in
+                        Button {
+                            startQuickCardio(activityType: option.activityType)
+                        } label: {
+                            Label(option.title, systemImage: option.icon)
+                        }
                     }
                 }
             }
@@ -547,9 +657,20 @@ struct HomeView: View {
         quickWorkoutSession = session
     }
     
-    private func startQuickCardio(activityType: String) {
+    private func startQuickCardio(
+        activityType: String,
+        plannedTarget: ScheduledRunTarget? = nil
+    ) {
         Haptics.playImpact(.light)
-        quickCardioActivityType = activityType
+        let tracker = RunTracker.shared
+        // Re-enter an existing active/paused activity instead of presenting it
+        // under the type of the newly tapped shortcut.
+        quickCardioActivityType = tracker.hasRecoverableActivity
+            ? tracker.activityType
+            : activityType
+        quickPlannedRunTarget = tracker.hasRecoverableActivity
+            ? tracker.plannedTarget
+            : plannedTarget
         showQuickRunTracking = true
     }
     
@@ -577,7 +698,29 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                
+                HomeTodayCard(
+                    workoutSessions: workoutSessions,
+                    weightEntries: weightEntries,
+                    preferredWeightUnit: preferredWeightUnit,
+                    distanceUnit: distanceUnit,
+                    runTracker: runTracker,
+                    onStartCardio: { activityType, plannedTarget in
+                        startQuickCardio(
+                            activityType: activityType,
+                            plannedTarget: plannedTarget
+                        )
+                    },
+                    onOpenWorkout: { session in
+                        quickWorkoutSession = session
+                    },
+                    onLogWeight: {
+                        showQuickWeightLog = true
+                    },
+                    onSaveError: { message in
+                        saveErrorMessage = message
+                    }
+                )
+
                 // Weather summary tile
                 WeatherSummaryView()
 
@@ -657,7 +800,10 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showQuickRunTracking) {
             NavigationStack {
-                RunTrackingProView(activityType: quickCardioActivityType)
+                RunTrackingProView(
+                    activityType: quickCardioActivityType,
+                    plannedTarget: quickPlannedRunTarget
+                )
                     .navigationTitle(quickCardioTrackingTitle(for: quickCardioActivityType))
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
@@ -668,6 +814,11 @@ struct HomeView: View {
             .appBackground(AppTheme.gradientRuns)
             .foregroundColor(AppTheme.textColor)
             .tint(AppTheme.accentColor)
+        }
+        .onChange(of: showQuickRunTracking) { _, isPresented in
+            if !isPresented {
+                quickPlannedRunTarget = nil
+            }
         }
         .sheet(isPresented: $showQuickWeightLog) {
             LogWeightView()
@@ -688,6 +839,143 @@ struct HomeView: View {
             Text(saveErrorMessage ?? "Couldn’t save your changes. Please try again.")
         }
         .id(appTheme) // Force rebuild when theme changes
+    }
+}
+
+private struct HomeRecentActivityRow: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: icon)
+                .font(.headline)
+                .foregroundStyle(AppTheme.accentColor)
+                .frame(width: 36, height: 36)
+                .background(AppTheme.accentColor.opacity(0.14))
+                .clipShape(Circle())
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppTheme.textColor)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.secondaryTextColor)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppTheme.secondaryTextColor)
+                .accessibilityHidden(true)
+        }
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct HomeWeightEntryDetailView: View {
+    let entry: WeightEntry
+    let comparisonEntry: WeightEntry?
+    let preferredWeightUnit: String
+
+    @AppStorage("weightGoal") private var weightGoal: String = "lose"
+
+    private var convertedWeight: Double {
+        UnitConverter.weight(
+            entry.weight,
+            from: entry.weightUnit,
+            to: preferredWeightUnit
+        )
+    }
+
+    private var weightChange: Double? {
+        guard let comparisonEntry else { return nil }
+        let previousWeight = UnitConverter.weight(
+            comparisonEntry.weight,
+            from: comparisonEntry.weightUnit,
+            to: preferredWeightUnit
+        )
+        return convertedWeight - previousWeight
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(entry.date.formatted(date: .long, time: .shortened))
+                        .font(.headline)
+                    Text("Recorded measurement")
+                        .font(.subheadline)
+                        .foregroundStyle(AppTheme.secondaryTextColor)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .floatingTile()
+
+                detailMetric(
+                    title: "Weight",
+                    value: "\(convertedWeight.formatted(.number.precision(.fractionLength(1)))) \(preferredWeightUnit)"
+                )
+
+                if let weightChange {
+                    let isUp = weightChange >= 0
+                    let isTowardGoal = weightGoal == "gain" ? isUp : !isUp
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Change From Previous Entry")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.secondaryTextColor)
+
+                        Label {
+                            Text("\(abs(weightChange).formatted(.number.precision(.fractionLength(1)))) \(preferredWeightUnit)")
+                                .font(.headline)
+                                .monospacedDigit()
+                        } icon: {
+                            Image(systemName: isUp ? "arrow.up" : "arrow.down")
+                        }
+                        .foregroundStyle(isTowardGoal ? .green : .orange)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .floatingTile()
+                }
+
+                NavigationLink {
+                    WeightLogView()
+                } label: {
+                    Label("View Weight History", systemImage: "chart.line.uptrend.xyaxis")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.bordered)
+            }
+            .padding(.horizontal, AppTheme.padding)
+            .padding(.top)
+        }
+        .navigationTitle("Weight Entry")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
+        .appBackground(AppTheme.gradientWeight)
+        .foregroundStyle(AppTheme.textColor)
+        .tint(AppTheme.accentColor)
+    }
+
+    private func detailMetric(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(AppTheme.secondaryTextColor)
+            Text(value)
+                .font(.title2.weight(.semibold))
+                .monospacedDigit()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .floatingTile()
+        .accessibilityElement(children: .combine)
     }
 }
 

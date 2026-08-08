@@ -3,6 +3,7 @@ import SwiftData
 
 #if DEBUG
 /// Generates realistic sample data for testing purposes (DEBUG builds only)
+@MainActor
 enum DebugDataGenerator {
 
     // Hidden markers to identify debug/sample data (not visible to user)
@@ -16,10 +17,364 @@ enum DebugDataGenerator {
     // MARK: - UI Test Fixtures
 
     static func generateUITestFixture(named fixtureName: String, context: ModelContext) {
-        guard fixtureName == "core_tabs", !didSeedUITestFixture else { return }
+        guard !didSeedUITestFixture else { return }
 
         didSeedUITestFixture = true
-        generateCoreTabsFixture(context: context)
+        switch fixtureName {
+        case "core_tabs":
+            generateCoreTabsFixture(context: context)
+        case "app_store_month":
+            generateAppStoreMonthFixture(context: context)
+        case "wearable_inbox_duplicates":
+            generateWearableInboxDuplicateFixture(context: context)
+        case "wearable_inbox_distinct_oura_sync_ids":
+            generateDistinctOuraSyncIdentifierFixture(context: context)
+        case "wearable_inbox_courage_source":
+            generateCourageSourceFixture(context: context)
+        case "wearable_inbox_oura_apple_watch":
+            generateOuraAppleWatchFixture(context: context)
+        case "wearable_inbox_replacement_batches":
+            generateWearableReplacementBatchFixture(context: context)
+        case "wearable_inbox_replacement_retirement":
+            generateWearableReplacementRetirementFixture(context: context)
+        case "cardio_inbox_unique_match":
+            generateCardioInboxUniqueMatchFixture(context: context)
+        default:
+            break
+        }
+    }
+
+    private static func wearableInboxFixtureWindow() -> (start: Date, duration: TimeInterval) {
+        let calendar = Calendar.current
+        let day = calendar.date(
+            byAdding: .day,
+            value: -1,
+            to: calendar.startOfDay(for: Date())
+        ) ?? Date()
+        let start = calendar.date(byAdding: .hour, value: 18, to: day) ?? day
+        return (start, 58 * 60)
+    }
+
+    private static func generateCardioInboxUniqueMatchFixture(
+        context: ModelContext
+    ) {
+        let calendar = Calendar.current
+        let day = calendar.date(
+            byAdding: .day,
+            value: -1,
+            to: calendar.startOfDay(for: Date())
+        ) ?? Date()
+        let start = calendar.date(byAdding: .hour, value: 18, to: day) ?? day
+        let localDuration: TimeInterval = 38 * 60
+        let localEnd = start.addingTimeInterval(localDuration)
+        let runID = UUID(uuidString: "81000000-0000-0000-0000-000000000001")!
+
+        let localWalk = RunningSession(
+            id: runID,
+            date: localEnd,
+            distance: 2.10,
+            distanceUnit: "mi",
+            duration: localDuration,
+            notes: "Evening walk",
+            healthWorkoutUUID: "82000000-0000-0000-0000-000000000002",
+            activityType: "walking"
+        )
+        context.insert(localWalk)
+
+        let ouraWalk = CardioWorkoutInboxItem(
+            id: UUID(uuidString: "83000000-0000-0000-0000-000000000003")!,
+            healthWorkoutUUID: "84000000-0000-0000-0000-000000000004",
+            startDate: start.addingTimeInterval(20),
+            endDate: localEnd.addingTimeInterval(-10),
+            activityType: "walking",
+            distanceMeters: 3_347,
+            duration: localDuration - 30,
+            calories: 228,
+            avgHeartRate: 112,
+            maxHeartRate: 131,
+            minHeartRate: 78,
+            sourceName: "Oura",
+            sourceBundleIdentifier: "com.ouraring.oura",
+            healthSyncIdentifier: "oura-cardio-walk-fixture",
+            healthSyncVersion: 1,
+            suggestedRunningSessionID: runID
+        )
+        context.insert(ouraWalk)
+        _ = PersistenceSave.commit(
+            context,
+            action: "save cardio inbox match fixture"
+        )
+    }
+
+    private static func generateWearableInboxDuplicateFixture(context: ModelContext) {
+        let (start, duration) = wearableInboxFixtureWindow()
+        let sourceBundle = "com.ouraring.oura"
+
+        let rows: [HealthWorkoutInboxItem] = [
+            HealthWorkoutInboxItem(
+                healthWorkoutUUID: "10000000-0000-0000-0000-000000000001",
+                startDate: start,
+                endDate: start.addingTimeInterval(duration),
+                activityType: "traditionalStrengthTraining",
+                duration: duration,
+                sourceName: "Oura",
+                sourceBundleIdentifier: sourceBundle
+            ),
+            HealthWorkoutInboxItem(
+                healthWorkoutUUID: "10000000-0000-0000-0000-000000000001",
+                startDate: start,
+                endDate: start.addingTimeInterval(duration),
+                activityType: "traditionalStrengthTraining",
+                duration: duration,
+                sourceName: "Oura",
+                sourceBundleIdentifier: sourceBundle
+            ),
+            HealthWorkoutInboxItem(
+                healthWorkoutUUID: "20000000-0000-0000-0000-000000000002",
+                startDate: start.addingTimeInterval(15),
+                endDate: start.addingTimeInterval(duration + 15),
+                activityType: "traditionalStrengthTraining",
+                duration: duration,
+                calories: 410,
+                avgHeartRate: 132,
+                sourceName: "Oura Ring",
+                sourceBundleIdentifier: sourceBundle,
+                healthSyncIdentifier: "oura-strength-fixture",
+                healthSyncVersion: 2
+            ),
+            HealthWorkoutInboxItem(
+                healthWorkoutUUID: "30000000-0000-0000-0000-000000000003",
+                startDate: start.addingTimeInterval(-20),
+                endDate: start.addingTimeInterval(duration - 20),
+                activityType: "traditionalStrengthTraining",
+                duration: duration,
+                sourceName: "Oura",
+                sourceBundleIdentifier: sourceBundle,
+                healthSyncIdentifier: "oura-strength-fixture",
+                healthSyncVersion: 1
+            ),
+        ]
+
+        rows.forEach(context.insert)
+        _ = PersistenceSave.commit(context, action: "save wearable inbox duplicate fixture")
+    }
+
+    private static func generateDistinctOuraSyncIdentifierFixture(context: ModelContext) {
+        let (start, duration) = wearableInboxFixtureWindow()
+        let sourceBundle = "com.ouraring.oura"
+        let rows: [HealthWorkoutInboxItem] = [
+            HealthWorkoutInboxItem(
+                healthWorkoutUUID: "41000000-0000-0000-0000-000000000001",
+                startDate: start,
+                endDate: start.addingTimeInterval(duration),
+                activityType: "traditionalStrengthTraining",
+                duration: duration,
+                sourceName: "Oura",
+                sourceBundleIdentifier: sourceBundle,
+                healthSyncIdentifier: "oura-distinct-workout-a",
+                healthSyncVersion: 1
+            ),
+            HealthWorkoutInboxItem(
+                healthWorkoutUUID: "42000000-0000-0000-0000-000000000002",
+                startDate: start,
+                endDate: start.addingTimeInterval(duration),
+                activityType: "traditionalStrengthTraining",
+                duration: duration,
+                sourceName: "Oura",
+                sourceBundleIdentifier: sourceBundle,
+                healthSyncIdentifier: "oura-distinct-workout-b",
+                healthSyncVersion: 1
+            ),
+        ]
+
+        rows.forEach(context.insert)
+        _ = PersistenceSave.commit(
+            context,
+            action: "save distinct Oura sync identifier fixture"
+        )
+    }
+
+    private static func generateCourageSourceFixture(context: ModelContext) {
+        let (start, duration) = wearableInboxFixtureWindow()
+        let rows: [HealthWorkoutInboxItem] = [
+            HealthWorkoutInboxItem(
+                healthWorkoutUUID: "51000000-0000-0000-0000-000000000001",
+                startDate: start,
+                endDate: start.addingTimeInterval(duration),
+                activityType: "traditionalStrengthTraining",
+                duration: duration,
+                sourceName: "Courage",
+                sourceBundleIdentifier: "com.example.courage"
+            ),
+            HealthWorkoutInboxItem(
+                healthWorkoutUUID: "52000000-0000-0000-0000-000000000002",
+                startDate: start,
+                endDate: start.addingTimeInterval(duration),
+                activityType: "traditionalStrengthTraining",
+                duration: duration,
+                sourceName: "Courage",
+                sourceBundleIdentifier: "com.example.courage"
+            ),
+        ]
+
+        rows.forEach(context.insert)
+        _ = PersistenceSave.commit(context, action: "save Courage source fixture")
+    }
+
+    private static func generateOuraAppleWatchFixture(context: ModelContext) {
+        let (start, duration) = wearableInboxFixtureWindow()
+        let rows: [HealthWorkoutInboxItem] = [
+            HealthWorkoutInboxItem(
+                healthWorkoutUUID: "61000000-0000-0000-0000-000000000001",
+                startDate: start,
+                endDate: start.addingTimeInterval(duration),
+                activityType: "traditionalStrengthTraining",
+                duration: duration,
+                sourceName: "Oura",
+                sourceBundleIdentifier: "com.ouraring.oura"
+            ),
+            HealthWorkoutInboxItem(
+                healthWorkoutUUID: "62000000-0000-0000-0000-000000000002",
+                startDate: start.addingTimeInterval(8),
+                endDate: start.addingTimeInterval(duration + 8),
+                activityType: "traditionalStrengthTraining",
+                duration: duration,
+                calories: 395,
+                avgHeartRate: 137,
+                sourceName: "Apple Watch",
+                sourceBundleIdentifier: "com.apple.health"
+            ),
+        ]
+
+        rows.forEach(context.insert)
+        _ = PersistenceSave.commit(context, action: "save Oura and Apple Watch fixture")
+    }
+
+    private static func generateWearableReplacementBatchFixture(context: ModelContext) {
+        let (start, duration) = wearableInboxFixtureWindow()
+        let originalUUID = "71000000-0000-0000-0000-000000000001"
+        let replacementUUID = "72000000-0000-0000-0000-000000000002"
+        let syncIdentifier = "oura-sequential-replacement"
+
+        let session = WorkoutSession(
+            date: start,
+            title: "Replacement Linked Workout"
+        )
+        session.healthWorkoutUUID = originalUUID
+        session.healthDuration = duration
+        session.healthCalories = 310
+        session.healthAvgHeartRate = 111
+        session.healthSourceName = "Oura"
+        session.healthActivityType = "traditionalStrengthTraining"
+        context.insert(session)
+
+        let item = HealthWorkoutInboxItem(
+            healthWorkoutUUID: originalUUID,
+            startDate: start,
+            endDate: start.addingTimeInterval(duration),
+            activityType: "traditionalStrengthTraining",
+            duration: duration,
+            calories: 310,
+            avgHeartRate: 111,
+            sourceName: "Oura",
+            sourceBundleIdentifier: "com.ouraring.oura",
+            healthSyncIdentifier: syncIdentifier,
+            healthSyncVersion: 1
+        )
+        item.status = .linked
+        item.linkedWorkoutSessionID = session.id
+        context.insert(item)
+        guard PersistenceSave.commit(
+            context,
+            action: "save wearable replacement source fixture"
+        ) else {
+            return
+        }
+
+        let deletionTime = Date()
+        _ = WearableWorkoutInboxService.reconcileForUITesting(
+            importedWorkouts: [],
+            deleted: [
+                HealthKitManager.CardioWorkoutChanges.DeletedWorkout(
+                    uuid: originalUUID,
+                    syncIdentifier: syncIdentifier,
+                    syncVersion: 1
+                )
+            ],
+            observedAt: deletionTime,
+            context: context
+        )
+
+        let correctedStart = start.addingTimeInterval(45)
+        _ = WearableWorkoutInboxService.reconcileForUITesting(
+            importedWorkouts: [
+                WearableWorkoutInboxService.ImportedWorkout(
+                    healthWorkoutUUID: replacementUUID,
+                    startDate: correctedStart,
+                    endDate: correctedStart.addingTimeInterval(duration + 120),
+                    activityType: "traditionalStrengthTraining",
+                    duration: duration + 120,
+                    calories: 425,
+                    avgHeartRate: 137,
+                    sourceName: "Oura",
+                    sourceBundleIdentifier: "com.ouraring.oura",
+                    healthSyncIdentifier: syncIdentifier,
+                    healthSyncVersion: 2,
+                    healthExternalUUID: "oura-external-replacement"
+                )
+            ],
+            deleted: [],
+            observedAt: deletionTime.addingTimeInterval(5),
+            context: context
+        )
+    }
+
+    private static func generateWearableReplacementRetirementFixture(
+        context: ModelContext
+    ) {
+        generateWearableReplacementBatchFixture(context: context)
+        guard let item = try? context.fetch(
+            FetchDescriptor<HealthWorkoutInboxItem>()
+        ).first else {
+            return
+        }
+
+        let deletionTime = Date()
+        _ = WearableWorkoutInboxService.reconcileForUITesting(
+            importedWorkouts: [],
+            deleted: [
+                HealthKitManager.CardioWorkoutChanges.DeletedWorkout(
+                    uuid: item.healthWorkoutUUID,
+                    syncIdentifier: item.healthSyncIdentifier,
+                    syncVersion: item.healthSyncVersion
+                )
+            ],
+            observedAt: deletionTime,
+            context: context
+        )
+        _ = WearableWorkoutInboxService.reconcileForUITesting(
+            importedWorkouts: [],
+            deleted: [],
+            observedAt: deletionTime.addingTimeInterval(25 * 60 * 60),
+            context: context
+        )
+    }
+
+    private static func generateAppStoreMonthFixture(context: ModelContext) {
+        generateSampleData(context: context)
+
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+
+        for dayOffset in stride(from: 27, through: 0, by: -3) {
+            guard let date = calendar.date(byAdding: .day, value: -dayOffset, to: today) else { continue }
+            let progress = Double(27 - dayOffset) / 27.0
+            let weight = ((188.4 - (5.8 * progress)) * 10).rounded() / 10
+            let entryDate = calendar.date(byAdding: .hour, value: 7, to: date) ?? date
+            context.insert(WeightEntry(date: entryDate, weight: weight, weightUnit: "lbs"))
+        }
+
+        _ = PersistenceSave.commit(context, action: "save app store screenshot fixture")
     }
 
     private static func generateCoreTabsFixture(context: ModelContext) {
@@ -129,6 +484,41 @@ enum DebugDataGenerator {
                     context.insert(log)
                 }
             }
+        }
+
+        let plan = RunningPlan(
+            name: "5K Momentum",
+            source: "built_in",
+            style: "balanced",
+            targetDistanceMeters: 5_000,
+            primaryGoal: "finish_strong",
+            durationWeeks: 6,
+            daysPerWeek: 3,
+            startDate: today,
+            isActive: true
+        )
+        context.insert(plan)
+
+        let scheduledSessions: [(offset: Int, type: String, distance: Double?, duration: Double?, pace: Double?, intensity: String, notes: String)] = [
+            (0, "easy", 4_023.36, 1_800, 10.25, "easy", "Keep the effort conversational."),
+            (1, "rest", nil, nil, nil, "easy", "Rest or take a short walk."),
+            (2, "interval", 4_828.03, 2_100, 8.75, "hard", "Six controlled two-minute efforts."),
+        ]
+
+        for (dayIndex, item) in scheduledSessions.enumerated() {
+            let session = RunningPlanSession(
+                plan: plan,
+                weekIndex: 0,
+                dayIndex: dayIndex,
+                scheduledDate: calendar.date(byAdding: .day, value: item.offset, to: today),
+                sessionType: item.type,
+                targetDistanceMeters: item.distance,
+                targetDurationSeconds: item.duration,
+                targetPaceMinPerMile: item.pace,
+                intensityLevel: item.intensity,
+                notes: item.notes
+            )
+            context.insert(session)
         }
 
         _ = PersistenceSave.commit(context, action: "save changes")

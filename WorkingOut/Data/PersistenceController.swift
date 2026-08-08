@@ -63,11 +63,14 @@ class PersistenceController {
             RunningSession.self,
             RunningPlan.self,
             RunningPlanSession.self,
+            TrainingPlan.self,
+            PlannedSession.self,
             WeightEntry.self,
             AIConversation.self,
             WorkoutTemplate.self,
             TemplateExercise.self,
-            HealthWorkoutInboxItem.self
+            HealthWorkoutInboxItem.self,
+            CardioWorkoutInboxItem.self
         ])
 
         // Build a configuration; enable CloudKit (will fall back to local if not available)
@@ -204,8 +207,7 @@ class PersistenceController {
             (from: "Flat Bench Press", to: "Bench Press", group: "Chest"),
             (from: "Incline Bench", to: "Incline Bench Press", group: "Chest"),
             (from: "Romanian Deadlifts (RDLs)", to: "Romanian Deadlifts", group: "Back"),
-            (from: "Rows", to: "Barbell Rows", group: "Back"),
-            (from: "Romanian Squats", to: "Bulgarian Split Squats", group: "Legs")
+            (from: "Rows", to: "Barbell Rows", group: "Back")
         ]
 
         var changed = false

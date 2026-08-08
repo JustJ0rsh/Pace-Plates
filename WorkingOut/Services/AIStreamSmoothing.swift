@@ -21,26 +21,12 @@ enum AIStreamSmoothing {
         guard !current.isEmpty else { return "" }
         guard !previous.isEmpty else { return current }
 
-        if current.hasPrefix(previous) {
-            return String(current.dropFirst(previous.count))
-        }
-
-        if previous.hasPrefix(current) {
-            // Model corrected by backtracking; caller can't delete already-rendered text safely.
-            return ""
-        }
-
-        let prefixLength = commonPrefixLength(previous: previous, current: current)
-        if prefixLength > 0 {
-            return String(current.dropFirst(prefixLength))
-        }
-
-        let overlap = overlapLength(previous: previous, current: current)
-        if overlap > 0 {
-            return String(current.dropFirst(overlap))
-        }
-
-        return ""
+        // The stream consumers are append-only. If a snapshot backtracks or
+        // revises already-rendered text, there is no safe delta to append.
+        // Waiting for a later monotonic snapshot avoids output such as
+        // "Take 3 sets4 sets".
+        guard current.hasPrefix(previous) else { return "" }
+        return String(current.dropFirst(previous.count))
     }
 
     static func wordChunked(_ text: String, maxChunkChars: Int = 42) -> [String] {
@@ -90,18 +76,5 @@ enum AIStreamSmoothing {
 
         flush()
         return chunks
-    }
-
-    private static func overlapLength(previous: String, current: String) -> Int {
-        let maxOverlap = min(previous.count, current.count)
-        guard maxOverlap > 0 else { return 0 }
-
-        for overlap in stride(from: maxOverlap, through: 1, by: -1) {
-            if previous.suffix(overlap) == current.prefix(overlap) {
-                return overlap
-            }
-        }
-
-        return 0
     }
 }

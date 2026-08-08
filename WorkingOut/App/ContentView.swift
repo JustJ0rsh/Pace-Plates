@@ -1,7 +1,6 @@
 import SwiftUI
 import GameKit
 import SwiftData
-import HealthKit
 
 struct ContentView: View {
     let persistenceController = PersistenceController.shared // Need access to this
@@ -11,9 +10,7 @@ struct ContentView: View {
     @AppStorage("didCompleteProfileSetup") private var didCompleteProfileSetup: Bool = false
     @AppStorage("age") private var age: Int = 0
     @AppStorage("heightValue") private var heightValue: Double = 0
-    @AppStorage("didShowHealthAccessIssueAlert") private var didShowHealthAccessIssueAlert: Bool = false
     @State private var showTutorial: Bool = false
-    @State private var healthAuthError: String? = nil
     @AppStorage("measurementSystem") private var measurementSystem: String = "imperial"
     @AppStorage("weightUnit") private var weightUnit: String = "lbs"
     @AppStorage("distanceUnit") private var distanceUnit: String = "mi"
@@ -41,7 +38,7 @@ struct ContentView: View {
                 .tag(1)
 
             NavigationStack { AIPlannerView() }
-                .tabItem { Label("AI", systemImage: "sparkles") }
+                .tabItem { Label("Coach", systemImage: "sparkles.rectangle.stack.fill") }
                 .tag(2)
 
             // Right side
@@ -76,14 +73,17 @@ struct ContentView: View {
             persistenceController.ensureDefaultExercisesPresent()
             // Unify synonymous exercise names without losing user history
             persistenceController.unifySynonymousExerciseDefinitions()
+            TrainingPlanService.shared.syncRunningPlans(
+                context: persistenceController.container.mainContext
+            )
             // Ensure legacy arm exercises are reclassified to Biceps/Triceps
             // (idempotent)
 
             #if DEBUG
             DebugDataGenerator.hideLegacySampleMarkers(context: persistenceController.container.mainContext)
-            if launchConfiguration.usesCoreTabsFixture {
+            if let fixtureName = launchConfiguration.fixtureName {
                 DebugDataGenerator.generateUITestFixture(
-                    named: "core_tabs",
+                    named: fixtureName,
                     context: persistenceController.container.mainContext
                 )
             }
@@ -105,7 +105,11 @@ struct ContentView: View {
             // Show onboarding if: 
             // 1. They haven't completed profile setup AND
             // 2. They haven't filled out basic profile info (age, height)
-            if launchConfiguration.shouldSkipAutomationSideEffects {
+            if launchConfiguration.shouldShowOnboardingForTesting {
+                didCompleteProfileSetup = false
+                didShowTutorial = false
+                showTutorial = true
+            } else if launchConfiguration.shouldSkipAutomationSideEffects {
                 didCompleteProfileSetup = true
                 didShowTutorial = true
                 showTutorial = false
@@ -118,10 +122,6 @@ struct ContentView: View {
                     didCompleteProfileSetup = true
                     didShowTutorial = true
 
-                    // Check health authorization and prompt if not granted
-                    Task { @MainActor in
-                        await checkAndRequestHealthAuthorizationIfNeeded()
-                    }
                 }
             }
             
@@ -151,27 +151,18 @@ struct ContentView: View {
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
             reconcileLiveActivities()
+            TrainingPlanService.shared.reconcileTrackedRuns(
+                context: persistenceController.container.mainContext
+            )
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willTerminateNotification)) { _ in
             LiveActivityManager.shared.end()
         }
-        .alert("Health Access Issue", isPresented: Binding(get: { healthAuthError != nil }, set: { if !$0 { healthAuthError = nil } })) {
-            Button("OK", role: .cancel) { healthAuthError = nil }
-            Button("Open Settings") {
-                if let url = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(url)
-                }
-            }
-        } message: {
-            Text(healthAuthError ?? "Health permissions may be limited. You can adjust them in Settings.")
-        }
-        .sheet(isPresented: $showTutorial, onDismiss: {
-            didShowTutorial = true
-            didCompleteProfileSetup = true
-        }) {
+        .sheet(isPresented: $showTutorial) {
             TutorialView(onFinish: {
                 finishOnboarding()
             })
+            .interactiveDismissDisabled()
         }
 
         .sheet(item: $importedWorkout) { session in
@@ -197,76 +188,6 @@ extension ContentView {
         didShowTutorial = true
         didCompleteProfileSetup = true
         showTutorial = false
-
-        guard !launchConfiguration.shouldSkipAutomationSideEffects else { return }
-
-        Task { @MainActor in
-            do {
-                // Give time for the tutorial sheet to fully dismiss before presenting system permission sheets.
-                try await Task.sleep(nanoseconds: 500_000_000)
-                try await HealthKitManager.shared.requestAuthorization()
-                if !HealthKitManager.shared.isAuthorized {
-                    presentHealthAuthorizationIssue(incompleteHealthAuthorizationMessage)
-                } else {
-                    clearHealthAuthorizationIssue(resetSuppression: true)
-                }
-            } catch {
-                presentHealthAuthorizationIssue(error.localizedDescription)
-            }
-        }
-    }
-    
-    /// Checks if Health authorization is needed and requests it
-    /// This ensures users get prompted after reinstalling the app
-    @MainActor
-    private func checkAndRequestHealthAuthorizationIfNeeded() async {
-        guard !launchConfiguration.shouldSkipAutomationSideEffects else { return }
-        guard HKHealthStore.isHealthDataAvailable() else { return }
-
-        await HealthKitManager.shared.refreshAuthorizationState()
-        if HealthKitManager.shared.isAuthorized {
-            clearHealthAuthorizationIssue(resetSuppression: true)
-            return
-        }
-
-        let shouldRequestAuthorization = await HealthKitManager.shared.authorizationRequiresRequest()
-        if shouldRequestAuthorization {
-            do {
-                try await Task.sleep(nanoseconds: 500_000_000) // Small delay for smooth UX
-                try await HealthKitManager.shared.requestAuthorization()
-                if !HealthKitManager.shared.isAuthorized {
-                    presentHealthAuthorizationIssue(incompleteHealthAuthorizationMessage)
-                } else {
-                    clearHealthAuthorizationIssue(resetSuppression: true)
-                }
-            } catch {
-                presentHealthAuthorizationIssue(error.localizedDescription)
-            }
-        } else {
-            presentHealthAuthorizationIssue(incompleteHealthAuthorizationMessage)
-        }
-    }
-
-    @MainActor
-    private func presentHealthAuthorizationIssue(_ message: String) {
-        if message == incompleteHealthAuthorizationMessage {
-            guard !didShowHealthAccessIssueAlert else { return }
-            didShowHealthAccessIssueAlert = true
-        }
-
-        healthAuthError = message
-    }
-
-    @MainActor
-    private func clearHealthAuthorizationIssue(resetSuppression: Bool = false) {
-        healthAuthError = nil
-        if resetSuppression {
-            didShowHealthAccessIssueAlert = false
-        }
-    }
-
-    private var incompleteHealthAuthorizationMessage: String {
-        "Health permissions are incomplete. Enable workout, workout route, and distance write access in Settings > Health > Data Access & Devices."
     }
 
     // Removed debug-only sample run feature and top banner

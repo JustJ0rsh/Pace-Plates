@@ -164,6 +164,10 @@ final class WorkoutPlanGenerator {
     // Prewarm on AI tab open to reduce first-token latency
     @MainActor
     func prewarmIfPossible() async {
+        guard !AppLaunchConfiguration.current.isUITest else {
+            return
+        }
+
         guard AIProviderManager.currentStatus().canGenerateNow else {
             return
         }
@@ -186,13 +190,15 @@ final class WorkoutPlanGenerator {
     
     /// Reset/offload the model sessions to clear context and free memory
     @MainActor
-    func resetModelContext() {
+    func resetModelContext(preserveConversationSummary: Bool = false) {
         #if AI_FOUNDATION_AVAILABLE
         if #available(iOS 26, *) {
             #if canImport(FoundationModels)
             print("🔄 Resetting model context...")
             basicSession = nil
-            Self.lastConversationSummary = nil
+            if !preserveConversationSummary {
+                Self.lastConversationSummary = nil
+            }
             print("✅ Model context reset complete")
             #endif
         }
@@ -204,18 +210,30 @@ final class WorkoutPlanGenerator {
         #if AI_FOUNDATION_AVAILABLE
         if #available(iOS 26, *) {
             #if canImport(FoundationModels)
-            // Take last 6-8 messages for summary
             let recentMessages = messages.suffix(8)
             guard !recentMessages.isEmpty else { return nil }
-            
-            // Build a concise summary prompt
-            var summaryText = "Previous conversation summary:\n"
-            for (role, text) in recentMessages {
-                let preview = String(text.prefix(150))
-                summaryText += "\(role): \(preview)...\n"
+
+            // Keep the deterministic handoff below conversationContext's cap.
+            // Prefer the newest turns while preserving their display order.
+            let heading = "Previous conversation summary:"
+            let maxSummaryChars = 320
+            var selected: [String] = []
+            var usedChars = heading.count
+
+            for (role, text) in recentMessages.reversed() {
+                let cleaned = normalizedConversationText(text)
+                guard !cleaned.isEmpty else { continue }
+
+                let available = maxSummaryChars - usedChars - 1
+                guard available > role.count + 3 else { break }
+                let previewLimit = min(120, available - role.count - 2)
+                let preview = String(cleaned.prefix(previewLimit))
+                selected.insert("\(role): \(preview)", at: 0)
+                usedChars += role.count + preview.count + 3
             }
-            
-            return summaryText
+
+            guard !selected.isEmpty else { return nil }
+            return ([heading] + selected).joined(separator: "\n")
             #endif
         }
         #endif
@@ -244,6 +262,13 @@ final class WorkoutPlanGenerator {
     func generateAskStream(request: WorkoutPlanRequest,
                            history: [(String, String)],
                            profile: AskGenerationProfile = .conversational) -> AsyncThrowingStream<String, Error> {
+        if AppLaunchConfiguration.current.isUITest {
+            return AsyncThrowingStream { continuation in
+                continuation.yield("Keep an easy run conversational and controlled. Slow down whenever breathing becomes strained.")
+                continuation.finish()
+            }
+        }
+
         let status = AIProviderManager.currentStatus()
         let conversationContext = Self.conversationContext(
             for: request.extraContext,
@@ -257,7 +282,7 @@ final class WorkoutPlanGenerator {
         if #available(iOS 26, *) {
             #if canImport(FoundationModels)
             return AsyncThrowingStream { continuation in
-                Task {
+                let producer = Task {
                     do {
                         try Task.checkCancellation()
                         let generationOptions = Self.generationOptionsForAsk(profile: profile)
@@ -276,17 +301,16 @@ final class WorkoutPlanGenerator {
                         // Build concise prompt using centralized builder
                         // Include equipment from Settings if available
                         let equipment = UserDefaults.standard.string(forKey: "userEquipment")
-                        var prompt = AIPromptBuilder.buildConversationPrompt(
+                        let prompt = AIPromptBuilder.buildConversationPrompt(
                             goal: request.goal,
                             question: request.extraContext,
                             weightUnit: request.weightUnit,
                             distanceUnit: request.distanceUnit,
                             userStats: userStats,
                             equipment: equipment,
-                            conversationContext: conversationContext
+                            conversationContext: conversationContext,
+                            maxChars: 900
                         )
-                        // Extra-safe cap for Ask prompts
-                        if prompt.count > 900 { prompt = String(prompt.prefix(900)) }
 
                         // Clamp prompt size defensively to avoid context window overflow
                         let safePrompt = Self.clampPrompt(prompt)
@@ -295,9 +319,8 @@ final class WorkoutPlanGenerator {
                         #if canImport(FoundationModels)
                         if #available(iOS 26, *) {
                             do {
-                                print("🎯 Conversation: Streaming Foundation Models response for prompt: \(safePrompt.prefix(100))...")
-                                var previousSnapshotText = ""
-                                var streamedAnyText = false
+                                var latestSnapshotText = ""
+                                var emittedText = ""
 
                                 for try await snapshot in session.streamResponse(
                                     to: safePrompt,
@@ -307,22 +330,22 @@ final class WorkoutPlanGenerator {
                                     let currentText = snapshot.content
                                         .replacingOccurrences(of: "\r\n", with: "\n")
                                         .replacingOccurrences(of: "\r", with: "\n")
+                                    latestSnapshotText = currentText
 
                                     let delta = AIStreamSmoothing.appendableDelta(
-                                        previous: previousSnapshotText,
+                                        previous: emittedText,
                                         current: currentText
                                     )
-                                    previousSnapshotText = currentText
 
                                     guard !delta.isEmpty else { continue }
-                                    streamedAnyText = true
+                                    emittedText += delta
                                     for piece in AIStreamSmoothing.wordChunked(delta, maxChunkChars: 34) {
                                         continuation.yield(piece)
                                     }
                                 }
 
-                                if !streamedAnyText && !previousSnapshotText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                    continuation.yield(previousSnapshotText)
+                                if emittedText.isEmpty && !latestSnapshotText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    continuation.yield(latestSnapshotText)
                                 }
                                 continuation.finish()
                                 return
@@ -350,6 +373,11 @@ final class WorkoutPlanGenerator {
                         print("❌ Conversation setup failed: \(error.localizedDescription)")
                         continuation.finish(throwing: error)
                         return
+                    }
+                }
+                continuation.onTermination = { @Sendable termination in
+                    if case .cancelled = termination {
+                        producer.cancel()
                     }
                 }
             }
@@ -414,10 +442,13 @@ final class WorkoutPlanGenerator {
         var assembled: [String] = []
         var totalChars = 0
         for line in lines {
-            let proposed = totalChars == 0 ? line.count : line.count + 1
-            if totalChars + proposed > maxChars { break }
-            assembled.append(line)
-            totalChars += proposed
+            let separatorCount = totalChars == 0 ? 0 : 1
+            let available = maxChars - totalChars - separatorCount
+            guard available > 0 else { break }
+            let clipped = String(line.prefix(available))
+            guard !clipped.isEmpty else { continue }
+            assembled.append(clipped)
+            totalChars += clipped.count + separatorCount
         }
 
         guard !assembled.isEmpty else { return nil }
@@ -439,7 +470,7 @@ final class WorkoutPlanGenerator {
         if #available(iOS 26, *) {
             // Guided generation via FoundationModels; use a fresh session per request to avoid context carry-over
             return AsyncThrowingStream { continuation in
-                Task {
+                let producer = Task {
                     do {
                         #if canImport(FoundationModels)
                         let session: LanguageModelSession = await MainActor.run {
@@ -470,6 +501,10 @@ final class WorkoutPlanGenerator {
                                         return
                                     }
 
+                                    guard !Task.isCancelled else {
+                                        continuation.finish()
+                                        return
+                                    }
                                     continuation.yield("⚠️ **Generation Failed**\n\nUnable to generate a structured plan right now. Please try again.")
                                     continuation.finish()
                                     return
@@ -480,6 +515,9 @@ final class WorkoutPlanGenerator {
                                     if Task.isCancelled { break }
                                     continuation.yield(chunk)
                                 }
+                                continuation.finish()
+                                return
+                            } catch is CancellationError {
                                 continuation.finish()
                                 return
                             } catch {
@@ -512,6 +550,14 @@ final class WorkoutPlanGenerator {
                             continuation.finish()
                         } else {
                             continuation.finish(throwing: error)
+                        }
+                    }
+                }
+                continuation.onTermination = { @Sendable termination in
+                    if case .cancelled = termination {
+                        producer.cancel()
+                        if let token {
+                            _ = Self.takeStructuredPlanJSON(for: token)
                         }
                     }
                 }
@@ -589,7 +635,11 @@ final class WorkoutPlanGenerator {
 
         // Fetch objects directly via SwiftData queries
         let workouts: [WorkoutSession] = (try? context.fetch(FetchDescriptor<WorkoutSession>())) ?? []
-        let runs: [RunningSession] = (try? context.fetch(FetchDescriptor<RunningSession>())) ?? []
+        let runs: [RunningSession] = (try? context.fetch(
+            FetchDescriptor<RunningSession>(
+                sortBy: [SortDescriptor(\RunningSession.date, order: .reverse)]
+            )
+        )) ?? []
         let exerciseDefs: [ExerciseDefinition] = (try? context.fetch(FetchDescriptor<ExerciseDefinition>())) ?? []
         let weights: [WeightEntry] = (try? context.fetch(FetchDescriptor<WeightEntry>(sortBy: [SortDescriptor(\.date, order: .reverse)]))) ?? []
 
@@ -603,7 +653,10 @@ final class WorkoutPlanGenerator {
         var detailedWorkouts: [DetailedWorkout] = []
         
         for session in recentWorkouts {
-            let logs = session.exerciseLogs ?? []
+            let sessionLogs: [ExerciseLog] = session.exerciseLogs ?? []
+            let logs = sessionLogs.filter {
+                ExerciseRecommendationService.isCompletedPositiveStrengthSet($0)
+            }
             var sessionVolume: Double = 0
             var exerciseNames: [String] = []
             
@@ -632,7 +685,7 @@ final class WorkoutPlanGenerator {
         // For distance-weighted average pace
         var aggDurationSec14d: TimeInterval = 0
         var aggDistanceUnits14d: Double = 0
-        var lastDistances: [Double] = []
+        var recentDistances: [Double] = []
         
         for run in recentRuns {
             let baseMi = run.distanceUnit.lowercased().contains("mi")
@@ -648,7 +701,7 @@ final class WorkoutPlanGenerator {
                 aggDurationSec14d += run.duration
                 aggDistanceUnits14d += distInUnit
             }
-            if converted > 0 { lastDistances.append(converted) }
+            if converted > 0 { recentDistances.append(converted) }
 
             detailedRuns.append(DetailedRun(
                 date: run.date,
@@ -724,8 +777,10 @@ final class WorkoutPlanGenerator {
         // Compute typical distance (median of last up to 6 runs)
         var typicalRunDistance: Double? = nil
         var suggestedLongRun: Double? = nil
-        if !lastDistances.isEmpty {
-            let sorted = lastDistances.suffix(6).sorted()
+        if !recentDistances.isEmpty {
+            // `runs` is newest-first, so prefix(6) is deterministically the six
+            // most recent qualifying local runs.
+            let sorted = recentDistances.prefix(6).sorted()
             if !sorted.isEmpty {
                 let mid = sorted.count / 2
                 let median = sorted.count % 2 == 0 ? (sorted[mid-1] + sorted[mid]) / 2.0 : sorted[mid]
@@ -834,7 +889,7 @@ final class WorkoutPlanGenerator {
                     fallback: previousPreviewText,
                     distanceUnit: request.distanceUnit
                 )
-                let delta = AIStreamSmoothing.appendableDelta(previous: previousPreviewText, current: preview)
+                let delta = AIStreamSmoothing.appendableDelta(previous: emittedText, current: preview)
                 previousPreviewText = preview
 
                 guard !delta.isEmpty else { continue }
@@ -1171,13 +1226,12 @@ final class WorkoutPlanGenerator {
     private static func weekdayIndex(from title: String, calendar: Calendar) -> Int? {
         let lowered = title.lowercased()
         let normalized = lowered.replacingOccurrences(of: "[^a-z]", with: " ", options: .regularExpression)
-        let compact = lowered.replacingOccurrences(of: "[^a-z]", with: "", options: .regularExpression)
         let tokens = Set(normalized.split(separator: " ").map(String.init))
 
         for idx in 0..<7 {
             let full = normalizedDayToken(calendar.weekdaySymbols[idx])
             let short = normalizedDayToken(calendar.shortWeekdaySymbols[idx])
-            if tokens.contains(full) || tokens.contains(short) || compact.contains(full) || compact.contains(short) {
+            if tokens.contains(full) || tokens.contains(short) {
                 return idx + 1
             }
         }
@@ -1191,7 +1245,7 @@ final class WorkoutPlanGenerator {
             ("fri", 6), ("friday", 6),
             ("sat", 7), ("saturday", 7)
         ]
-        for (token, weekday) in fallback where tokens.contains(token) || compact.contains(token) {
+        for (token, weekday) in fallback where tokens.contains(token) {
             return weekday
         }
         return nil

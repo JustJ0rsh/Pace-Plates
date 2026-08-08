@@ -206,7 +206,15 @@ struct WorkoutExercisesTile: View {
                                             weightUnit: base.weightUnit,
                                             setNumber: (logs.map { $0.setNumber }.max() ?? 0) + 1,
                                             exerciseName: base.exerciseName,
-                                            exerciseOrder: base.exerciseOrder
+                                            exerciseOrder: base.exerciseOrder,
+                                            exerciseType: base.exerciseType,
+                                            durationSeconds: base.durationSeconds,
+                                            distance: base.distance,
+                                            distanceUnit: base.distanceUnit,
+                                            caloriesBurned: base.caloriesBurned,
+                                            avgHeartRate: base.avgHeartRate,
+                                            notes: base.notes,
+                                            isCompleted: false
                                         )
                                         next.exerciseDefinition = base.exerciseDefinition
                                         next.workoutSession = session

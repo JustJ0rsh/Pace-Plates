@@ -57,7 +57,8 @@ final class GameCenterService: NSObject {
     func presentLeaderboards(leaderboardID: String? = nil, from presenter: UIViewController? = nil) {
         guard isCommunityAccessEnabled else { return }
         guard isAuthenticated || GKLocalPlayer.local.isAuthenticated else {
-            authenticate(presenting: presenter) { [weak self] _ in
+            authenticate(presenting: presenter) { [weak self] error in
+                guard error == nil, GKLocalPlayer.local.isAuthenticated else { return }
                 self?.presentLeaderboards(leaderboardID: leaderboardID, from: presenter)
             }
             return
@@ -69,7 +70,8 @@ final class GameCenterService: NSObject {
     func presentAchievements(from presenter: UIViewController? = nil) {
         guard isCommunityAccessEnabled else { return }
         guard isAuthenticated || GKLocalPlayer.local.isAuthenticated else {
-            authenticate(presenting: presenter) { [weak self] _ in
+            authenticate(presenting: presenter) { [weak self] error in
+                guard error == nil, GKLocalPlayer.local.isAuthenticated else { return }
                 self?.presentAchievements(from: presenter)
             }
             return
@@ -154,7 +156,10 @@ final class GameCenterService: NSObject {
         var bestDeadlift: Double = 0
         var sessionVolumeLbs: Double = 0
 
-        for log in logs where (log.exerciseType ?? "strength") == "strength" {
+        for log in logs where (log.isCompleted || log.workoutSession?.sourceTemplateID == nil)
+            && (log.exerciseType ?? "strength") == "strength"
+            && log.reps > 0
+            && log.weight > 0 {
             let name = (log.exerciseName ?? "").lowercased()
             let weightLbs = lbs(from: log.weight, unit: log.weightUnit)
             sessionVolumeLbs += Double(log.effectiveReps) * weightLbs

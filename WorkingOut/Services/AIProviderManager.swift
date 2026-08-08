@@ -104,7 +104,10 @@ enum AIProviderManager {
     }
 
     static func currentStatus() -> AIProviderStatus {
-        AIProviderStatus(appleIntelligenceStatus: appleIntelligenceStatus())
+        if AppLaunchConfiguration.current.isUITest {
+            return AIProviderStatus(appleIntelligenceStatus: .available)
+        }
+        return AIProviderStatus(appleIntelligenceStatus: appleIntelligenceStatus())
     }
 
     /// One-time removal of artifacts from the retired OpenRouter integration:

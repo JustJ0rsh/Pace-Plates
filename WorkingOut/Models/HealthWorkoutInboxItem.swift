@@ -23,6 +23,18 @@ final class HealthWorkoutInboxItem {
     var avgHeartRate: Double? = nil
     // Recording device/app, e.g. "Apple Watch"
     var sourceName: String? = nil
+    // Stable source/metadata identity used to reconcile HealthKit replacements.
+    var sourceBundleIdentifier: String? = nil
+    var healthSyncIdentifier: String? = nil
+    var healthSyncVersion: Int? = nil
+    var healthExternalUUID: String? = nil
+    // Other HKWorkout UUIDs observed for this same logical workout. Health data
+    // remains untouched; aliases only prevent duplicate local inbox cards.
+    var alternateHealthWorkoutUUIDsRaw: String = ""
+    // HealthKit replacements can report the deletion and addition in separate
+    // anchored-query batches. Keep the local row hidden briefly so a later
+    // replacement can inherit its linked/dismissed state and metrics.
+    var healthDeletionObservedAt: Date? = nil
     var statusRaw: String = Status.pending.rawValue
     var linkedWorkoutSessionID: UUID? = nil
     var createdAt: Date = Date()
@@ -40,7 +52,12 @@ final class HealthWorkoutInboxItem {
          duration: TimeInterval,
          calories: Double? = nil,
          avgHeartRate: Double? = nil,
-         sourceName: String? = nil) {
+         sourceName: String? = nil,
+         sourceBundleIdentifier: String? = nil,
+         healthSyncIdentifier: String? = nil,
+         healthSyncVersion: Int? = nil,
+         healthExternalUUID: String? = nil,
+         alternateHealthWorkoutUUIDsRaw: String = "") {
         self.id = id
         self.healthWorkoutUUID = healthWorkoutUUID
         self.startDate = startDate
@@ -50,6 +67,11 @@ final class HealthWorkoutInboxItem {
         self.calories = calories
         self.avgHeartRate = avgHeartRate
         self.sourceName = sourceName
+        self.sourceBundleIdentifier = sourceBundleIdentifier
+        self.healthSyncIdentifier = healthSyncIdentifier
+        self.healthSyncVersion = healthSyncVersion
+        self.healthExternalUUID = healthExternalUUID
+        self.alternateHealthWorkoutUUIDsRaw = alternateHealthWorkoutUUIDsRaw
         self.statusRaw = Status.pending.rawValue
         self.createdAt = Date()
     }

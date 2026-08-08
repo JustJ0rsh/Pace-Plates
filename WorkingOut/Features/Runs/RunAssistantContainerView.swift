@@ -5,7 +5,7 @@ struct RunAssistantContainerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
 
-    let onStartRun: () -> Void
+    let onStartRun: (ScheduledRunTarget) -> Void
 
     @AppStorage("didCompleteRunAssistantOnboarding") private var didCompleteOnboarding: Bool = false
     @AppStorage("runAssistantGoalFocus") private var goalFocus: String = "hybrid"
@@ -59,9 +59,9 @@ struct RunAssistantContainerView: View {
                 if didCompleteOnboarding {
                     RunAssistantDashboardView(
                         profile: profileBinding,
-                        onStartRun: {
+                        onStartRun: { target in
                             dismiss()
-                            onStartRun()
+                            onStartRun(target)
                         },
                         onEditProfile: {
                             showProfileEditor = true

@@ -48,6 +48,7 @@ struct AIConversationSheet: View {
     @State private var showTemplateSuccess = false
     @State private var createdTemplatesCount = 0
     @State private var waitingForFirstChunk = true
+    @State private var conversationID = UUID()
 
     init(mode: Mode, request: WorkoutPlanRequest) {
         self.mode = mode
@@ -281,10 +282,10 @@ struct AIConversationSheet: View {
         } message: {
             Text("Your workout plan has been added to your calendar with reminders.")
         }
-        .alert("Saved as Templates", isPresented: $showTemplateSuccess) {
+        .alert("Plan Ready", isPresented: $showTemplateSuccess) {
             Button("OK") { }
         } message: {
-            Text("\(createdTemplatesCount) workout template\(createdTemplatesCount == 1 ? "" : "s") created! Check the Templates tab in Workouts to use them.")
+            Text("Coach activated this plan and created \(createdTemplatesCount) executable session\(createdTemplatesCount == 1 ? "" : "s").")
         }
         .alert("Calendar Access", isPresented: .constant(calendarError != nil)) {
             Button("Settings") {
@@ -869,15 +870,32 @@ struct AIConversationSheet: View {
             promptText = request.extraContext.isEmpty ? "General Question" : request.extraContext
         }
         
-        let convo = AIConversation(
-            mode: mode.rawValue,
-            goal: request.goal,
-            prompt: promptText,
-            response: content,
-            model: WorkoutPlanGenerator.shared.persistenceModelIdentifier(),
-            structuredPlanJSON: structuredPlanJSON
+        let id = conversationID
+        let descriptor = FetchDescriptor<AIConversation>(
+            predicate: #Predicate { $0.id == id }
         )
-        modelContext.insert(convo)
+        let convo: AIConversation
+        if let existing = try? modelContext.fetch(descriptor).first {
+            convo = existing
+            convo.date = Date()
+            convo.mode = mode.rawValue
+            convo.goal = request.goal
+            convo.prompt = promptText
+            convo.response = content
+            convo.model = WorkoutPlanGenerator.shared.persistenceModelIdentifier()
+            convo.structuredPlanJSON = structuredPlanJSON
+        } else {
+            convo = AIConversation(
+                id: conversationID,
+                mode: mode.rawValue,
+                goal: request.goal,
+                prompt: promptText,
+                response: content,
+                model: WorkoutPlanGenerator.shared.persistenceModelIdentifier(),
+                structuredPlanJSON: structuredPlanJSON
+            )
+            modelContext.insert(convo)
+        }
         do { try modelContext.save(); showSaved = true } catch { errorText = error.localizedDescription }
     }
     
@@ -895,11 +913,13 @@ struct AIConversationSheet: View {
                 }
                 
                 let tempConvo = AIConversation(
+                    id: conversationID,
                     mode: mode.rawValue,
                     goal: request.goal,
                     prompt: promptText,
                     response: content,
-                    model: WorkoutPlanGenerator.shared.persistenceModelIdentifier()
+                    model: WorkoutPlanGenerator.shared.persistenceModelIdentifier(),
+                    structuredPlanJSON: structuredPlanJSON
                 )
                 
                 do {
@@ -937,6 +957,7 @@ struct AIConversationSheet: View {
         }
         
         let tempConvo = AIConversation(
+            id: conversationID,
             mode: mode.rawValue,
             goal: request.goal,
             prompt: promptText,
@@ -950,14 +971,21 @@ struct AIConversationSheet: View {
             conversation: tempConvo,
             context: modelContext
         )
+
+        let trainingPlan = TrainingPlanService.shared.createOrUpdateAIPlan(
+            conversation: tempConvo,
+            templates: templates,
+            context: modelContext,
+            activate: true
+        )
         
         createdTemplatesCount = templates.count
-        if createdTemplatesCount > 0 {
+        if createdTemplatesCount > 0, trainingPlan != nil {
             showTemplateSuccess = true
             Haptics.notify(.success)
         } else {
             // No templates created (might be all rest days or parsing failed)
-            calendarError = "No workout templates could be created from this plan. Make sure the plan contains strength training exercises with sets and reps."
+            calendarError = "Coach couldn’t turn this response into an executable plan. Try generating a new plan with specific training days."
             Haptics.notify(.warning)
         }
     }
@@ -985,7 +1013,7 @@ private extension AIConversationSheet {
                         Button { saveAsTemplates() } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "doc.text.fill")
-                                Text("Save Templates")
+                                Text("Activate Plan")
                             }
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(.white)

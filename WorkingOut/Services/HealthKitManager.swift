@@ -11,10 +11,40 @@ private let strengthWorkoutAnchorDefaultsKey = "healthKit.strengthWorkoutAnchor"
 
 @MainActor
 final class HealthKitManager: ObservableObject {
+    enum WorkoutDeletionError: LocalizedError {
+        case missingIdentifier
+        case invalidIdentifier
+        case workoutNotFound
+        case deletionRejected
+
+        var errorDescription: String? {
+            switch self {
+            case .missingIdentifier:
+                return "This activity is not linked to an Apple Health workout. Delete it from this device instead."
+            case .invalidIdentifier:
+                return "The saved Apple Health workout identifier is invalid. Delete this activity from this device instead."
+            case .workoutNotFound:
+                return "The linked workout could not be found in Apple Health. It may already have been removed."
+            case .deletionRejected:
+                return "Apple Health did not remove the linked workout."
+            }
+        }
+    }
+
     struct CardioWorkoutChanges {
+        struct DeletedWorkout {
+            let uuid: String
+            let syncIdentifier: String?
+            let syncVersion: Int?
+        }
+
         let added: [HKWorkout]
-        let deletedUUIDs: [String]
+        let deleted: [DeletedWorkout]
         let newAnchor: HKQueryAnchor?
+
+        var deletedUUIDs: [String] {
+            deleted.map(\.uuid)
+        }
     }
 
     struct SleepScoreBreakdown {
@@ -23,6 +53,32 @@ final class HealthKitManager: ObservableObject {
         let bedtimeScore: Int
         let interruptionScore: Int
         let sleepDurationSeconds: TimeInterval
+    }
+
+    struct WorkoutHeartRateSummary {
+        let average: Double?
+        let maximum: Double?
+        let minimum: Double?
+        let sampleCount: Int
+        let coveredDuration: TimeInterval
+
+        init(
+            average: Double?,
+            maximum: Double?,
+            minimum: Double?,
+            sampleCount: Int = 0,
+            coveredDuration: TimeInterval = 0
+        ) {
+            self.average = average
+            self.maximum = maximum
+            self.minimum = minimum
+            self.sampleCount = sampleCount
+            self.coveredDuration = coveredDuration
+        }
+
+        var hasValues: Bool {
+            average != nil || maximum != nil || minimum != nil
+        }
     }
 
     private struct SleepSessionSummary {
@@ -44,7 +100,8 @@ final class HealthKitManager: ObservableObject {
         .stairClimbing
     ]
 
-    // Non-cardio wearable workouts routed to the workout inbox (cardio auto-imports as runs)
+    // Non-cardio wearable workouts routed to the workout inbox. Cardio uses a
+    // separate Runs inbox so the user controls matching and enrichment.
     nonisolated static let supportedStrengthTypes: Set<HKWorkoutActivityType> = [
         .traditionalStrengthTraining,
         .functionalStrengthTraining,
@@ -240,7 +297,14 @@ final class HealthKitManager: ObservableObject {
     }
 
     // MARK: - Save Workout
-    func saveRunWorkout(start: Date, end: Date, distanceMeters: Double, energyBurned: Double? = nil, activityType: String = "running") async throws -> HKWorkout {
+    func saveRunWorkout(
+        start: Date,
+        end: Date,
+        distanceMeters: Double,
+        energyBurned: Double? = nil,
+        activityType: String = "running",
+        localSessionID: UUID? = nil
+    ) async throws -> HKWorkout {
         let store = self.healthStore
 
         // Prepare quantities
@@ -288,6 +352,14 @@ final class HealthKitManager: ObservableObject {
 
         // Add samples before ending collection so the builder lifecycle stays consistent.
         try await builder.beginCollection(at: start)
+        if let localSessionID {
+            let bundleIdentifier = Bundle.main.bundleIdentifier ?? "PaceAndPlates"
+            try await builder.addMetadata([
+                HKMetadataKeyExternalUUID: localSessionID.uuidString,
+                HKMetadataKeySyncIdentifier: "\(bundleIdentifier).cardio.\(localSessionID.uuidString)",
+                HKMetadataKeySyncVersion: NSNumber(value: 1)
+            ])
+        }
         try await builder.addSamples(additionalSamples)
         try await builder.endCollection(at: end)
 
@@ -359,9 +431,28 @@ final class HealthKitManager: ObservableObject {
         }
     }
 
-    func fetchCardioWorkoutChanges(resetAnchor: Bool = false, limit: Int = HKObjectQueryNoLimit) async throws -> CardioWorkoutChanges {
+    func fetchCardioWorkoutChanges(
+        resetAnchor: Bool = false,
+        limit: Int = HKObjectQueryNoLimit,
+        since: Date? = nil
+    ) async throws -> CardioWorkoutChanges {
         let anchor = resetAnchor ? nil : storedWorkoutAnchor()
-        let predicate = cardioWorkoutsPredicate()
+        let activityPredicate = cardioWorkoutsPredicate()
+        let predicate: NSPredicate
+        if let since {
+            predicate = NSCompoundPredicate(
+                andPredicateWithSubpredicates: [
+                    activityPredicate,
+                    HKQuery.predicateForSamples(
+                        withStart: since,
+                        end: nil,
+                        options: []
+                    )
+                ]
+            )
+        } else {
+            predicate = activityPredicate
+        }
 
         return try await withCheckedThrowingContinuation { continuation in
             let query = HKAnchoredObjectQuery(
@@ -377,11 +468,17 @@ final class HealthKitManager: ObservableObject {
 
                 let workouts = (samples as? [HKWorkout]) ?? []
                 let added = workouts.filter { self.supportedCardioTypes.contains($0.workoutActivityType) }
-                let deletedUUIDs = (deleted ?? []).map { $0.uuid.uuidString }
+                let deletedWorkouts = (deleted ?? []).map { deletedObject in
+                    CardioWorkoutChanges.DeletedWorkout(
+                        uuid: deletedObject.uuid.uuidString,
+                        syncIdentifier: deletedObject.metadata?[HKMetadataKeySyncIdentifier] as? String,
+                        syncVersion: (deletedObject.metadata?[HKMetadataKeySyncVersion] as? NSNumber)?.intValue
+                    )
+                }
                 continuation.resume(
                     returning: CardioWorkoutChanges(
                         added: added,
-                        deletedUUIDs: deletedUUIDs,
+                        deleted: deletedWorkouts,
                         newAnchor: newAnchor
                     )
                 )
@@ -414,11 +511,17 @@ final class HealthKitManager: ObservableObject {
 
                 let workouts = (samples as? [HKWorkout]) ?? []
                 let added = workouts.filter { Self.supportedStrengthTypes.contains($0.workoutActivityType) }
-                let deletedUUIDs = (deleted ?? []).map { $0.uuid.uuidString }
+                let deletedWorkouts = (deleted ?? []).map { deletedObject in
+                    CardioWorkoutChanges.DeletedWorkout(
+                        uuid: deletedObject.uuid.uuidString,
+                        syncIdentifier: deletedObject.metadata?[HKMetadataKeySyncIdentifier] as? String,
+                        syncVersion: (deletedObject.metadata?[HKMetadataKeySyncVersion] as? NSNumber)?.intValue
+                    )
+                }
                 continuation.resume(
                     returning: CardioWorkoutChanges(
                         added: added,
-                        deletedUUIDs: deletedUUIDs,
+                        deleted: deletedWorkouts,
                         newAnchor: newAnchor
                     )
                 )
@@ -485,6 +588,154 @@ final class HealthKitManager: ObservableObject {
     }
 
     // MARK: - Workout Metrics
+
+    /// Returns heart-rate aggregates associated with a Health workout. Oura can
+    /// write samples for the workout's exact source and interval without an
+    /// HKWorkout association, so a conservative source/time fallback is used
+    /// only for recognized Oura sources with adequate sample coverage.
+    func heartRateSummary(for workout: HKWorkout) async throws -> WorkoutHeartRateSummary {
+        guard let heartRateType = HKQuantityType.quantityType(
+            forIdentifier: .heartRate
+        ) else {
+            return WorkoutHeartRateSummary(
+                average: nil,
+                maximum: nil,
+                minimum: nil
+            )
+        }
+
+        let associated = validHeartRateSamples(
+            try await heartRateQuantitySamples(
+                type: heartRateType,
+                predicate: HKQuery.predicateForObjects(from: workout)
+            )
+        )
+        if !associated.isEmpty {
+            return heartRateSummary(from: associated)
+        }
+
+        guard isRecognizedOuraSource(workout.sourceRevision.source) else {
+            return WorkoutHeartRateSummary(
+                average: nil,
+                maximum: nil,
+                minimum: nil
+            )
+        }
+
+        let interval = HKQuery.predicateForSamples(
+            withStart: workout.startDate,
+            end: workout.endDate,
+            options: [.strictStartDate, .strictEndDate]
+        )
+        let source = HKQuery.predicateForObjects(
+            from: Set([workout.sourceRevision.source])
+        )
+        let fallback = validHeartRateSamples(
+            try await heartRateQuantitySamples(
+                type: heartRateType,
+                predicate: NSCompoundPredicate(
+                    andPredicateWithSubpredicates: [interval, source]
+                )
+            )
+        )
+        guard hasAdequateOuraFallbackCoverage(
+            fallback,
+            workoutDuration: workout.duration
+        ) else {
+            return WorkoutHeartRateSummary(
+                average: nil,
+                maximum: nil,
+                minimum: nil
+            )
+        }
+        return heartRateSummary(from: fallback)
+    }
+
+    private func heartRateSummary(
+        from samples: [HKQuantitySample]
+    ) -> WorkoutHeartRateSummary {
+        let unit = HKUnit.count().unitDivided(by: .minute())
+        let values = samples.map { $0.quantity.doubleValue(for: unit) }
+        guard let minimum = values.min(), let maximum = values.max() else {
+            return WorkoutHeartRateSummary(
+                average: nil,
+                maximum: nil,
+                minimum: nil
+            )
+        }
+        let average = values.reduce(0, +) / Double(values.count)
+        let coveredDuration = heartRateCoveredDuration(samples)
+        return WorkoutHeartRateSummary(
+            average: average,
+            maximum: maximum,
+            minimum: minimum,
+            sampleCount: values.count,
+            coveredDuration: coveredDuration
+        )
+    }
+
+    private func heartRateQuantitySamples(
+        type: HKQuantityType,
+        predicate: NSPredicate
+    ) async throws -> [HKQuantitySample] {
+        let sort = NSSortDescriptor(
+            key: HKSampleSortIdentifierStartDate,
+            ascending: true
+        )
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: type,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [sort]
+            ) { _, samples, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                continuation.resume(
+                    returning: (samples as? [HKQuantitySample]) ?? []
+                )
+            }
+            self.healthStore.execute(query)
+        }
+    }
+
+    private func isRecognizedOuraSource(_ source: HKSource) -> Bool {
+        let bundle = source.bundleIdentifier.lowercased()
+        let name = source.name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        return bundle == "com.ouraring.oura" ||
+            bundle.hasPrefix("com.ouraring.") ||
+            name == "oura" || name == "oura ring"
+    }
+
+    private func hasAdequateOuraFallbackCoverage(
+        _ samples: [HKQuantitySample],
+        workoutDuration: TimeInterval
+    ) -> Bool {
+        guard samples.count >= 4, workoutDuration > 0 else { return false }
+        let coveredDuration = heartRateCoveredDuration(samples)
+        return coveredDuration >= workoutDuration * 0.5
+    }
+
+    private func heartRateCoveredDuration(
+        _ samples: [HKQuantitySample]
+    ) -> TimeInterval {
+        guard let first = samples.first, let last = samples.last else { return 0 }
+        return max(0, last.endDate.timeIntervalSince(first.startDate))
+    }
+
+    private func validHeartRateSamples(
+        _ samples: [HKQuantitySample]
+    ) -> [HKQuantitySample] {
+        let unit = HKUnit.count().unitDivided(by: .minute())
+        return samples.filter {
+            let value = $0.quantity.doubleValue(for: unit)
+            return value.isFinite && value >= 20 && value <= 260
+        }
+    }
     
     /// Fetch average heart rate for a workout
     func averageHeartRate(for workout: HKWorkout) async throws -> Double? {
@@ -699,37 +950,52 @@ final class HealthKitManager: ObservableObject {
         }
     }
     
-    // MARK: - Delete matching run
-    func deleteRun(uuidString: String?, endDate: Date, duration: TimeInterval, distanceMeters: Double? = nil) async throws {
-        let runs = try await fetchRecentRuns(limit: 50)
-        if let uuidString, let target = runs.first(where: { $0.uuid.uuidString == uuidString }) {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                healthStore.delete(target) { ok, error in
-                    if let error = error { continuation.resume(throwing: error); return }
-                    continuation.resume(returning: ())
-                }
-            }
-            return
+    // MARK: - Delete linked run
+    //
+    // Health deletion is intentionally exact-ID only. A time/duration proximity
+    // match can target an unrelated workout (or even a different activity type),
+    // so legacy/local-only records must use "Delete on Device" instead.
+    func deleteRun(uuidString: String?) async throws {
+        guard let uuidString, !uuidString.isEmpty else {
+            throw WorkoutDeletionError.missingIdentifier
         }
-        // Choose a workout which end date and duration are close, and (if provided) distance close
-        var best: HKWorkout? = nil
-        var bestScore: Double = .greatestFiniteMagnitude
-        for w in runs where supportedCardioTypes.contains(w.workoutActivityType) {
-            let dt = abs(w.endDate.timeIntervalSince(endDate))
-            let ddur = abs(w.duration - duration)
-            var score = dt + ddur
-            if let distanceMeters {
-                let dm = abs((w.totalDistance?.doubleValue(for: .meter()) ?? 0) - distanceMeters)
-                score += min(dm / 10.0, 600) // scale distance influence
-            }
-            if score < bestScore { bestScore = score; best = w }
+        guard let uuid = UUID(uuidString: uuidString) else {
+            throw WorkoutDeletionError.invalidIdentifier
         }
-        guard let workout = best, bestScore < 300 /* 5 min tolerance */ else { return }
+        guard let workout = try await workout(with: uuid) else {
+            throw WorkoutDeletionError.workoutNotFound
+        }
+
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             healthStore.delete(workout) { ok, error in
                 if let error = error { continuation.resume(throwing: error); return }
+                guard ok else {
+                    continuation.resume(throwing: WorkoutDeletionError.deletionRejected)
+                    return
+                }
                 continuation.resume(returning: ())
             }
+        }
+    }
+
+    private func workout(with uuid: UUID) async throws -> HKWorkout? {
+        let workoutType = HKObjectType.workoutType()
+        let predicate = HKQuery.predicateForObject(with: uuid)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: workoutType,
+                predicate: predicate,
+                limit: 1,
+                sortDescriptors: nil
+            ) { _, samples, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                continuation.resume(returning: samples?.first as? HKWorkout)
+            }
+            healthStore.execute(query)
         }
     }
 
@@ -1140,23 +1406,52 @@ final class HealthKitManager: ObservableObject {
     /// Fetch all heart rate samples for a workout with timestamps
     func heartRateSamples(for workout: HKWorkout) async throws -> [(timestamp: Date, bpm: Double)] {
         guard let heartRateType = HKQuantityType.quantityType(forIdentifier: .heartRate) else { return [] }
-        let predicate = HKQuery.predicateForObjects(from: workout)
-        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
-        
-        return try await withCheckedThrowingContinuation { continuation in
-            let query = HKSampleQuery(sampleType: heartRateType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                    return
-                }
-                
-                let heartRateSamples = (samples as? [HKQuantitySample]) ?? []
-                let results = heartRateSamples.map { sample in
-                    (timestamp: sample.startDate, bpm: sample.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute())))
-                }
-                continuation.resume(returning: results)
-            }
-            self.healthStore.execute(query)
+        let associated = validHeartRateSamples(
+            try await heartRateQuantitySamples(
+                type: heartRateType,
+                predicate: HKQuery.predicateForObjects(from: workout)
+            )
+        )
+        if !associated.isEmpty {
+            return timestampedHeartRateValues(from: associated)
+        }
+
+        guard isRecognizedOuraSource(workout.sourceRevision.source) else {
+            return []
+        }
+
+        let interval = HKQuery.predicateForSamples(
+            withStart: workout.startDate,
+            end: workout.endDate,
+            options: [.strictStartDate, .strictEndDate]
+        )
+        let source = HKQuery.predicateForObjects(
+            from: Set([workout.sourceRevision.source])
+        )
+        let fallback = validHeartRateSamples(
+            try await heartRateQuantitySamples(
+                type: heartRateType,
+                predicate: NSCompoundPredicate(
+                    andPredicateWithSubpredicates: [interval, source]
+                )
+            )
+        )
+        guard hasAdequateOuraFallbackCoverage(
+            fallback,
+            workoutDuration: workout.duration
+        ) else { return [] }
+        return timestampedHeartRateValues(from: fallback)
+    }
+
+    private func timestampedHeartRateValues(
+        from samples: [HKQuantitySample]
+    ) -> [(timestamp: Date, bpm: Double)] {
+        let unit = HKUnit.count().unitDivided(by: .minute())
+        return samples.map { sample in
+            (
+                timestamp: sample.startDate,
+                bpm: sample.quantity.doubleValue(for: unit)
+            )
         }
     }
     

@@ -234,7 +234,13 @@ struct WorkoutSessionDetailView: View {
         let hasNotes = !(notesBuffer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         let titleTrim = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasTitle = didEditTitle && !titleTrim.isEmpty
-        return !(hasExercises || hasNotes || hasTitle)
+        let hasWearableData = session.healthWorkoutUUID != nil
+            || session.healthDuration != nil
+            || session.healthCalories != nil
+            || session.healthAvgHeartRate != nil
+            || session.healthSourceName != nil
+            || session.healthActivityType != nil
+        return !(hasExercises || hasNotes || hasTitle || hasWearableData)
     }
 
     private func updateGeneratedTemplateIfNeeded() {
@@ -266,13 +272,25 @@ struct WorkoutSessionDetailView: View {
     }
     
     private func duplicateExerciseLog(_ log: ExerciseLog) {
+        let nextSetNumber = ((session.exerciseLogs ?? [])
+            .filter { $0.exerciseName == log.exerciseName }
+            .map(\.setNumber)
+            .max() ?? 0) + 1
         let copy = ExerciseLog(
             reps: log.reps,
             weight: log.weight,
             weightUnit: log.weightUnit,
-            setNumber: log.setNumber + 1,
+            setNumber: nextSetNumber,
             exerciseName: log.exerciseName,
-            exerciseOrder: log.exerciseOrder
+            exerciseOrder: log.exerciseOrder,
+            exerciseType: log.exerciseType,
+            durationSeconds: log.durationSeconds,
+            distance: log.distance,
+            distanceUnit: log.distanceUnit,
+            caloriesBurned: log.caloriesBurned,
+            avgHeartRate: log.avgHeartRate,
+            notes: log.notes,
+            isCompleted: false
         )
         copy.exerciseDefinition = log.exerciseDefinition
         copy.workoutSession = session

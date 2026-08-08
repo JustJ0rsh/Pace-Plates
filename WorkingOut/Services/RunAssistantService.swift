@@ -4,33 +4,43 @@ import SwiftData
 /// Centralized weekday <-> date math for running plans.
 ///
 /// Sessions store `weekday` as a locale-independent number (1=Sun ... 7=Sat).
-/// The pitfall: `DateComponents.weekday` resolves *within the calendar's week*,
-/// and which dates fall in a given `.weekOfYear` depends on `calendar.firstWeekday`.
-/// In a Monday-first locale (UK/EU), setting `comps.weekday = 1` (Sunday) on a
-/// week-of-year anchor lands on a Sunday in a *different* calendar week than a
-/// Sunday-first locale would produce — pushing the session into an adjacent week.
-///
-/// To stay deterministic regardless of locale we never assign `comps.weekday`.
-/// Instead we compute the start of the target week (which respects firstWeekday,
-/// so its own weekday == `calendar.firstWeekday`) and add a fixed day offset:
-///     offset = (weekday - calendar.firstWeekday + 7) % 7
-/// All conversions between the stored 1=Sun...7=Sat number and a date go through
-/// here so scheduling, rest-day moves, and the dashboard agree.
+/// A plan uses a rolling seven-day week anchored to `startDate`, rather than the
+/// locale's calendar week. Week 0 therefore spans the start date through the next
+/// six days and can never contain a session before the plan begins.
 enum RunAssistantWeekday {
     /// Resolves a stored weekday (1=Sun ... 7=Sat) to a concrete date within the
-    /// week `weekOffset` weeks after `startDate`, independent of `firstWeekday`.
+    /// rolling week `weekOffset` after `startDate`.
     static func scheduledDate(startDate: Date, weekOffset: Int, weekday: Int) -> Date {
         let calendar = Calendar.current
-        let weekStart = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: startDate)) ?? startDate
-        let offsetWeekStart = calendar.date(byAdding: .weekOfYear, value: weekOffset, to: weekStart) ?? weekStart
-        let offset = ((weekday - calendar.firstWeekday) + 7) % 7
-        return calendar.date(byAdding: .day, value: offset, to: offsetWeekStart) ?? offsetWeekStart
+        let anchor = calendar.startOfDay(for: startDate)
+        let anchorWeekday = calendar.component(.weekday, from: anchor)
+        let clampedWeekday = min(max(weekday, 1), 7)
+        let weekdayOffset = ((clampedWeekday - anchorWeekday) + 7) % 7
+        let dayOffset = (max(0, weekOffset) * 7) + weekdayOffset
+        let candidate = calendar.date(byAdding: .day, value: dayOffset, to: anchor) ?? anchor
+
+        // Older plans may retain a time component in startDate. Preserve the
+        // invariant that no week-0 session predates that exact timestamp.
+        if weekOffset <= 0, candidate < startDate {
+            return startDate
+        }
+        return candidate
     }
 
     /// Reads the stored weekday number (1=Sun ... 7=Sat) from a scheduled date.
     /// `.weekday` is already locale-independent, so this is a straight component read.
     static func weekday(of date: Date) -> Int {
         Calendar.current.component(.weekday, from: date)
+    }
+
+    /// Returns the zero-based rolling week containing `referenceDate`.
+    static func rollingWeekIndex(startDate: Date, referenceDate: Date) -> Int {
+        let calendar = Calendar.current
+        let anchor = calendar.startOfDay(for: startDate)
+        let reference = calendar.startOfDay(for: referenceDate)
+        guard reference >= anchor else { return 0 }
+        let elapsedDays = calendar.dateComponents([.day], from: anchor, to: reference).day ?? 0
+        return max(0, elapsedDays / 7)
     }
 }
 
@@ -64,6 +74,7 @@ final class RunAssistantService {
         context: ModelContext
     ) -> RunningPlan {
         let now = Date()
+        let normalizedStartDate = Calendar.current.startOfDay(for: startDate)
         let plan = RunningPlan(
             name: template.name,
             source: template.source,
@@ -72,7 +83,7 @@ final class RunAssistantService {
             primaryGoal: template.primaryGoal,
             durationWeeks: template.durationWeeks,
             daysPerWeek: profile.daysPerWeek,
-            startDate: startDate,
+            startDate: normalizedStartDate,
             isActive: false,
             isArchived: false,
             createdAt: now,
@@ -83,13 +94,13 @@ final class RunAssistantService {
 
         context.insert(plan)
 
-        let blueprints = blueprintsForTemplate(template, profile: profile, startDate: startDate, context: context)
+        let blueprints = blueprintsForTemplate(template, profile: profile, startDate: normalizedStartDate, context: context)
         for item in blueprints {
             let session = RunningPlanSession(
                 plan: plan,
                 weekIndex: item.weekIndex,
                 dayIndex: item.dayIndex,
-                scheduledDate: scheduledDate(startDate: startDate, weekOffset: item.weekIndex, weekday: item.scheduledWeekday),
+                scheduledDate: scheduledDate(startDate: normalizedStartDate, weekOffset: item.weekIndex, weekday: item.scheduledWeekday),
                 sessionType: item.sessionType,
                 targetDistanceMeters: item.targetDistanceMeters,
                 targetDurationSeconds: item.targetDurationSeconds,
@@ -115,28 +126,36 @@ final class RunAssistantService {
         buildBuiltInBlueprints(template: template, profile: profile, startDate: startDate, context: context)
     }
 
-    func setActivePlan(_ planID: UUID, context: ModelContext) {
-        let allPlans = (try? context.fetch(FetchDescriptor<RunningPlan>())) ?? []
-        var activePlan: RunningPlan?
+    @discardableResult
+    func setActivePlan(_ planID: UUID, context: ModelContext) -> Bool {
+        guard let allPlans = try? context.fetch(FetchDescriptor<RunningPlan>()),
+              let activePlan = allPlans.first(where: { $0.id == planID }) else {
+            return false
+        }
+        var deactivatedPlanIDs: [UUID] = []
 
         for plan in allPlans {
             if plan.id == planID {
                 plan.isArchived = false
                 plan.isActive = true
                 plan.updatedAt = Date()
-                activePlan = plan
             } else if plan.isActive {
                 plan.isActive = false
                 plan.updatedAt = Date()
-                ReminderService.cancelRunningPlanReminders(planID: plan.id)
+                deactivatedPlanIDs.append(plan.id)
             }
         }
 
-        if let activePlan {
-            reschedulePlanRemindersIfNeeded(for: activePlan)
+        guard PersistenceSave.commit(context, action: "activate running plan") else {
+            context.rollback()
+            return false
         }
 
-        _ = PersistenceSave.commit(context, action: "save changes")
+        for id in deactivatedPlanIDs {
+            ReminderService.cancelRunningPlanReminders(planID: id)
+        }
+        reschedulePlanRemindersIfNeeded(for: activePlan)
+        return true
     }
 
     func archivePlan(_ planID: UUID, context: ModelContext) {
@@ -156,12 +175,51 @@ final class RunAssistantService {
         context: ModelContext
     ) {
         guard let session = fetchSession(id: sessionID, context: context) else { return }
+
+        if status != "completed" {
+            if let linkedRun = session.completedRun,
+               linkedRun.plannedSession?.id == session.id {
+                linkedRun.plannedSession = nil
+                linkedRun.plannedSessionID = nil
+            }
+            session.completedRun = nil
+        } else if let completedRunSessionID,
+                  let linkedRun = fetchRun(id: completedRunSessionID, context: context) {
+            associate(
+                linkedRun,
+                with: session,
+                recordsLaunchIdentity: completionSource == "tracked"
+            )
+        }
+
         session.status = status
         session.completionSource = completionSource
         session.completedRunSessionID = completedRunSessionID
         session.completedAt = (status == "completed" || status == "skipped") ? Date() : nil
         session.plan?.updatedAt = Date()
         _ = PersistenceSave.commit(context, action: "save changes")
+    }
+
+    /// Associates a newly tracked run with the exact scheduled session that
+    /// launched tracking. This only mutates the context so the run and plan
+    /// completion can be saved atomically by the caller.
+    @discardableResult
+    func completeScheduledSession(
+        _ sessionID: UUID,
+        with run: RunningSession,
+        context: ModelContext
+    ) -> Bool {
+        guard let session = fetchSession(id: sessionID, context: context) else {
+            return false
+        }
+
+        associate(run, with: session, recordsLaunchIdentity: true)
+        session.status = "completed"
+        session.completionSource = "tracked"
+        session.completedAt = run.date
+        session.completedRunSessionID = run.id
+        session.plan?.updatedAt = Date()
+        return true
     }
 
     func updateSessionIntensity(_ sessionID: UUID, intensityLevel: String, context: ModelContext) {
@@ -226,6 +284,12 @@ final class RunAssistantService {
         // Heal previously auto-completed sessions that were matched before the plan started.
         for session in sessions where session.status == "completed" && session.completionSource == "auto" {
             if let completedAt = session.completedAt, completedAt < activePlan.startDate {
+                if let linkedRun = session.completedRun,
+                   linkedRun.plannedSession?.id == session.id {
+                    linkedRun.plannedSession = nil
+                    linkedRun.plannedSessionID = nil
+                }
+                session.completedRun = nil
                 session.status = "pending"
                 session.completionSource = nil
                 session.completedAt = nil
@@ -249,7 +313,34 @@ final class RunAssistantService {
 
         var usedRunIDs = Set(sessions.compactMap { $0.completedRunSessionID })
 
+        // A run launched from a plan carries an explicit session identity. Heal
+        // that exact relationship before considering legacy heuristic matches.
         for run in eligibleRuns {
+            guard let plannedSessionID = run.plannedSessionID,
+                  let session = sessions.first(where: { $0.id == plannedSessionID }) else {
+                continue
+            }
+
+            let needsAssociation = run.plannedSession?.id != session.id
+                || session.completedRun?.id != run.id
+            associate(run, with: session, recordsLaunchIdentity: true)
+            if needsAssociation
+                || session.status != "completed"
+                || session.completedRunSessionID != run.id
+                || session.completionSource != "tracked" {
+                session.status = "completed"
+                session.completionSource = "tracked"
+                session.completedAt = run.date
+                session.completedRunSessionID = run.id
+                didMutate = true
+            }
+            usedRunIDs.insert(run.id)
+            pendingSessions.removeAll { $0.id == session.id }
+        }
+
+        for run in eligibleRuns {
+            // Never let a directly-linked run complete a different session.
+            guard run.plannedSessionID == nil else { continue }
             guard !usedRunIDs.contains(run.id) else { continue }
 
             let runDistanceMeters = runDistanceInMeters(run)
@@ -279,6 +370,7 @@ final class RunAssistantService {
             session.completionSource = "auto"
             session.completedAt = run.date
             session.completedRunSessionID = run.id
+            associate(run, with: session, recordsLaunchIdentity: false)
             usedRunIDs.insert(run.id)
             didMutate = true
         }
@@ -328,8 +420,10 @@ final class RunAssistantService {
     }
 
     func calendarWeekIndex(plan: RunningPlan, referenceDate: Date = Date()) -> Int {
-        let calendar = Calendar.current
-        let raw = calendar.dateComponents([.weekOfYear], from: plan.startDate, to: referenceDate).weekOfYear ?? 0
+        let raw = RunAssistantWeekday.rollingWeekIndex(
+            startDate: plan.startDate,
+            referenceDate: referenceDate
+        )
         return clampedWeekIndex(max(0, raw), plan: plan)
     }
 
@@ -369,6 +463,32 @@ final class RunAssistantService {
     private func fetchSession(id: UUID, context: ModelContext) -> RunningPlanSession? {
         let sessions = (try? context.fetch(FetchDescriptor<RunningPlanSession>())) ?? []
         return sessions.first(where: { $0.id == id })
+    }
+
+    private func fetchRun(id: UUID, context: ModelContext) -> RunningSession? {
+        let runs = (try? context.fetch(FetchDescriptor<RunningSession>())) ?? []
+        return runs.first(where: { $0.id == id })
+    }
+
+    private func associate(
+        _ run: RunningSession,
+        with session: RunningPlanSession,
+        recordsLaunchIdentity: Bool
+    ) {
+        if let previousRun = session.completedRun, previousRun.id != run.id {
+            previousRun.plannedSession = nil
+            previousRun.plannedSessionID = nil
+        }
+        if let previousSession = run.plannedSession, previousSession.id != session.id {
+            previousSession.completedRun = nil
+            previousSession.completedRunSessionID = nil
+        }
+
+        if recordsLaunchIdentity {
+            run.plannedSessionID = session.id
+        }
+        run.plannedSession = session
+        session.completedRun = run
     }
 
     private func score(template: RunPlanTemplateDescriptor, profile: RunAssistantProfile) -> Int {
@@ -689,9 +809,7 @@ final class RunAssistantService {
 
     private func sessionWeekdays(for plan: RunningPlan) -> [Int] {
         guard let sessions = plan.sessions else { return [] }
-        let calendar = Calendar.current
-        let today = Date()
-        let currentWeek = max(0, calendar.dateComponents([.weekOfYear], from: plan.startDate, to: today).weekOfYear ?? 0)
+        let currentWeek = calendarWeekIndex(plan: plan)
 
         let inCurrentWeek = sessions.filter { $0.weekIndex == currentWeek && $0.sessionType != "rest" }
         let currentWeekdays = inCurrentWeek.compactMap { $0.scheduledDate.map { RunAssistantWeekday.weekday(of: $0) } }

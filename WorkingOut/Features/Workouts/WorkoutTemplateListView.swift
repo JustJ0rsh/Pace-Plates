@@ -34,9 +34,17 @@ struct WorkoutTemplateListView: View {
     private var importedTemplates: [WorkoutTemplate] {
         templates.filter { !$0.isBuiltIn && $0.experienceLevel == "Imported" }
     }
+
+    private var customTemplates: [WorkoutTemplate] {
+        templates.filter { !$0.isBuiltIn && $0.experienceLevel == "Custom" }
+    }
     
     private var aiGeneratedTemplates: [WorkoutTemplate] {
-        templates.filter { !$0.isBuiltIn && $0.experienceLevel != "Imported" }
+        templates.filter {
+            !$0.isBuiltIn &&
+            $0.experienceLevel != "Imported" &&
+            $0.experienceLevel != "Custom"
+        }
     }
 
     private var aiTemplateGroups: [AITemplateGroup] {
@@ -86,13 +94,13 @@ struct WorkoutTemplateListView: View {
         }
         
         if selectedExperienceLevel == "Custom" {
-            // Show both built-in Custom AND imported templates
-            let customBuiltIns = builtInTemplates.filter { $0.experienceLevel == "Custom" }
-            return customBuiltIns + importedTemplates
+            // Keep the existing combined Custom/Imported view while ensuring
+            // user-created templates are never classified as built-ins.
+            return customTemplates + importedTemplates
         }
         
-        // For other levels or "All", filter built-ins normally
-        var filtered = builtInTemplates
+        // For other levels or "All", filter programs normally.
+        var filtered = builtInTemplates + customTemplates
         
         if let level = selectedExperienceLevel {
             filtered = filtered.filter { $0.experienceLevel == level }
@@ -119,6 +127,7 @@ struct WorkoutTemplateListView: View {
         let order = ["Custom", "Imported", "Beginner", "Intermediate"]
         
         return order.filter { level in
+            if level == "Custom" { return !customTemplates.isEmpty }
             if level == "Imported" { return !importedTemplates.isEmpty }
             return builtInLevels.contains(level)
         }
@@ -170,7 +179,7 @@ struct WorkoutTemplateListView: View {
                 ZStack(alignment: .bottom) {
                     List {
                         // MARK: - Custom & Imported Templates Combined
-                        if !builtInTemplates.isEmpty || !importedTemplates.isEmpty || !aiGeneratedTemplates.isEmpty {
+                        if !builtInTemplates.isEmpty || !customTemplates.isEmpty || !importedTemplates.isEmpty || !aiGeneratedTemplates.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
                                 HStack {
                                     Image(systemName: sectionIcon)
@@ -408,7 +417,7 @@ struct WorkoutTemplateListView: View {
         .onAppear {
             // Smart default selection
             if selectedLibraryTab == .programs && selectedExperienceLevel == nil {
-                let hasCustom = builtInTemplates.contains { $0.experienceLevel == "Custom" }
+                let hasCustom = !customTemplates.isEmpty
                 let hasImported = !importedTemplates.isEmpty
                 if hasImported {
                     // Default to Imported if we have imported templates

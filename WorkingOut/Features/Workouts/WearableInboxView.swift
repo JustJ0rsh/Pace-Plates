@@ -11,7 +11,9 @@ struct WearableInboxView: View {
     @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
 
     @Query(
-        filter: #Predicate<HealthWorkoutInboxItem> { $0.statusRaw == "pending" },
+        filter: #Predicate<HealthWorkoutInboxItem> {
+            $0.statusRaw == "pending" && $0.healthDeletionObservedAt == nil
+        },
         sort: [SortDescriptor<HealthWorkoutInboxItem>(\.startDate, order: .reverse)]
     )
     private var pendingItems: [HealthWorkoutInboxItem]
@@ -66,7 +68,9 @@ struct WearableInboxView: View {
             .presentationDragIndicator(.visible)
         }
         .navigationDestination(item: $createdSession) { session in
-            WorkoutSessionDetailView(session: session, isNewSession: true)
+            // The inbox service has already persisted and linked this workout.
+            // It is not an expendable blank draft.
+            WorkoutSessionDetailView(session: session, isNewSession: false)
         }
         .id(appTheme)
     }
@@ -168,6 +172,7 @@ private struct WearableInboxRow: View {
         .padding()
         .background(AppTheme.secondaryBackgroundColor)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .accessibilityIdentifier("wearable.inbox.item")
     }
 
     private func metric(icon: String, text: String) -> some View {

@@ -368,7 +368,15 @@ struct EditExerciseLogView: View {
                 distanceFocused = false
                 notesFocused = false
                 dismissKeyboard()
-                if isNew && !didSaveExplicitly {
+                if didCancelExplicitly {
+                    // Draft fields are local state. Explicit cancellation of an
+                    // existing set must leave the persisted model untouched.
+                    // A newly inserted set still needs to be removed.
+                    if isNew {
+                        modelContext.delete(log)
+                        _ = PersistenceSave.commit(modelContext, action: "cancel new set")
+                    }
+                } else if isNew && !didSaveExplicitly {
                     // User canceled; remove the newly created set
                     modelContext.delete(log)
                     _ = PersistenceSave.commit(modelContext, action: "save changes")
@@ -481,11 +489,15 @@ struct EditExerciseLogView: View {
     }
 
     @State private var didSaveExplicitly: Bool = false
+    @State private var didCancelExplicitly: Bool = false
 
     private func cancelAndDismiss() {
-        didSaveExplicitly = false
+        didCancelExplicitly = true
         repsFocused = false
         weightFocused = false
+        durationFocused = false
+        distanceFocused = false
+        notesFocused = false
         dismissKeyboard()
         dismiss()
     }

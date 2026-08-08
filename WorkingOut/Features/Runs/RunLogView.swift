@@ -7,9 +7,19 @@ import Charts
 import Combine
 
 struct RunLogView: View {
+    private static let pendingForcedEnrichmentDefaultsKey =
+        "healthKit.pendingForcedRunEnrichmentUUIDs"
+
     private struct RunTrackingRequest: Identifiable {
         let id = UUID()
         let activityType: String
+        let plannedTarget: ScheduledRunTarget?
+    }
+
+    private enum EnrichmentOutcome {
+        case completed
+        case noLongerNeeded
+        case retryLater
     }
 
     @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
@@ -25,6 +35,10 @@ struct RunLogView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Query(sort: [SortDescriptor<RunningSession>(\.date, order: .reverse)]) private var runningSessions: [RunningSession] // Added sort
+    @Query(filter: #Predicate<CardioWorkoutInboxItem> {
+        $0.statusRaw == "pending" && $0.healthDeletionObservedAt == nil
+    })
+    private var pendingCardioInboxItems: [CardioWorkoutInboxItem]
     
     @State private var isEditing: Bool = false
     @State private var locationCache: [UUID: String] = [:]
@@ -32,12 +46,13 @@ struct RunLogView: View {
     @State private var hasPrefetchedLocations = false // Prevent duplicate prefetching
     @State private var runTrackingRequest: RunTrackingRequest? = nil
     @State private var stepsToday: Int? = nil
-    @State private var requestedLocationAuthOnce = false
     @State private var hasScheduledInitialImport = false
     @State private var pendingEnrichmentUUIDs: Set<String> = []
+    @State private var pendingForcedEnrichmentUUIDs: Set<String> = []
+    @State private var activeForcedEnrichmentUUIDs: Set<String> = []
     @State private var enrichmentTask: Task<Void, Never>? = nil
     private let healthStore = HKHealthStore()
-    @State private var pendingDeleteIndex: Int? = nil
+    @State private var pendingDeleteSession: RunningSession? = nil
     @State private var showDeleteConfirm: Bool = false
     @State private var loadingSessionId: UUID? = nil
     @State private var navigationSessionId: UUID? = nil
@@ -45,7 +60,6 @@ struct RunLogView: View {
     @State private var pendingSwipeDeleteSession: RunningSession? = nil
     @State private var showSwipeDeleteConfirm: Bool = false
     @State private var lockedChartDate: Date? = nil // Keeps summary open until X is clicked
-    @State private var showRunAssistant: Bool = false
     @State private var showRunActions: Bool = false
     @State private var showPastRunLog: Bool = false
     @State private var saveErrorMessage: String? = nil
@@ -53,6 +67,9 @@ struct RunLogView: View {
     @State private var hasInitializedRunPagination: Bool = false
     @State private var healthChangeDebounceTask: Task<Void, Never>? = nil
     @State private var quickViewSession: RunningSession? = nil
+    @State private var historySearchText: String = ""
+    @State private var historyRange: HistoryRange = .all
+    @State private var historyActivityType: String? = nil
     private let runPageSize: Int = 30
     private let defaultHealthImportLimit: Int = 10
     private let forcedHealthImportLimit: Int = 8
@@ -90,15 +107,38 @@ struct RunLogView: View {
         return start...endExclusive
     }
 
-    private var displayedRuns: [RunningSession] {
-        Array(runningSessions.prefix(max(0, visibleRunCount)))
+    private var historyActivityOptions: [HistoryFilterOption] {
+        activityFilterOptions().map { label in
+            HistoryFilterOption(id: keyForActivity(label), title: label)
+        }
     }
 
-    private var hasMoreRuns: Bool {
-        runningSessions.count > displayedRuns.count
+    private var filteredHistoryRuns: [RunningSession] {
+        let query = historySearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return runningSessions.filter { session in
+            guard historyRange.contains(session.date) else { return false }
+            if let historyActivityType,
+               !matchesHistoryActivity(session.activityType, selectedType: historyActivityType)
+            {
+                return false
+            }
+            guard !query.isEmpty else { return true }
+
+            let searchableValues = [
+                session.activityType,
+                activityName(for: session.activityType),
+                session.notes ?? ""
+            ]
+            return searchableValues.contains { $0.localizedCaseInsensitiveContains(query) }
+        }
     }
-    
+
     var body: some View {
+        let historyRuns = filteredHistoryRuns
+        let visibleHistoryRuns = Array(historyRuns.prefix(max(0, visibleRunCount)))
+        let canLoadMoreHistoryRuns = historyRuns.count > visibleHistoryRuns.count
+
         ScrollView {
             VStack(spacing: 16) {
                 
@@ -238,7 +278,7 @@ struct RunLogView: View {
                                 Button {
                                     importHealthRuns(limit: forcedHealthImportLimit, force: true)
                                 } label: {
-                                    Label("Import from Health", systemImage: "heart.text.square")
+                                    Label("Check Health Inbox", systemImage: "tray.and.arrow.down")
                                         .frame(maxWidth: .infinity)
                                 }
                                 .buttonStyle(.bordered)
@@ -377,77 +417,120 @@ struct RunLogView: View {
 
                     if !runningSessions.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            LazyVStack(spacing: 0) {
-                                ForEach(displayedRuns) { session in
-                                    RunSessionRowContent(
-                                        session: session,
-                                        preferredDistanceUnit: preferredDistanceUnit,
-                                        locationName: locationCache[session.id],
-                                        isEditing: isEditing,
-                                        onDelete: {
-                                            if let idx = runningSessions.firstIndex(where: { $0.id == session.id }) {
-                                                pendingDeleteIndex = idx
-                                                showDeleteConfirm = true
-                                            }
-                                        }
-                                    )
-                                    .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        guard !isEditing else { return }
-                                        loadingSessionId = session.id
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                                            navigationSessionId = session.id
-                                        }
-                                    }
-                                    .onLongPressGesture {
-                                        guard !isEditing else { return }
-                                        Haptics.playImpact(.light)
-                                        quickViewSession = session
-                                    }
-                                    .padding(.vertical, 8)
-                                    .contextMenu {
-                                        Button {
-                                            quickViewSession = session
-                                        } label: {
-                                            Label("Quick View", systemImage: "eye")
-                                        }
-
-                                        Button(role: .destructive) {
-                                            if let idx = runningSessions.firstIndex(where: { $0.id == session.id }) {
-                                                pendingDeleteIndex = idx
-                                                showDeleteConfirm = true
-                                            }
-                                        } label: {
-                                            Label("Delete", systemImage: "trash")
-                                        }
-                                    }
-                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                        Button(role: .destructive) {
-                                            pendingSwipeDeleteSession = session
-                                            showSwipeDeleteConfirm = true
-                                        } label: {
-                                            Label("Delete", systemImage: "trash")
-                                        }
-                                    }
-                                }
+                            HStack(spacing: 8) {
+                                Image(systemName: "figure.run")
+                                    .foregroundStyle(AppTheme.textColor)
+                                Text("Activity History")
+                                    .font(.headline)
                             }
 
-                            if hasMoreRuns {
-                                Divider().padding(.top, 6).opacity(0.25)
+                            HistoryFilterBar(
+                                searchText: $historySearchText,
+                                selectedRange: $historyRange,
+                                selectedCategory: $historyActivityType,
+                                resultCount: historyRuns.count,
+                                searchPrompt: "Search activities or notes",
+                                accessibilityIdentifier: "runs.history.filters",
+                                categories: historyActivityOptions
+                            )
 
-                                HStack(spacing: 10) {
-                                    Text("Showing \(displayedRuns.count) of \(runningSessions.count) runs")
-                                        .font(.footnote)
-                                        .foregroundStyle(AppTheme.secondaryTextColor)
+                            if historyRuns.isEmpty {
+                                HistoryNoResultsView(
+                                    title: "No Matching Activities",
+                                    message: "Try another activity, note, or date range.",
+                                    accessibilityIdentifier: "runs.history.no_results",
+                                    clearFilters: clearRunHistoryFilters
+                                )
+                            } else {
+                                LazyVStack(spacing: 0) {
+                                    ForEach(visibleHistoryRuns) { session in
+                                        Group {
+                                            if isEditing {
+                                                RunSessionRowContent(
+                                                    session: session,
+                                                    preferredDistanceUnit: preferredDistanceUnit,
+                                                    locationName: locationCache[session.id],
+                                                    isEditing: true,
+                                                    onDelete: {
+                                                        pendingDeleteSession = session
+                                                        showDeleteConfirm = true
+                                                    }
+                                                )
+                                            } else {
+                                                Button {
+                                                    loadingSessionId = session.id
+                                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                                        navigationSessionId = session.id
+                                                    }
+                                                } label: {
+                                                    RunSessionRowContent(
+                                                        session: session,
+                                                        preferredDistanceUnit: preferredDistanceUnit,
+                                                        locationName: locationCache[session.id],
+                                                        isEditing: false,
+                                                        onDelete: {
+                                                            pendingDeleteSession = session
+                                                            showDeleteConfirm = true
+                                                        }
+                                                    )
+                                                }
+                                                .buttonStyle(.plain)
+                                                .accessibilityHint("Opens activity details")
+                                            }
+                                        }
+                                        .contentShape(Rectangle())
+                                        .onLongPressGesture {
+                                            guard !isEditing else { return }
+                                            Haptics.playImpact(.light)
+                                            quickViewSession = session
+                                        }
+                                        .padding(.vertical, 8)
+                                        .contextMenu {
+                                            Button {
+                                                quickViewSession = session
+                                            } label: {
+                                                Label("Quick View", systemImage: "eye")
+                                            }
 
-                                    Spacer()
-
-                                    Button("Load 30 More") {
-                                        visibleRunCount = min(visibleRunCount + runPageSize, runningSessions.count)
+                                            Button(role: .destructive) {
+                                                pendingDeleteSession = session
+                                                showDeleteConfirm = true
+                                            } label: {
+                                                Label("Delete", systemImage: "trash")
+                                            }
+                                        }
+                                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                            Button(role: .destructive) {
+                                                pendingSwipeDeleteSession = session
+                                                showSwipeDeleteConfirm = true
+                                            } label: {
+                                                Label("Delete", systemImage: "trash")
+                                            }
+                                        }
                                     }
-                                    .buttonStyle(.borderedProminent)
                                 }
-                                .padding(.top, 8)
+
+                                if canLoadMoreHistoryRuns {
+                                    Divider().padding(.top, 6).opacity(0.25)
+
+                                    HStack(spacing: 10) {
+                                        Text("Showing \(visibleHistoryRuns.count) of \(historyRuns.count) activities")
+                                            .font(.footnote)
+                                            .foregroundStyle(AppTheme.secondaryTextColor)
+
+                                        Spacer()
+
+                                        Button("Load 30 More") {
+                                            visibleRunCount = min(
+                                                visibleRunCount + runPageSize,
+                                                historyRuns.count
+                                            )
+                                        }
+                                        .buttonStyle(.borderedProminent)
+                                        .frame(minHeight: 44)
+                                    }
+                                    .padding(.top, 8)
+                                }
                             }
                         }
                         .floatingTile()
@@ -466,21 +549,24 @@ struct RunLogView: View {
                 .padding(.top)
             }
             .alert("Delete Run?", isPresented: $showDeleteConfirm) {
-                Button("Cancel", role: .cancel) { pendingDeleteIndex = nil }
+                Button("Cancel", role: .cancel) { pendingDeleteSession = nil }
                 Button("Delete on Device", role: .destructive) {
-                    if let idx = pendingDeleteIndex { deleteRunningSessions(offsets: IndexSet(integer: idx)) }
-                    pendingDeleteIndex = nil
+                    if let session = pendingDeleteSession {
+                        deleteRunningSession(session, action: "delete run session")
+                    }
+                    pendingDeleteSession = nil
                 }
                 Button("Delete on Device + Health", role: .destructive) {
                     Task { @MainActor in
-                        if let idx = pendingDeleteIndex {
-                            let s = runningSessions[idx]
-                            // Kick off Health deletion before removing locally
-                            let meters: Double = (s.distanceUnit == "mi") ? (s.distance * 1609.34) : (s.distance * 1000.0)
-                            try? await HealthKitManager.shared.deleteRun(uuidString: s.healthWorkoutUUID, endDate: s.date, duration: s.duration, distanceMeters: meters)
-                            deleteRunningSessions(offsets: IndexSet(integer: idx))
+                        if let session = pendingDeleteSession {
+                            do {
+                                try await HealthKitManager.shared.deleteRun(uuidString: session.healthWorkoutUUID)
+                                deleteRunningSession(session, action: "delete run + health")
+                            } catch {
+                                saveErrorMessage = "Nothing was deleted. \(error.localizedDescription)"
+                            }
                         }
-                        pendingDeleteIndex = nil
+                        pendingDeleteSession = nil
                     }
                 }
             } message: {
@@ -490,26 +576,19 @@ struct RunLogView: View {
                 Button("Cancel", role: .cancel) { pendingSwipeDeleteSession = nil }
                 Button("Delete on Device", role: .destructive) {
                     if let session = pendingSwipeDeleteSession {
-                        modelContext.delete(session)
-                        _ = PersistenceSave.commit(
-                            modelContext,
-                            action: "delete run (swipe)",
-                            onFailure: { message in saveErrorMessage = message }
-                        )
+                        deleteRunningSession(session, action: "delete run (swipe)")
                     }
                     pendingSwipeDeleteSession = nil
                 }
                 Button("Delete on Device + Health", role: .destructive) {
                     Task { @MainActor in
                         if let session = pendingSwipeDeleteSession {
-                            let meters: Double = (session.distanceUnit == "mi") ? (session.distance * 1609.34) : (session.distance * 1000.0)
-                            try? await HealthKitManager.shared.deleteRun(uuidString: session.healthWorkoutUUID, endDate: session.date, duration: session.duration, distanceMeters: meters)
-                            modelContext.delete(session)
-                            _ = PersistenceSave.commit(
-                                modelContext,
-                                action: "delete run + health (swipe)",
-                                onFailure: { message in saveErrorMessage = message }
-                            )
+                            do {
+                                try await HealthKitManager.shared.deleteRun(uuidString: session.healthWorkoutUUID)
+                                deleteRunningSession(session, action: "delete run + health (swipe)")
+                            } catch {
+                                saveErrorMessage = "Nothing was deleted. \(error.localizedDescription)"
+                            }
                         }
                         pendingSwipeDeleteSession = nil
                     }
@@ -569,23 +648,40 @@ struct RunLogView: View {
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showRunAssistant = true
-                    } label: {
-                        Image(systemName: "figure.run.circle")
-                            .font(.system(size: 19, weight: .semibold))
-                            .foregroundStyle(AppTheme.toolbarButtonColor)
-                            .accessibilityLabel("Running Assistant")
-                    }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showRunActions = true
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(AppTheme.toolbarButtonColor)
-                            .accessibilityLabel("Track Activity")
+                    HStack(spacing: 14) {
+                        NavigationLink {
+                            CardioInboxView()
+                        } label: {
+                            Image(systemName: "tray.fill")
+                                .foregroundStyle(AppTheme.toolbarButtonColor)
+                                .overlay(alignment: .topTrailing) {
+                                    if !pendingCardioInboxItems.isEmpty {
+                                        Text("\(min(pendingCardioInboxItems.count, 99))")
+                                            .font(.system(size: 10, weight: .bold))
+                                            .foregroundStyle(.white)
+                                            .padding(3)
+                                            .frame(minWidth: 15)
+                                            .background(Color.red)
+                                            .clipShape(Capsule())
+                                            .offset(x: 8, y: -8)
+                                    }
+                                }
+                                .accessibilityLabel(
+                                    pendingCardioInboxItems.isEmpty
+                                        ? "Cardio Inbox"
+                                        : "Cardio Inbox, \(pendingCardioInboxItems.count) pending"
+                                )
+                        }
+                        .accessibilityIdentifier("runs.cardioInbox")
+
+                        Button {
+                            showRunActions = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(AppTheme.toolbarButtonColor)
+                                .accessibilityLabel("Track Activity")
+                        }
                     }
                 }
 
@@ -598,19 +694,13 @@ struct RunLogView: View {
                 }
                 if !launchConfiguration.shouldSkipAutomationSideEffects {
                     HealthKitManager.shared.startWorkoutChangeObservationIfNeeded()
+                    restorePersistedForcedEnrichment()
                     if UserDefaults.standard.bool(forKey: "runsPendingHealthImport") {
                         UserDefaults.standard.set(false, forKey: "runsPendingHealthImport")
                         importHealthRuns(limit: forcedHealthImportLimit, force: true)
                     }
-                    // Request location permission only when entering Runs for the first time
-                    if !requestedLocationAuthOnce {
-                        requestedLocationAuthOnce = true
-                        let manager = CLLocationManager()
-                        if manager.authorizationStatus == .notDetermined {
-                            manager.requestWhenInUseAuthorization()
-                        }
-                    }
-                    // Load data (HealthKit should already be authorized from tutorial)
+                    // Permissions are requested in the tracking/import flows
+                    // that need them, rather than when browsing run history.
                     fetchTodaySteps()
                     scheduleInitialHealthImportIfNeeded()
                     reconcileAssistantPlanCompletions()
@@ -624,6 +714,15 @@ struct RunLogView: View {
                 }
                 reconcileAssistantPlanCompletions()
             }
+            .onChange(of: historySearchText) {
+                resetRunHistoryPagination()
+            }
+            .onChange(of: historyRange) {
+                resetRunHistoryPagination()
+            }
+            .onChange(of: historyActivityType) {
+                resetRunHistoryPagination()
+            }
             .onReceive(NotificationCenter.default.publisher(for: .healthKitWorkoutsDidChange)) { _ in
                 scheduleImportForHealthWorkoutUpdate()
             }
@@ -633,7 +732,10 @@ struct RunLogView: View {
             }
             .sheet(item: $runTrackingRequest) { request in
                 NavigationStack {
-                    RunTrackingProView(activityType: request.activityType)
+                    RunTrackingProView(
+                        activityType: request.activityType,
+                        plannedTarget: request.plannedTarget
+                    )
                         .navigationTitle(activityTitle(for: request.activityType))
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
@@ -670,20 +772,13 @@ struct RunLogView: View {
                         ),
                         QuickActionSheetAction(
                             id: "run.import-health",
-                            title: "Import from Health",
-                            subtitle: "Pull recent cardio workouts from Apple Health.",
-                            systemImage: "heart.text.square",
+                            title: "Check Cardio Inbox",
+                            subtitle: "Review and link cardio workouts from Apple Health.",
+                            systemImage: "tray.and.arrow.down",
                             accessibilityIdentifier: "runs.action.import_health",
                             handler: { importHealthRuns(limit: forcedHealthImportLimit, force: true) }
                         )
                     ]
-                )
-            }
-            .sheet(isPresented: $showRunAssistant) {
-                RunAssistantContainerView(
-                    onStartRun: {
-                        presentRunTracking(for: "running")
-                    }
                 )
             }
             .sheet(item: $quickViewSession) { session in
@@ -706,6 +801,24 @@ struct RunLogView: View {
                 }
             }
             .id(appTheme) // Force rebuild when theme changes
+    }
+
+    private func clearRunHistoryFilters() {
+        historySearchText = ""
+        historyRange = .all
+        historyActivityType = nil
+        resetRunHistoryPagination()
+    }
+
+    private func resetRunHistoryPagination() {
+        visibleRunCount = runPageSize
+    }
+
+    private func matchesHistoryActivity(_ sessionType: String, selectedType: String) -> Bool {
+        if selectedType == "stairClimbing" {
+            return sessionType == "stairClimbing" || sessionType == "stairStepper"
+        }
+        return sessionType == selectedType
     }
     
     private func activityTitle(for type: String) -> String {
@@ -731,8 +844,14 @@ struct RunLogView: View {
         ["Running", "Walking", "Hiking", "Cycling", "Rowing", "Elliptical", "Stair Climbing"]
     }
 
-    private func presentRunTracking(for activityType: String) {
-        runTrackingRequest = RunTrackingRequest(activityType: activityType)
+    private func presentRunTracking(
+        for activityType: String,
+        plannedTarget: ScheduledRunTarget? = nil
+    ) {
+        runTrackingRequest = RunTrackingRequest(
+            activityType: activityType,
+            plannedTarget: plannedTarget
+        )
     }
 
     private func runDistanceSummary(filteredSessions: [RunningSession], unitLabel: String) -> String {
@@ -805,12 +924,22 @@ struct RunLogView: View {
         }
     }
     
-    private func deleteRunningSessions(offsets: IndexSet) {
-         withAnimation { // Added animation
-            offsets.map { runningSessions[$0] }.forEach(modelContext.delete)
+    private func deleteRunningSession(_ session: RunningSession, action: String) {
+        withAnimation {
+            if let inboxItems = try? modelContext.fetch(
+                FetchDescriptor<CardioWorkoutInboxItem>()
+            ) {
+                for item in inboxItems where
+                    item.linkedRunningSessionID == session.id {
+                    item.status = .pending
+                    item.linkedRunningSessionID = nil
+                    item.suggestedRunningSessionID = nil
+                }
+            }
+            modelContext.delete(session)
             _ = PersistenceSave.commit(
                 modelContext,
-                action: "delete run sessions",
+                action: action,
                 onFailure: { message in saveErrorMessage = message }
             )
         }
@@ -922,30 +1051,88 @@ struct RunLogView: View {
         guard shouldImportHealthRuns(force: force) else { return }
         let effectiveLimit = max(1, limit ?? defaultHealthImportLimit)
 
+        Task { @MainActor in
+            let result = await CardioWorkoutInboxService.sync(
+                context: modelContext,
+                pageLimit: effectiveLimit,
+                requestAuthorization: force
+            )
+            if let errorMessage = result.errorMessage {
+                saveErrorMessage = "Cardio inbox refresh failed: \(errorMessage)"
+            } else {
+                runsLastHealthImportAt = Date().timeIntervalSince1970
+            }
+        }
+    }
+
+    /// Kept temporarily for migration reference while older app stores move to
+    /// the explicit cardio inbox. New Health changes are handled above.
+    private func legacyImportHealthRuns(limit: Int? = nil, force: Bool = false) {
+        guard shouldImportHealthRuns(force: force) else { return }
+        let effectiveLimit = max(1, limit ?? defaultHealthImportLimit)
+        let expectedPurgeGeneration =
+            WearableWorkoutInboxService.localDataPurgeGeneration
+
         Task(priority: .utility) {
             do {
                 let changes = try await HealthKitManager.shared.fetchCardioWorkoutChanges(resetAnchor: false, limit: effectiveLimit)
-                let workouts = changes.added
                 let existingRuns = await MainActor.run {
-                    runningSessions.map {
+                    () -> [ExistingRunSnapshot]? in
+                    guard WearableWorkoutInboxService
+                        .isCurrentLocalDataPurgeGeneration(
+                            expectedPurgeGeneration
+                        ) else {
+                        return nil
+                    }
+                    return runningSessions.map {
                         ExistingRunSnapshot(
                             id: $0.id,
                             date: $0.date,
                             distance: $0.distance,
                             distanceUnit: $0.distanceUnit,
                             duration: $0.duration,
-                            healthWorkoutUUID: $0.healthWorkoutUUID
+                            healthWorkoutUUID: $0.healthWorkoutUUID,
+                            activityType: $0.activityType
                         )
                     }
                 }
+                guard let existingRuns else { return }
 
+                let workouts = changes.added
                 var existingUUIDs = Set(existingRuns.compactMap(\.healthWorkoutUUID))
                 let runLookup = existingRuns
                 var actions: [RunImportAction] = []
                 var uuidsToEnrich: [String] = []
+                var uuidsToForceEnrich: [String] = []
 
-                for deletedUUID in changes.deletedUUIDs {
-                    actions.append(.delete(healthWorkoutUUID: deletedUUID))
+                let replacements = SameBatchCardioReplacementReconciler.matches(
+                    changes: changes,
+                    addedWorkouts: workouts,
+                    existingSessions: existingRuns.compactMap {
+                        run -> CardioReplacementSessionSnapshot? in
+                        guard let healthWorkoutUUID = run.healthWorkoutUUID,
+                              !healthWorkoutUUID.isEmpty else { return nil }
+                        return CardioReplacementSessionSnapshot(
+                            healthWorkoutUUID: healthWorkoutUUID,
+                            sessionID: run.id,
+                            date: run.date,
+                            distance: run.distance,
+                            distanceUnit: run.distanceUnit,
+                            duration: run.duration,
+                            activityType: run.activityType
+                        )
+                    }
+                )
+                let replacementByAddedUUID = Dictionary(
+                    uniqueKeysWithValues: replacements.map {
+                        ($0.addedWorkoutUUID, $0)
+                    }
+                )
+                let replacedDeletedUUIDs = Set(replacements.map(\.deletedUUID))
+
+                for deletedUUID in changes.deletedUUIDs
+                where !replacedDeletedUUIDs.contains(deletedUUID) {
+                    actions.append(.unlink(healthWorkoutUUID: deletedUUID))
                 }
 
                 for w in workouts {
@@ -971,6 +1158,23 @@ struct RunLogView: View {
 
                     existingUUIDs.insert(uuidStr)
 
+                    if let replacement = replacementByAddedUUID[uuidStr] {
+                        actions.append(.update(
+                            sessionID: replacement.sessionID,
+                            healthWorkoutUUID: uuidStr,
+                            activityType: activityType,
+                            date: end,
+                            distance: value,
+                            distanceUnit: unit,
+                            duration: duration,
+                            calories: nil,
+                            locations: nil
+                        ))
+                        uuidsToEnrich.append(uuidStr)
+                        uuidsToForceEnrich.append(uuidStr)
+                        continue
+                    }
+
                     // Attempt to match a similar local run (e.g., tracked via phone) and attach the UUID
                     if let similarId = findSimilarRunID(
                         in: runLookup,
@@ -984,6 +1188,10 @@ struct RunLogView: View {
                             sessionID: similarId,
                             healthWorkoutUUID: uuidStr,
                             activityType: activityType,
+                            date: nil,
+                            distance: nil,
+                            distanceUnit: nil,
+                            duration: nil,
                             calories: kcal,
                             locations: nil
                         ))
@@ -1018,15 +1226,35 @@ struct RunLogView: View {
                 }
 
                 await MainActor.run {
+                    guard WearableWorkoutInboxService
+                        .isCurrentLocalDataPurgeGeneration(
+                            expectedPurgeGeneration
+                        ) else {
+                        return
+                    }
                     let didCommit = applyImportActions(actions)
                     guard didCommit else { return }
+
+                    var forcedSeen = Set<String>()
+                    let forcedUUIDs = uuidsToForceEnrich.filter {
+                        forcedSeen.insert($0).inserted
+                    }
+                    enqueuePersistedForcedEnrichmentUUIDs(forcedUUIDs)
 
                     HealthKitManager.shared.persistCardioWorkoutAnchor(changes.newAnchor)
                     runsLastHealthImportAt = Date().timeIntervalSince1970
 
-                    var seenUUIDs = Set<String>()
-                    let uniqueUUIDs = uuidsToEnrich.filter { seenUUIDs.insert($0).inserted }
-                    scheduleDeferredEnrichment(for: Array(uniqueUUIDs.prefix(autoEnrichmentLimit)))
+                    var ordinarySeen = Set(forcedUUIDs)
+                    let ordinaryUUIDs = uuidsToEnrich.filter {
+                        ordinarySeen.insert($0).inserted
+                    }
+                    let scheduledUUIDs =
+                        forcedUUIDs +
+                        Array(ordinaryUUIDs.prefix(autoEnrichmentLimit))
+                    scheduleDeferredEnrichment(
+                        for: scheduledUUIDs,
+                        forcing: Set(forcedUUIDs)
+                    )
                 }
             } catch {
                 // Ignore errors silently; user may not have granted permission yet
@@ -1086,18 +1314,35 @@ struct RunLogView: View {
 
         for action in actions {
             switch action {
-            case let .update(sessionID, uuid, activityType, calories, locations):
+            case let .update(
+                sessionID,
+                uuid,
+                activityType,
+                date,
+                distance,
+                distanceUnit,
+                duration,
+                calories,
+                locations
+            ):
                 guard let similar = sessionsById[sessionID] else { continue }
                 similar.healthWorkoutUUID = uuid
                 similar.activityType = activityType
+                if let date { similar.date = date }
+                if let distance { similar.distance = distance }
+                if let distanceUnit { similar.distanceUnit = distanceUnit }
+                if let duration { similar.duration = duration }
                 if let calories, calories > 0 { similar.calories = calories }
                 if similar.locations.isEmpty, let locations, !locations.isEmpty {
                     similar.locations = locations
                 }
 
-            case let .delete(healthWorkoutUUID):
+            case let .unlink(healthWorkoutUUID):
                 guard let session = runningSessions.first(where: { $0.healthWorkoutUUID == healthWorkoutUUID }) else { continue }
-                modelContext.delete(session)
+                // Health records and app logs are separate. Preserve the local
+                // run (including notes/routes) when Health reports a deletion;
+                // a later replacement can relink it by similarity.
+                session.healthWorkoutUUID = nil
 
             case let .insert(payload):
                 let model = RunningSession(
@@ -1149,10 +1394,88 @@ struct RunLogView: View {
     }
 
     @MainActor
-    private func scheduleDeferredEnrichment(for uuids: [String]) {
-        for uuid in uuids where !uuid.isEmpty {
+    private func restorePersistedForcedEnrichment() {
+        let persisted = persistedForcedEnrichmentUUIDs()
+        guard !persisted.isEmpty else { return }
+
+        let linkedUUIDs = Set(
+            runningSessions
+                .compactMap(\.healthWorkoutUUID)
+                .filter { !$0.isEmpty }
+        )
+        let noLongerNeeded = persisted.subtracting(linkedUUIDs)
+        if !noLongerNeeded.isEmpty {
+            updatePersistedForcedEnrichmentUUIDs(
+                persisted.subtracting(noLongerNeeded)
+            )
+        }
+
+        let retryUUIDs = persisted
+            .intersection(linkedUUIDs)
+            .subtracting(activeForcedEnrichmentUUIDs)
+        guard !retryUUIDs.isEmpty else { return }
+
+        scheduleDeferredEnrichment(
+            for: Array(retryUUIDs),
+            forcing: retryUUIDs
+        )
+    }
+
+    @MainActor
+    private func enqueuePersistedForcedEnrichmentUUIDs(_ uuids: [String]) {
+        let cleaned = Set(uuids.filter { !$0.isEmpty })
+        guard !cleaned.isEmpty else { return }
+        updatePersistedForcedEnrichmentUUIDs(
+            persistedForcedEnrichmentUUIDs().union(cleaned)
+        )
+    }
+
+    @MainActor
+    private func removePersistedForcedEnrichmentUUID(_ uuid: String) {
+        var persisted = persistedForcedEnrichmentUUIDs()
+        guard persisted.remove(uuid) != nil else { return }
+        updatePersistedForcedEnrichmentUUIDs(persisted)
+    }
+
+    private func persistedForcedEnrichmentUUIDs() -> Set<String> {
+        Set(
+            UserDefaults.standard
+                .stringArray(
+                    forKey: Self.pendingForcedEnrichmentDefaultsKey
+                ) ?? []
+        ).filter { !$0.isEmpty }
+    }
+
+    private func updatePersistedForcedEnrichmentUUIDs(
+        _ uuids: Set<String>
+    ) {
+        let defaults = UserDefaults.standard
+        if uuids.isEmpty {
+            defaults.removeObject(
+                forKey: Self.pendingForcedEnrichmentDefaultsKey
+            )
+        } else {
+            defaults.set(
+                uuids.sorted(),
+                forKey: Self.pendingForcedEnrichmentDefaultsKey
+            )
+        }
+    }
+
+    @MainActor
+    private func scheduleDeferredEnrichment(
+        for uuids: [String],
+        forcing forcedUUIDs: Set<String> = []
+    ) {
+        let schedulableForcedUUIDs = forcedUUIDs
+            .subtracting(activeForcedEnrichmentUUIDs)
+        for uuid in uuids where
+            !uuid.isEmpty &&
+            (!forcedUUIDs.contains(uuid) ||
+                schedulableForcedUUIDs.contains(uuid)) {
             pendingEnrichmentUUIDs.insert(uuid)
         }
+        pendingForcedEnrichmentUUIDs.formUnion(schedulableForcedUUIDs)
 
         guard enrichmentTask == nil else { return }
 
@@ -1166,11 +1489,40 @@ struct RunLogView: View {
             while processed < maxPerPass {
                 if Task.isCancelled { break }
 
-                let nextUUID = await MainActor.run { pendingEnrichmentUUIDs.first }
-                guard let nextUUID else { break }
+                let next = await MainActor.run { () -> (String, Bool)? in
+                    guard let uuid = pendingEnrichmentUUIDs.first else {
+                        return nil
+                    }
+                    _ = pendingEnrichmentUUIDs.remove(uuid)
+                    let forceRefresh =
+                        pendingForcedEnrichmentUUIDs.remove(uuid) != nil
+                    if forceRefresh {
+                        activeForcedEnrichmentUUIDs.insert(uuid)
+                    }
+                    return (uuid, forceRefresh)
+                }
+                guard let (nextUUID, forceRefresh) = next else { break }
 
-                await MainActor.run { _ = pendingEnrichmentUUIDs.remove(nextUUID) }
-                await enrichRunDetails(forWorkoutUUID: nextUUID)
+                let outcome = await enrichRunDetails(
+                    forWorkoutUUID: nextUUID,
+                    forceHealthMetrics: forceRefresh
+                )
+                if forceRefresh {
+                    await MainActor.run {
+                        activeForcedEnrichmentUUIDs.remove(nextUUID)
+                        switch outcome {
+                        case .completed, .noLongerNeeded:
+                            removePersistedForcedEnrichmentUUID(nextUUID)
+                            // A view activation may have restored the UUID while
+                            // this attempt was in flight.
+                            pendingEnrichmentUUIDs.remove(nextUUID)
+                            pendingForcedEnrichmentUUIDs.remove(nextUUID)
+                        case .retryLater:
+                            // Leave the durable entry for a later view activation.
+                            break
+                        }
+                    }
+                }
                 processed += 1
             }
 
@@ -1183,110 +1535,224 @@ struct RunLogView: View {
         }
     }
 
-    private func enrichRunDetails(forWorkoutUUID uuid: String) async {
-        let needs = await MainActor.run { enrichmentNeeds(forWorkoutUUID: uuid) }
-        guard let needs, needs.requiresAnyFetch else { return }
-
-        do {
-            guard let workout = try await HealthKitManager.shared.workoutForUUID(uuid) else { return }
-
-            var routeData: Data? = nil
-            var elevationMetrics: (ascent: Double, descent: Double, min: Double, max: Double)? = nil
-
-            if needs.needsRoute || needs.needsElevation {
-                if let locs = try? await HealthKitManager.shared.routeLocations(for: workout), !locs.isEmpty {
-                    let reduced = downsampleLocations(locs)
-                    let coords = reduced.map {
-                        RunCoordinate(
-                            latitude: $0.coordinate.latitude,
-                            longitude: $0.coordinate.longitude,
-                            altitude: $0.altitude,
-                            timestamp: $0.timestamp
-                        )
-                    }
-                    routeData = try? JSONEncoder().encode(coords)
-                    elevationMetrics = ElevationCalculator.calculateElevationMetrics(from: coords)
-                }
-            }
-
-            var calories: Double? = nil
-            if needs.needsCalories {
-                calories = try? await HealthKitManager.shared.activeEnergyKilocalories(for: workout)
-            }
-
-            let avgHeartRate = needs.needsHeartRate ? (try? await HealthKitManager.shared.averageHeartRate(for: workout)) : nil
-            let maxHeartRate = needs.needsHeartRate ? (try? await HealthKitManager.shared.maxHeartRate(for: workout)) : nil
-            let minHeartRate = needs.needsHeartRate ? (try? await HealthKitManager.shared.minHeartRate(for: workout)) : nil
-
-            let avgCadence = needs.needsCadence ? (try? await HealthKitManager.shared.averageCadence(for: workout)) : nil
-            let maxCadence = needs.needsCadence ? (try? await HealthKitManager.shared.maxCadence(for: workout)) : nil
-            let avgStrideLength = needs.needsStrideLength ? (try? await HealthKitManager.shared.averageStrideLength(for: workout)) : nil
-            let verticalOscillation = needs.needsVerticalOscillation ? (try? await HealthKitManager.shared.averageVerticalOscillation(for: workout)) : nil
-            let groundContactTime = needs.needsGroundContactTime ? (try? await HealthKitManager.shared.averageGroundContactTime(for: workout)) : nil
-
-            let avgPower = needs.needsPower ? (try? await HealthKitManager.shared.averagePower(for: workout)) : nil
-            let maxPower = needs.needsPower ? (try? await HealthKitManager.shared.maxPower(for: workout)) : nil
-
-            await MainActor.run {
-                guard let session = runningSessions.first(where: { $0.healthWorkoutUUID == uuid }) else { return }
-
-                if let calories, calories > 0 { session.calories = calories }
-
-                if needs.needsRoute, session.locations.isEmpty, let routeData, !routeData.isEmpty {
-                    session.locations = routeData
-                }
-
-                if needs.needsHeartRate {
-                    if session.avgHeartRate == nil, let avgHeartRate { session.avgHeartRate = avgHeartRate }
-                    if session.maxHeartRate == nil, let maxHeartRate { session.maxHeartRate = maxHeartRate }
-                    if session.minHeartRate == nil, let minHeartRate { session.minHeartRate = minHeartRate }
-                }
-
-                if needs.needsCadence {
-                    if session.avgCadence == nil, let avgCadence { session.avgCadence = avgCadence }
-                    if session.maxCadence == nil, let maxCadence { session.maxCadence = maxCadence }
-                }
-                if needs.needsStrideLength, session.avgStrideLength == nil, let avgStrideLength {
-                    session.avgStrideLength = avgStrideLength
-                }
-                if needs.needsVerticalOscillation, session.verticalOscillation == nil, let verticalOscillation {
-                    session.verticalOscillation = verticalOscillation
-                }
-                if needs.needsGroundContactTime, session.groundContactTime == nil, let groundContactTime {
-                    session.groundContactTime = groundContactTime
-                }
-
-                if needs.needsPower {
-                    if session.avgPower == nil, let avgPower { session.avgPower = avgPower }
-                    if session.maxPower == nil, let maxPower { session.maxPower = maxPower }
-                }
-
-                if needs.needsElevation, let elevationMetrics {
-                    if session.totalAscent == nil { session.totalAscent = elevationMetrics.ascent }
-                    if session.totalDescent == nil { session.totalDescent = elevationMetrics.descent }
-                    if session.minElevation == nil { session.minElevation = elevationMetrics.min }
-                    if session.maxElevation == nil { session.maxElevation = elevationMetrics.max }
-                }
-
-                _ = PersistenceSave.commit(modelContext, action: "enrich run details")
-            }
-        } catch {
-            // Best-effort enrichment only.
+    private func enrichRunDetails(
+        forWorkoutUUID uuid: String,
+        forceHealthMetrics: Bool
+    ) async -> EnrichmentOutcome {
+        let needs = await MainActor.run {
+            enrichmentNeeds(
+                forWorkoutUUID: uuid,
+                forceHealthMetrics: forceHealthMetrics
+            )
         }
+        guard let needs else { return .noLongerNeeded }
+        guard needs.requiresAnyFetch else { return .completed }
+
+        let workout: HKWorkout
+        do {
+            guard let fetchedWorkout = try await HealthKitManager.shared
+                .workoutForUUID(uuid) else {
+                return .noLongerNeeded
+            }
+            workout = fetchedWorkout
+        } catch {
+            return .retryLater
+        }
+
+        var routeData: Data? = nil
+        var elevationMetrics: (ascent: Double, descent: Double, min: Double, max: Double)? = nil
+
+        if needs.needsRoute || needs.needsElevation {
+            if let locs = try? await HealthKitManager.shared
+                .routeLocations(for: workout), !locs.isEmpty {
+                let reduced = downsampleLocations(locs)
+                let coords = reduced.map {
+                    RunCoordinate(
+                        latitude: $0.coordinate.latitude,
+                        longitude: $0.coordinate.longitude,
+                        altitude: $0.altitude,
+                        timestamp: $0.timestamp
+                    )
+                }
+                routeData = try? JSONEncoder().encode(coords)
+                elevationMetrics = ElevationCalculator.calculateElevationMetrics(from: coords)
+            }
+        }
+
+        let calories: Double?
+        let avgHeartRate: Double?
+        let maxHeartRate: Double?
+        let minHeartRate: Double?
+        let avgCadence: Double?
+        let maxCadence: Double?
+        let avgStrideLength: Double?
+        let verticalOscillation: Double?
+        let groundContactTime: Double?
+        let avgPower: Double?
+        let maxPower: Double?
+
+        if forceHealthMetrics {
+            do {
+                calories = try await HealthKitManager.shared
+                    .activeEnergyKilocalories(for: workout)
+                avgHeartRate = try await HealthKitManager.shared
+                    .averageHeartRate(for: workout)
+                maxHeartRate = try await HealthKitManager.shared
+                    .maxHeartRate(for: workout)
+                minHeartRate = try await HealthKitManager.shared
+                    .minHeartRate(for: workout)
+                avgCadence = try await HealthKitManager.shared
+                    .averageCadence(for: workout)
+                maxCadence = try await HealthKitManager.shared
+                    .maxCadence(for: workout)
+                avgStrideLength = try await HealthKitManager.shared
+                    .averageStrideLength(for: workout)
+                verticalOscillation = try await HealthKitManager.shared
+                    .averageVerticalOscillation(for: workout)
+                groundContactTime = try await HealthKitManager.shared
+                    .averageGroundContactTime(for: workout)
+                avgPower = try await HealthKitManager.shared
+                    .averagePower(for: workout)
+                maxPower = try await HealthKitManager.shared
+                    .maxPower(for: workout)
+            } catch {
+                return .retryLater
+            }
+        } else {
+            calories = needs.needsCalories
+                ? (try? await HealthKitManager.shared.activeEnergyKilocalories(for: workout))
+                : nil
+            avgHeartRate = needs.needsHeartRate
+                ? (try? await HealthKitManager.shared.averageHeartRate(for: workout))
+                : nil
+            maxHeartRate = needs.needsHeartRate
+                ? (try? await HealthKitManager.shared.maxHeartRate(for: workout))
+                : nil
+            minHeartRate = needs.needsHeartRate
+                ? (try? await HealthKitManager.shared.minHeartRate(for: workout))
+                : nil
+            avgCadence = needs.needsCadence
+                ? (try? await HealthKitManager.shared.averageCadence(for: workout))
+                : nil
+            maxCadence = needs.needsCadence
+                ? (try? await HealthKitManager.shared.maxCadence(for: workout))
+                : nil
+            avgStrideLength = needs.needsStrideLength
+                ? (try? await HealthKitManager.shared.averageStrideLength(for: workout))
+                : nil
+            verticalOscillation = needs.needsVerticalOscillation
+                ? (try? await HealthKitManager.shared.averageVerticalOscillation(for: workout))
+                : nil
+            groundContactTime = needs.needsGroundContactTime
+                ? (try? await HealthKitManager.shared.averageGroundContactTime(for: workout))
+                : nil
+            avgPower = needs.needsPower
+                ? (try? await HealthKitManager.shared.averagePower(for: workout))
+                : nil
+            maxPower = needs.needsPower
+                ? (try? await HealthKitManager.shared.maxPower(for: workout))
+                : nil
+        }
+
+        let didCommit: Bool? = await MainActor.run {
+            guard let session = runningSessions.first(where: {
+                $0.healthWorkoutUUID == uuid
+            }) else {
+                return nil
+            }
+
+            if let calories, calories > 0 { session.calories = calories }
+
+            if needs.needsRoute,
+               session.locations.isEmpty,
+               let routeData,
+               !routeData.isEmpty {
+                session.locations = routeData
+            }
+
+            if needs.needsHeartRate {
+                if let avgHeartRate,
+                   forceHealthMetrics || session.avgHeartRate == nil {
+                    session.avgHeartRate = avgHeartRate
+                }
+                if let maxHeartRate,
+                   forceHealthMetrics || session.maxHeartRate == nil {
+                    session.maxHeartRate = maxHeartRate
+                }
+                if let minHeartRate,
+                   forceHealthMetrics || session.minHeartRate == nil {
+                    session.minHeartRate = minHeartRate
+                }
+            }
+
+            if needs.needsCadence {
+                if let avgCadence,
+                   forceHealthMetrics || session.avgCadence == nil {
+                    session.avgCadence = avgCadence
+                }
+                if let maxCadence,
+                   forceHealthMetrics || session.maxCadence == nil {
+                    session.maxCadence = maxCadence
+                }
+            }
+            if needs.needsStrideLength,
+               let avgStrideLength,
+               forceHealthMetrics || session.avgStrideLength == nil {
+                session.avgStrideLength = avgStrideLength
+            }
+            if needs.needsVerticalOscillation,
+               let verticalOscillation,
+               forceHealthMetrics || session.verticalOscillation == nil {
+                session.verticalOscillation = verticalOscillation
+            }
+            if needs.needsGroundContactTime,
+               let groundContactTime,
+               forceHealthMetrics || session.groundContactTime == nil {
+                session.groundContactTime = groundContactTime
+            }
+
+            if needs.needsPower {
+                if let avgPower,
+                   forceHealthMetrics || session.avgPower == nil {
+                    session.avgPower = avgPower
+                }
+                if let maxPower,
+                   forceHealthMetrics || session.maxPower == nil {
+                    session.maxPower = maxPower
+                }
+            }
+
+            if needs.needsElevation, let elevationMetrics {
+                if session.totalAscent == nil { session.totalAscent = elevationMetrics.ascent }
+                if session.totalDescent == nil { session.totalDescent = elevationMetrics.descent }
+                if session.minElevation == nil { session.minElevation = elevationMetrics.min }
+                if session.maxElevation == nil { session.maxElevation = elevationMetrics.max }
+            }
+
+            return PersistenceSave.commit(
+                modelContext,
+                action: "enrich run details"
+            )
+        }
+        guard let didCommit else { return .noLongerNeeded }
+        return didCommit ? .completed : .retryLater
     }
 
     @MainActor
-    private func enrichmentNeeds(forWorkoutUUID uuid: String) -> RunEnrichmentNeeds? {
+    private func enrichmentNeeds(
+        forWorkoutUUID uuid: String,
+        forceHealthMetrics: Bool
+    ) -> RunEnrichmentNeeds? {
         guard let session = runningSessions.first(where: { $0.healthWorkoutUUID == uuid }) else { return nil }
         return RunEnrichmentNeeds(
-            needsCalories: (session.calories ?? 0) <= 0,
+            needsCalories: forceHealthMetrics || (session.calories ?? 0) <= 0,
             needsRoute: session.locations.isEmpty,
-            needsHeartRate: session.avgHeartRate == nil || session.maxHeartRate == nil || session.minHeartRate == nil,
-            needsCadence: session.avgCadence == nil || session.maxCadence == nil,
-            needsStrideLength: session.avgStrideLength == nil,
-            needsVerticalOscillation: session.verticalOscillation == nil,
-            needsGroundContactTime: session.groundContactTime == nil,
-            needsPower: session.avgPower == nil || session.maxPower == nil,
+            needsHeartRate: forceHealthMetrics || session.avgHeartRate == nil || session.maxHeartRate == nil || session.minHeartRate == nil,
+            needsCadence: forceHealthMetrics || session.avgCadence == nil || session.maxCadence == nil,
+            needsStrideLength: forceHealthMetrics || session.avgStrideLength == nil,
+            needsVerticalOscillation: forceHealthMetrics || session.verticalOscillation == nil,
+            needsGroundContactTime: forceHealthMetrics || session.groundContactTime == nil,
+            needsPower: forceHealthMetrics || session.avgPower == nil || session.maxPower == nil,
             needsElevation: session.totalAscent == nil || session.totalDescent == nil || session.minElevation == nil || session.maxElevation == nil
         )
     }
@@ -1339,6 +1805,188 @@ struct RunLogView: View {
     }
 }
 
+struct SameBatchCardioReplacement {
+    let deletedUUID: String
+    let addedWorkoutUUID: String
+    let sessionID: UUID
+}
+
+struct CardioReplacementSessionSnapshot {
+    let healthWorkoutUUID: String
+    let sessionID: UUID
+    let date: Date
+    let distance: Double
+    let distanceUnit: String
+    let duration: TimeInterval
+    let activityType: String
+}
+
+enum SameBatchCardioReplacementReconciler {
+    static func matches(
+        changes: HealthKitManager.CardioWorkoutChanges,
+        addedWorkouts: [HKWorkout],
+        existingSessions: [CardioReplacementSessionSnapshot]
+    ) -> [SameBatchCardioReplacement] {
+        let sessionsByHealthUUID = Dictionary(
+            grouping: existingSessions,
+            by: { $0.healthWorkoutUUID }
+        )
+
+        var addedBySyncIdentifier: [String: [HKWorkout]] = [:]
+        for workout in addedWorkouts {
+            guard let syncIdentifier = syncIdentifier(
+                in: workout.metadata
+            ) else { continue }
+            addedBySyncIdentifier[syncIdentifier, default: []].append(workout)
+        }
+
+        var deletedBySyncIdentifier:
+            [String: [HealthKitManager.CardioWorkoutChanges.DeletedWorkout]] = [:]
+        for deleted in changes.deleted {
+            guard let syncIdentifier = normalized(deleted.syncIdentifier) else {
+                continue
+            }
+            deletedBySyncIdentifier[syncIdentifier, default: []].append(deleted)
+        }
+
+        var matches: [SameBatchCardioReplacement] = []
+        for syncIdentifier in deletedBySyncIdentifier.keys.sorted() {
+            guard let deletedObjects = deletedBySyncIdentifier[syncIdentifier],
+                  let addedCandidates = addedBySyncIdentifier[syncIdentifier]
+            else { continue }
+
+            let linkedDeletedObjects = deletedObjects.compactMap { deleted -> (
+                deleted: HealthKitManager.CardioWorkoutChanges.DeletedWorkout,
+                session: CardioReplacementSessionSnapshot
+            )? in
+                guard let sessions = sessionsByHealthUUID[deleted.uuid],
+                      sessions.count == 1,
+                      let session = sessions.first else { return nil }
+                return (deleted, session)
+            }
+            guard linkedDeletedObjects.count == 1,
+                  let linkedDeletion = linkedDeletedObjects.first else {
+                continue
+            }
+
+            let availableCandidates = addedCandidates.filter {
+                sessionsByHealthUUID[$0.uuid.uuidString] == nil &&
+                    semanticallyMatches(
+                        $0,
+                        session: linkedDeletion.session
+                    )
+            }
+            guard let replacement = preferredCandidate(
+                from: availableCandidates
+            ) else { continue }
+
+            matches.append(
+                SameBatchCardioReplacement(
+                    deletedUUID: linkedDeletion.deleted.uuid,
+                    addedWorkoutUUID: replacement.uuid.uuidString,
+                    sessionID: linkedDeletion.session.sessionID
+                )
+            )
+        }
+        return matches
+    }
+
+    private static func semanticallyMatches(
+        _ workout: HKWorkout,
+        session: CardioReplacementSessionSnapshot
+    ) -> Bool {
+        guard let activityType = activityKey(for: workout.workoutActivityType),
+              activityType == session.activityType ||
+                (activityType == "stairClimbing" &&
+                    session.activityType == "stairStepper") else {
+            return false
+        }
+
+        let candidateMeters = workout.totalDistance?
+            .doubleValue(for: .meter()) ?? 0
+        let sessionMeters = session.distanceUnit == "mi"
+            ? session.distance * 1609.34
+            : session.distance * 1000
+        return abs(session.date.timeIntervalSince(workout.endDate)) <= 120 &&
+            abs(session.duration - workout.duration) <= 120 &&
+            abs(sessionMeters - candidateMeters) <= 100
+    }
+
+    private static func activityKey(
+        for type: HKWorkoutActivityType
+    ) -> String? {
+        switch type {
+        case .running: return "running"
+        case .walking: return "walking"
+        case .hiking: return "hiking"
+        case .cycling: return "cycling"
+        case .rowing: return "rowing"
+        case .elliptical: return "elliptical"
+        case .stairClimbing: return "stairClimbing"
+        default: return nil
+        }
+    }
+
+    private static func preferredCandidate(
+        from candidates: [HKWorkout]
+    ) -> HKWorkout? {
+        guard !candidates.isEmpty else { return nil }
+
+        // Deleted HealthKit objects do not retain their source. Do not guess if
+        // two source apps happen to reuse the same source-scoped sync identifier.
+        let candidatesBySource = Dictionary(
+            grouping: candidates,
+            by: { $0.sourceRevision.source.bundleIdentifier.lowercased() }
+        )
+        guard candidatesBySource.count == 1,
+              let sameSourceCandidates = candidatesBySource.values.first else {
+            return nil
+        }
+        if sameSourceCandidates.count == 1 {
+            return sameSourceCandidates[0]
+        }
+
+        let versionedCandidates = sameSourceCandidates.compactMap { workout -> (
+            workout: HKWorkout,
+            version: Int
+        )? in
+            guard let version = syncVersion(in: workout.metadata) else {
+                return nil
+            }
+            return (workout, version)
+        }
+        guard let highestVersion = versionedCandidates.map(\.version).max() else {
+            return nil
+        }
+        let newestCandidates = versionedCandidates.filter {
+            $0.version == highestVersion
+        }
+        guard newestCandidates.count == 1 else { return nil }
+        return newestCandidates[0].workout
+    }
+
+    private static func syncIdentifier(
+        in metadata: [String: Any]?
+    ) -> String? {
+        normalized(metadata?[HKMetadataKeySyncIdentifier] as? String)
+    }
+
+    private static func syncVersion(
+        in metadata: [String: Any]?
+    ) -> Int? {
+        if let number = metadata?[HKMetadataKeySyncVersion] as? NSNumber {
+            return number.intValue
+        }
+        return metadata?[HKMetadataKeySyncVersion] as? Int
+    }
+
+    private static func normalized(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
 private struct ExistingRunSnapshot {
     let id: UUID
     let date: Date
@@ -1346,6 +1994,7 @@ private struct ExistingRunSnapshot {
     let distanceUnit: String
     let duration: TimeInterval
     let healthWorkoutUUID: String?
+    let activityType: String
 }
 
 private struct RunEnrichmentNeeds {
@@ -1391,10 +2040,14 @@ private enum RunImportAction {
         sessionID: UUID,
         healthWorkoutUUID: String,
         activityType: String,
+        date: Date?,
+        distance: Double?,
+        distanceUnit: String?,
+        duration: TimeInterval?,
         calories: Double?,
         locations: Data?
     )
-    case delete(healthWorkoutUUID: String)
+    case unlink(healthWorkoutUUID: String)
     case insert(NewRunPayload)
 }
 
@@ -1709,7 +2362,7 @@ struct RunCoordinate: Codable, Identifiable {
 
 // MARK: - Elevation Calculator
 struct ElevationCalculator {
-    static fileprivate func calculateElevationMetrics(from coordinates: [RunCoordinate]) -> (ascent: Double, descent: Double, min: Double, max: Double)? {
+    static func calculateElevationMetrics(from coordinates: [RunCoordinate]) -> (ascent: Double, descent: Double, min: Double, max: Double)? {
         let altitudes = coordinates.compactMap { $0.altitude }
         guard altitudes.count >= 2 else { return nil }
         
@@ -1878,6 +2531,12 @@ struct RunSessionDetailView: View {
                                 .font(.footnote)
                                 .foregroundStyle(AppTheme.secondaryTextColor)
                         }
+                        if let source = session.healthMetricSourceName,
+                           !source.isEmpty {
+                            Label("Heart-rate data from \(source)", systemImage: "heart.text.square.fill")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(AppTheme.accentColor)
+                        }
                         if let notes = session.notes { Text("Notes: \(notes)") }
 
                     }
@@ -1971,7 +2630,9 @@ struct RunSessionDetailView: View {
             }
             
             // Fetch heart rate samples if this is from HealthKit
-            if let uuid = session.healthWorkoutUUID, !uuid.isEmpty, heartRateSamples.isEmpty {
+            if let uuid = session.preferredMetricWorkoutUUID,
+               !uuid.isEmpty,
+               heartRateSamples.isEmpty {
                 isLoadingHeartRate = true
                 Task { @MainActor in
                     do {

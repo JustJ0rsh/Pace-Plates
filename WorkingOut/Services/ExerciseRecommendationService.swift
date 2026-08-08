@@ -10,24 +10,38 @@ struct ExerciseBaseline: Identifiable {
 }
 
 enum ExerciseRecommendationService {
+    static func isCompletedPositiveStrengthSet(_ log: ExerciseLog) -> Bool {
+        log.isCompleted
+            && !log.isCardio
+            && log.reps > 0
+            && log.weight.isFinite
+            && log.weight > 0
+    }
+
     // Estimate 1RM via Epley formula and find last working sets per reps count
     static func baselines(context: ModelContext, preferredUnit: String) -> [ExerciseBaseline] {
-        let logs: [ExerciseLog] = (try? context.fetch(FetchDescriptor<ExerciseLog>())) ?? []
+        let logs = ((try? context.fetch(FetchDescriptor<ExerciseLog>())) ?? [])
+            .filter(isCompletedPositiveStrengthSet)
         var grouped: [String: [ExerciseLog]] = [:]
-        for l in logs {
-            let rawName = l.exerciseDefinition?.name ?? l.exerciseName ?? "Unknown"
+        for log in logs {
+            guard let rawName = log.exerciseDefinition?.name ?? log.exerciseName else { continue }
             let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
-            grouped[name, default: []].append(l)
+            guard !name.isEmpty else { continue }
+            grouped[name, default: []].append(log)
         }
         var result: [ExerciseBaseline] = []
         for (name, arr) in grouped {
-            guard !name.isEmpty else { continue }
             var bestE1RM: Double = 0
             var lastByReps: [Int: (date: Date, weight: Double)] = [:]
 
             for log in arr {
                 let weight = convertWeight(log.weight, from: log.weightUnit, to: preferredUnit)
-                let reps = max(log.effectiveReps, 1)
+                guard weight.isFinite, weight > 0 else { continue }
+
+                // e1RM is a per-limb strength estimate. `effectiveReps` doubles
+                // unilateral work for volume accounting, which would inflate
+                // the estimated max and recommended load.
+                let reps = log.reps
                 let e1rm = epley1RM(weight: weight, reps: reps)
                 if e1rm > bestE1RM { bestE1RM = e1rm }
 
@@ -100,4 +114,3 @@ enum ExerciseRecommendationService {
         return value
     }
 }
-

@@ -72,6 +72,7 @@ final class LiveActivityManager {
     func start(startDate: Date, distanceMeters: Double, paceSecondsPerUnit: Double?, distanceUnit: String, activityType: String = "running") {
         // End any existing activity first
         end()
+        guard !AppLaunchConfiguration.current.isUITest else { return }
         
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
             print("⚠️ Live Activities are not enabled")
@@ -111,6 +112,8 @@ final class LiveActivityManager {
     }
 
     func update(startDate: Date, duration: TimeInterval, distanceMeters: Double, paceSecondsPerUnit: Double?, distanceUnit: String, isPaused: Bool = false) {
+        guard !AppLaunchConfiguration.current.isUITest else { return }
+
         adoptSystemActivityIfNeeded()
         guard let activity else {
             print("⚠️ No active Live Activity to update")
@@ -134,6 +137,11 @@ final class LiveActivityManager {
     }
 
     func end() {
+        guard !AppLaunchConfiguration.current.isUITest else {
+            activity = nil
+            return
+        }
+
         let activitiesToEnd = activeActivities
         guard !activitiesToEnd.isEmpty else {
             activity = nil
@@ -151,6 +159,11 @@ final class LiveActivityManager {
     }
 
     func reconcileActivities(hasRecoverableRun: Bool) {
+        guard !AppLaunchConfiguration.current.isUITest else {
+            activity = nil
+            return
+        }
+
         if hasRecoverableRun {
             adoptSystemActivityIfNeeded()
             return
@@ -160,6 +173,7 @@ final class LiveActivityManager {
     }
     
     var isActive: Bool {
+        guard !AppLaunchConfiguration.current.isUITest else { return false }
         adoptSystemActivityIfNeeded()
         return activity != nil
     }
@@ -175,6 +189,3 @@ final class LiveActivityManager {
     var isActive: Bool { false }
 }
 #endif
-
-
-
