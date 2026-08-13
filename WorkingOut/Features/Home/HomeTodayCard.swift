@@ -115,7 +115,6 @@ struct HomeTodayCard: View {
             primaryContent
         }
         .floatingTile()
-        .accessibilityIdentifier("home.today.card")
         .task(id: activeRunningPlan?.id) {
             reconcileRunningPlanIfNeeded()
         }
