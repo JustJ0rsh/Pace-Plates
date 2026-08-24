@@ -549,7 +549,10 @@ extension View {
     /// Applies the app's gradient background consistently.
     /// - Parameter gradient: Optional gradient override; defaults to the base background gradient.
     func appBackground(_ gradient: LinearGradient? = nil) -> some View {
-        self.background(gradient ?? AppTheme.backgroundGradient)
+        self.background {
+            (gradient ?? AppTheme.backgroundGradient)
+                .ignoresSafeArea(.all, edges: .bottom)
+        }
     }
 }
 
