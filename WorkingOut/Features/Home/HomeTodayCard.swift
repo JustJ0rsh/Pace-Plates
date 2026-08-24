@@ -96,7 +96,7 @@ struct HomeTodayCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("Today")
                     .font(.title3.weight(.bold))
@@ -162,8 +162,6 @@ struct HomeTodayCard: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-            .frame(minHeight: 44)
             .accessibilityIdentifier("home.today.plan.start")
 
             if candidate.timing.allowsDisposition || !candidate.moveOptions.isEmpty {
@@ -278,8 +276,6 @@ struct HomeTodayCard: View {
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
-        .controlSize(.small)
-        .frame(minHeight: 44)
         .accessibilityHint("Complete, skip, or move this planned session.")
         .accessibilityIdentifier("home.today.plan.options")
     }
