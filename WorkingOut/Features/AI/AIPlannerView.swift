@@ -94,6 +94,7 @@ struct AIPlannerView: View {
                     runTrackingRequest = CoachRunTrackingRequest(target: target)
                 }
             }
+            .presentationSizing(.page)
         }
         .sheet(item: $startedWorkout) { session in
             NavigationStack {

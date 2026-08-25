@@ -1,0 +1,75 @@
+{
+  "app": "Pace & Plates",
+  "version": "2.5",
+  "build": "4",
+  "format": "PNG, RGB, no alpha",
+  "hardware_model": "assets/iphone-model.png",
+  "composition": "Generated iPhone hardware asset with deterministic, unmodified Simulator UI compositing",
+  "sets": {
+    "iphone_6_9": {
+      "directory": "final",
+      "dimensions": [
+        1320,
+        2868
+      ]
+    },
+    "iphone_6_5": {
+      "directory": "final-6.5",
+      "dimensions": [
+        1284,
+        2778
+      ]
+    },
+    "ipad_13": {
+      "directory": "final-ipad-13",
+      "dimensions": [
+        2064,
+        2752
+      ]
+    }
+  },
+  "screenshots": [
+    {
+      "file": "01-your-fitness.png",
+      "source": "raw/01-home.png",
+      "ipad_source": "raw-ipad-13/01-home.png",
+      "headline": "Your fitness,\nall in one place.",
+      "subhead": "Workouts, cardio, weight and progress\u2014together."
+    },
+    {
+      "file": "02-every-rep.png",
+      "source": "raw/02-workouts.png",
+      "ipad_source": "raw-ipad-13/02-workouts.png",
+      "headline": "See every rep\nadd up.",
+      "subhead": "Log sets, review volume and stay consistent."
+    },
+    {
+      "file": "03-every-workout.png",
+      "source": "raw/04-runs.png",
+      "ipad_source": "raw-ipad-13/04-runs.png",
+      "headline": "Every workout\ncounts.",
+      "subhead": "Track runs, walks, rides and more in one history."
+    },
+    {
+      "file": "04-progress-visible.png",
+      "source": "raw/05-weight.png",
+      "ipad_source": "raw-ipad-13/05-weight.png",
+      "headline": "Make progress\nvisible.",
+      "subhead": "Follow your trend without losing sight of the work."
+    },
+    {
+      "file": "05-plan-smarter.png",
+      "source": "raw/03-coach.png",
+      "ipad_source": "raw-ipad-13/03-coach.png",
+      "headline": "Plan smarter.\nTrain your way.",
+      "subhead": "Build weekly plans with on-device Apple Intelligence."
+    },
+    {
+      "file": "06-run-plan.png",
+      "source": "raw/06-running-assistant.png",
+      "ipad_source": "raw-ipad-13/06-running-assistant.png",
+      "headline": "A run plan that\nfits your life.",
+      "subhead": "Choose a goal, follow each session and build momentum."
+    }
+  ]
+}

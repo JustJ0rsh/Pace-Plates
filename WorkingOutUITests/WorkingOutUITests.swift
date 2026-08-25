@@ -117,6 +117,50 @@ final class WorkingOutUITests: XCTestCase {
         snapshot("04_weight", waitForLoadingIndicator: false)
     }
 
+    func testAppStoreScreenshotSet() {
+        let home = launchApp(startTab: "home")
+        waitForElement(home.buttons["home.today.plan.start"])
+        waitForElement(home.buttons["home.today.plan.options"])
+        captureAppStoreScreenshot("01-home")
+        home.terminate()
+
+        let workouts = launchApp(startTab: "workouts")
+        waitForAnchor("workouts.ready", in: workouts)
+        XCTAssertTrue(workouts.navigationBars["Workouts"].waitForExistence(timeout: 5))
+        captureAppStoreScreenshot("02-workouts")
+        workouts.terminate()
+
+        let coach = launchApp(startTab: "ai")
+        XCTAssertTrue(coach.navigationBars["Coach"].waitForExistence(timeout: 5))
+        waitForElement(coach.buttons["coach.runningPlans"])
+        captureAppStoreScreenshot("03-coach")
+        coach.terminate()
+
+        let runs = launchApp(startTab: "runs")
+        waitForAnchor("runs.ready", in: runs)
+        XCTAssertTrue(runs.navigationBars["Runs"].waitForExistence(timeout: 5))
+        captureAppStoreScreenshot("04-runs")
+        runs.terminate()
+
+        let weight = launchApp(startTab: "weight")
+        waitForAnchor("weight.ready", in: weight)
+        XCTAssertTrue(weight.navigationBars["Weight"].waitForExistence(timeout: 5))
+        captureAppStoreScreenshot("05-weight")
+        weight.terminate()
+
+        let runningAssistant = launchApp(startTab: "ai")
+        let runningPlans = runningAssistant.buttons["coach.runningPlans"]
+        waitForElement(runningPlans)
+        runningPlans.tap()
+        XCTAssertTrue(
+            runningAssistant.navigationBars["Running Assistant"]
+                .waitForExistence(timeout: 5)
+        )
+        waitForElement(runningAssistant.staticTexts["5K Momentum"])
+        captureAppStoreScreenshot("06-running-assistant")
+        runningAssistant.terminate()
+    }
+
     func testFindHistoryFiltersEachLogAndOpensWeightDetails() {
         let workouts = launchApp(startTab: "workouts")
         waitForAnchor("workouts.ready", in: workouts)
@@ -572,6 +616,13 @@ final class WorkingOutUITests: XCTestCase {
             element.waitForExistence(timeout: timeout),
             "Expected element to exist: \(element)"
         )
+    }
+
+    private func captureAppStoreScreenshot(_ name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     private func reveal(_ element: XCUIElement, in app: XCUIApplication, attempts: Int = 6) {
