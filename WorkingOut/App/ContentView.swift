@@ -17,6 +17,7 @@ struct ContentView: View {
     @AppStorage("heightUnit") private var heightUnit: String = "in"
     @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
     @State private var selectedTab = AppLaunchConfiguration.current.initialTabSelection
+    @State private var showStorageSafeModeAlert = false
     @Binding var importedWorkout: SharedWorkoutSession?
     
     // Error handling moved to App level
@@ -144,6 +145,10 @@ struct ContentView: View {
 
             // Ensure the Game Center access point dot is hidden by default
             GKAccessPoint.shared.isActive = false
+
+            // Warn once when persistent storage failed to open and the app is
+            // running on a temporary in-memory store.
+            showStorageSafeModeAlert = persistenceController.startupSafeModeMessage != nil
         }
         .onChange(of: appTheme) { _, _ in
             AppTheme.applyGlobalTheme()
@@ -157,6 +162,11 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willTerminateNotification)) { _ in
             LiveActivityManager.shared.end()
+        }
+        .alert("Data Couldn't Be Loaded", isPresented: $showStorageSafeModeAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(persistenceController.startupSafeModeMessage ?? "")
         }
         .sheet(isPresented: $showTutorial) {
             TutorialView(onFinish: {
@@ -181,6 +191,9 @@ extension ContentView {
     private func reconcileLiveActivities() {
         guard !launchConfiguration.shouldSkipAutomationSideEffects else { return }
         LiveActivityManager.shared.reconcileActivities(hasRecoverableRun: hasRecoverableRun)
+        // A restored (paused) run adopts any surviving Live Activity above;
+        // freeze it to the restored snapshot so it stops showing stale state.
+        RunTracker.shared.pushPausedLiveActivityUpdateIfNeeded()
     }
 
     @MainActor

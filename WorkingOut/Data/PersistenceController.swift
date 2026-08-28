@@ -53,6 +53,10 @@ class PersistenceController {
     
     let container: ModelContainer
     private(set) var isCloudBacked: Bool = false
+    /// Set when both the CloudKit-backed and local persistent stores failed to
+    /// open and the app fell back to a temporary in-memory store (safe mode).
+    /// The UI surfaces this so the user knows changes won't be saved.
+    private(set) var startupSafeModeMessage: String? = nil
     
     // Modify init to accept inMemory flag
     init(inMemory: Bool = false, cloudKitMode: CloudKitMode = .automatic) {
@@ -110,7 +114,23 @@ class PersistenceController {
                 container = try ModelContainer(for: schema, configurations: [local])
                 isCloudBacked = false
             } catch {
-                fatalError("Could not initialize local ModelContainer: \(error)")
+                // Last resort: run on a temporary in-memory store instead of
+                // crashing at launch (previously a fatalError). This keeps the
+                // app usable when the on-disk store cannot be opened (e.g.
+                // disk full or store corruption); the UI warns via
+                // `startupSafeModeMessage` that changes won't be saved.
+                print("Local ModelContainer failed: \(error). Falling back to in-memory safe mode…")
+                let memory = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+                do {
+                    container = try ModelContainer(for: schema, configurations: [memory])
+                    isCloudBacked = false
+                    startupSafeModeMessage = "Your saved data couldn't be loaded from device storage, so Pace & Plates is running in a temporary session. Changes made now won't be saved. Try restarting the app, and free up storage if this keeps happening."
+                } catch {
+                    // Even an in-memory container failed, which means the model
+                    // schema itself could not be loaded — a programming error
+                    // that cannot be recovered at runtime.
+                    fatalError("Could not initialize any ModelContainer: \(error)")
+                }
             }
         }
     }

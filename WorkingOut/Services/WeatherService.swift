@@ -44,16 +44,30 @@ final class WeatherClient: WeatherProviding {
 final class WeatherViewModel: NSObject, ObservableObject, @MainActor CLLocationManagerDelegate {
     @Published var summary: WeatherSummary? = nil
     @Published var errorText: String? = nil
+    /// True while a location/weather refresh is in flight, so the tile can
+    /// show progress instead of a bare placeholder during startup.
+    @Published var isLoading: Bool = false
     private let provider: WeatherProviding
+    private let cache: CodableFileStore<CachedWeatherSummary>
 
     private let manager = CLLocationManager()
     private var isFetching = false
 
-    init(provider: WeatherProviding = WeatherClient.shared) {
+    init(
+        provider: WeatherProviding = WeatherClient.shared,
+        cache: CodableFileStore<CachedWeatherSummary> = .lastWeatherSummary
+    ) {
         self.provider = provider
+        self.cache = cache
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+
+        // Render the last known conditions immediately; a background refresh
+        // replaces them once location/WeatherKit respond.
+        if let cached = cache.load(), cached.isFresh() {
+            summary = cached.weatherSummary
+        }
     }
 
     func fetch() {
@@ -65,6 +79,7 @@ final class WeatherViewModel: NSObject, ObservableObject, @MainActor CLLocationM
             return
         }
         isFetching = true
+        isLoading = true
         if let location = manager.location, isUsableRecentLocation(location) {
             Task { await load(for: location.coordinate) }
         } else {
@@ -73,14 +88,20 @@ final class WeatherViewModel: NSObject, ObservableObject, @MainActor CLLocationM
     }
 
     private func load(for coord: CLLocationCoordinate2D) async {
-        defer { isFetching = false }
+        defer {
+            isFetching = false
+            isLoading = false
+        }
         do {
             let s = try await provider.currentWeather(at: coord)
             self.summary = s
             self.errorText = nil
+            cache.save(CachedWeatherSummary(s))
         } catch {
-            self.summary = nil
-            self.errorText = "Weather unavailable"
+            // Keep showing the cached summary; only surface an error without one.
+            if summary == nil {
+                self.errorText = "Weather unavailable"
+            }
         }
     }
 
@@ -96,12 +117,33 @@ final class WeatherViewModel: NSObject, ObservableObject, @MainActor CLLocationM
             Task { await load(for: location.coordinate) }
         } else {
             isFetching = false
-            errorText = "Current location not available"
+            isLoading = false
+            if summary == nil {
+                errorText = "Current location not available"
+            }
         }
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         isFetching = false
-        errorText = "Location error: \(error.localizedDescription)"
+        isLoading = false
+        if summary == nil {
+            errorText = "Location error: \(error.localizedDescription)"
+        }
+    }
+}
+
+extension CachedWeatherSummary {
+    init(_ summary: WeatherSummary, savedAt: Date = Date()) {
+        self.init(
+            temperatureC: summary.temperatureC,
+            condition: summary.condition,
+            symbolName: summary.symbolName,
+            savedAt: savedAt
+        )
+    }
+
+    var weatherSummary: WeatherSummary {
+        WeatherSummary(temperatureC: temperatureC, condition: condition, symbolName: symbolName)
     }
 }

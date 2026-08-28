@@ -51,8 +51,15 @@ struct WeatherSummaryView: View {
             } else if let err = displayedErrorText {
                 Text(err)
                     .foregroundStyle(AppTheme.secondaryTextColor)
+            } else if vm.isLoading {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Updating weather…")
+                        .foregroundStyle(AppTheme.secondaryTextColor)
+                }
             } else {
-                Text("—")
+                Text("Weather appears once your location is available.")
+                    .font(.subheadline)
                     .foregroundStyle(AppTheme.secondaryTextColor)
             }
 
