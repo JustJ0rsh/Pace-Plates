@@ -1,112 +1,53 @@
-- Bugs & Issues Inventory
+# Bugs & Issues Inventory
 
-- WeightLogView: references non-existent WeightEntry.notes
-  - Location: WorkingOut/Features/Weight/WeightLogView.swift (previously around the chart selection summary)
-  - Type: Compile-time error (property does not exist)
-  - Impact: Build failure
-  - Fix: Remove notes usage or add a notes field to WeightEntry; current code removed the notes block.
+Last verified against the codebase on 2026-08-28. Items are split into what is
+still open and what has been confirmed fixed, so this file reflects the actual
+release state instead of accumulating history.
 
-- WorkoutLogView: extraneous closing brace at file end
-  - Location: WorkingOut/Features/Workouts/WorkoutLogView.swift (end of file)
-  - Type: Compile-time error ("Extraneous '}' at top level")
-  - Impact: Build failure
-  - Fix: Remove the stray brace; done.
+## Open
 
-- WorkoutLogView: used ExerciseLog.sets (property doesn’t exist)
-  - Location: WorkingOut/Features/Workouts/WorkoutLogView.swift (selected-day summary set counting)
-  - Type: Compile-time error / logic error
-  - Impact: Build failure; wrong counting logic
-  - Fix: Each ExerciseLog represents one set; use logs.count (per session) instead.
-
-- Heavy SwiftUI Chart expressions cause type-check timeouts
-  - Locations: WeightLogView and WorkoutLogView chart sections
-  - Type: Compiler performance ("unable to type-check … in reasonable time")
-  - Impact: Build failures and slow compiles
-  - Fix: Extracted chart blocks into small subviews and precomputed values; consider the same for any remaining large ViewBuilders (e.g., RunLogView chart if it grows).
-
-- WorkoutLogView: unused locals left after refactor
-  - Location: WorkingOut/Features/Workouts/WorkoutLogView.swift (calendar, yLowerV, yUpperV)
-  - Type: Warnings / dead code
-  - Impact: Noise; potential confusion
-  - Fix: Remove unused variables; done.
-
-- RunLogView: distance aggregation ignores units
-  - Location: WorkingOut/Features/Runs/RunLogView.swift (daily distance grouping)
-  - Type: Logic bug
-  - Impact: Distances in mi and km are summed raw, producing incorrect totals and charts if units vary between sessions
-  - Fix: Convert each session.distance from its distanceUnit to preferredDistanceUnit (or a common base) before aggregation.
-
-- WeightLogView: history list shows raw units, not preferred unit
-  - Location: WorkingOut/Features/Weight/WeightLogView.swift (History tile rows)
-  - Type: UX / inconsistency
-  - Impact: Chart uses preferred unit but history displays stored unit, confusing users
-  - Fix: Convert entry.weight to preferred unit before rendering.
-
-- Workout list label likely misnamed: "X exercises" counts sets
-  - Location: WorkingOut/Features/Workouts/WorkoutLogView.swift (WorkoutSessionRowContent)
-  - Type: UX / correctness
-  - Impact: Label says exercises but counts ExerciseLog (sets), misleading users
-  - Fix: Either show unique exercises (by definition/name) or relabel as "X sets".
-
-- List embedded inside ScrollView with fixed height
-  - Locations: WeightLogView and WorkoutLogView
-  - Type: UI/layout smell
-  - Impact: Potential clipping, incorrect heights, accessibility issues as counts grow
-  - Fix: Prefer LazyVStack inside ScrollView or a standalone List without fixed-height frames.
-
-- Widespread silent error swallowing on saves
-  - Locations: Many files (e.g., WorkoutLogView, WeightLogView, WorkoutSessionDetailView, AddExerciseView, SettingsView, RunLogView, etc.)
-  - Type: Error handling bug
-  - Impact: Data-save failures are ignored; users can lose data with no feedback
-  - Fix: Replace try? with do/try/catch, surface user-friendly alerts, and log details.
-
-- PersistenceController fatalError on container init fallback
-  - Location: WorkingOut/Data/PersistenceController.swift
-  - Type: Crash risk
-  - Impact: App can crash on initialization if local container fails
-  - Fix: Avoid fatalError in production; show an error UI and attempt recovery or safe mode.
-
-- WorkoutVolume chart selection UX inconsistency across tabs
-  - Locations: WorkoutLogView vs WeightLogView
-  - Type: UX inconsistency
-  - Impact: Workout chart locks selection until close (via locked date), Weight chart dismisses immediately on selection change
-  - Fix: Align behavior across charts (either both lock until close or both follow live selection).
-
-- Duplicate convertWeight implementations
-  - Locations: WeightLogView and WorkoutLogView (and possibly others)
+- Duplicate `convertWeight` implementations
+  - Locations: `WorkingOut/Services/ExerciseRecommendationService.swift`, `WorkingOut/Services/AIPromptBuilder.swift`, `WorkingOut/Services/WorkoutPlanGenerator.swift` (private static copies)
   - Type: Maintainability
-  - Impact: Risk of drift if conversion changes are needed
-  - Fix: Extract a shared helper (e.g., WeightConverter) or extension used project-wide.
-
-- Dead/unreferenced code
-  - Examples:
-    - WeightLogView: deleteWeightEntries(offsets:) appears unused
-    - WorkoutLogView: backgroundGradient() not used
-  - Type: Maintainability
-  - Impact: Adds noise and confusion
-  - Fix: Remove or wire up, and add tests if intended to be used.
+  - Impact: Risk of drift if conversion rules change; `UnitConverter` already exists and is used by the UI layer
+  - Fix: Replace the three private copies with `UnitConverter.weight(_:from:to:)`.
 
 - Debug prints in services
-  - Locations: Multiple (TemplateSeeder, ReminderService, GameCenterService, LiveActivityManager, WorkoutTemplateService, WorkoutSharingService, StreakService, WorkoutPlanGenerator, etc.)
+  - Locations: ~50 `print(...)` calls across `WorkingOut/Services/` (WearableWorkoutInboxService, WorkoutTemplateService, WorkoutPlanGenerator, LiveActivityManager, WorkoutSharingService, TemplateSeeder, RunAssistantService, StreakService, ReminderService, GameCenterService, WorkoutCalendarService, RunAssistantAIService)
   - Type: Logging hygiene
   - Impact: Verbose console output in production, potential PII leakage
-  - Fix: Gate with a logging utility and build flags; prefer os_log with privacy settings.
+  - Fix: Migrate to `os.Logger` with privacy annotations (see `PersistenceSave` for the established pattern).
 
-- AIConversationSheet uses try! with NSRegularExpression
-  - Location: WorkingOut/Features/AI/AIConversationSheet.swift
-  - Type: Crash risk
-  - Impact: App will crash if a pattern is ever invalid (now or via edits)
-  - Fix: Replace try! with do/try/catch; precompile once and assert in debug only.
-
-- RunLogView TODO for elevation remains unimplemented
-  - Location: WorkingOut/Features/Runs/RunLogView.swift (totalElevation)
+- Run detail elevation shows "N/A"
+  - Location: `WorkingOut/Features/Runs/RunLogView.swift` (`totalElevation`)
   - Type: Missing feature / placeholder
-  - Impact: Users may see "N/A" without explanation
-  - Fix: Either implement with altitude data or soften UI copy and hide when unavailable.
+  - Impact: Users see "N/A" with no explanation
+  - Note: `RunningSession` now stores `totalAscent`/`totalDescent`/`minElevation`/`maxElevation` (computed at save time by `RunTracker.calculateElevationMetrics`), so the detail view can render real values for new sessions; older sessions lack the data.
 
-- Category filtering normalization may be inconsistent
-  - Location: WorkoutLogView.availableCategories()
+- Category filtering normalization is case-sensitive
+  - Location: `WorkoutLogView.availableCategories()`
   - Type: Data normalization
-  - Impact: "Chest" vs "chest" or leading/trailing spaces could create duplicates elsewhere
-  - Fix: Normalize by lowercasing and trimming at definition time; store canonical forms.
+  - Impact: Whitespace is now trimmed, but "Chest" vs "chest" would still create duplicate filter entries
+  - Fix: Normalize casing at definition time; store canonical forms.
 
+## Resolved (verified)
+
+- Run loss on process death — **fixed 2026-08-28.** `RunTracker` now persists a durable draft of the in-progress session (`WorkingOut/Models/RunDraft.swift`, stored via `WorkingOut/Services/CodableFileStore.swift`) on start/pause/resume and throttled during ticks/location updates. On relaunch the draft is restored in a paused state (dead time never counts toward the run), which plugs into the existing recovery UX (Home resume card, Runs banner, paused Resume/Save controls). Surviving Live Activities are adopted and frozen to the restored snapshot; stale drafts (>24h) are discarded and orphaned activities ended. Logic covered by `scripts/run_draft_logic_test_main.swift`.
+
+- Home weather tile stuck on "—" during startup — **fixed 2026-08-28.** `WeatherViewModel` now caches the last successful summary (`WorkingOut/Services/WeatherSummaryCache.swift`) and renders it immediately on launch, shows an explicit "Updating weather…" loading state, keeps the previous value on refresh failures, and shows neutral copy instead of a bare dash when location isn't available. See `WEATHER_STARTUP_DELAY_FOLLOWUP.md`.
+
+- `PersistenceController` fatalError on container init fallback — **fixed 2026-08-28.** When both the CloudKit-backed and local stores fail to open, the app now falls back to a temporary in-memory store (safe mode) and surfaces an alert (`startupSafeModeMessage` in `ContentView`) instead of crashing at launch. The remaining `fatalError` only triggers if the model schema itself cannot load (a programming error).
+
+- WeightLogView referenced non-existent `WeightEntry.notes` — fixed; the notes block was removed.
+- WorkoutLogView extraneous closing brace — fixed.
+- WorkoutLogView used non-existent `ExerciseLog.sets` — fixed; rows now show unique exercise names (`exerciseCount`) and a separate `setCount`.
+- Heavy SwiftUI chart expressions caused type-check timeouts — fixed by extracting chart blocks into subviews with precomputed values.
+- WorkoutLogView unused locals after refactor — removed.
+- RunLogView distance aggregation ignored units — fixed; sessions are converted via `UnitConverter.distance(_:from:to:)` before daily aggregation.
+- WeightLogView history showed raw stored units — fixed; rows convert to the preferred unit via `UnitConverter.weight(_:from:to:)`.
+- "X exercises" label counted sets — fixed; see `WorkoutSessionRowContent`.
+- `List` embedded in `ScrollView` with fixed height — no longer present in WeightLogView/WorkoutLogView.
+- Widespread silent error swallowing on saves — fixed; saves route through `PersistenceSave.commit(_:action:userMessage:onFailure:)`, which logs via `os.Logger` and surfaces user-facing alerts.
+- Workout/Weight chart selection UX inconsistency — aligned; both charts keep the selection summary open until explicitly closed (`lockedChartDate`).
+- Dead code (`deleteWeightEntries(offsets:)`, `backgroundGradient()`) — removed.
+- `try!` with `NSRegularExpression` in AIConversationSheet — removed; no `try!` remains in app code.

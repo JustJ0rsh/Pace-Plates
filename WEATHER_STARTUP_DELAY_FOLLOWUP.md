@@ -1,5 +1,25 @@
 # Weather Startup Delay Follow-Up
 
+## Status: implemented (2026-08-28)
+
+The proposed fix landed:
+
+- `WeatherViewModel` exposes a published `isLoading` state and renders
+  "Updating weather…" with a spinner while location/WeatherKit are in flight
+  (`WorkingOut/Features/Home/WeatherSummaryView.swift`).
+- The last successful summary is cached to disk
+  (`WorkingOut/Services/WeatherSummaryCache.swift`, stored via
+  `CodableFileStore`) and rendered immediately on launch when it is at most
+  90 minutes old; the fetch then refreshes it in the background.
+- Refresh failures keep showing the previous summary instead of clearing it;
+  an error is only surfaced when there is nothing to show.
+- When location permission is missing, the tile shows neutral copy
+  ("Weather appears once your location is available.") instead of a bare dash.
+- Cache freshness logic is covered by
+  `scripts/weather_cache_logic_test_main.swift`.
+
+The validation checklist below still requires a simulator/device pass.
+
 ## Smoke-test finding
 
 During the simulator smoke test on April 26, 2026, the Home weather tile rendered `—` for roughly 19 seconds on a normal launch. It eventually resolved to the current weather after CoreLocation timed out and WeatherKit returned data, so this was not a crash or a hard failure.

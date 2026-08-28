@@ -72,7 +72,12 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
     
     @ObservationIgnored @AppStorage("distanceUnit") var distanceUnit = "mi"
     @ObservationIgnored @AppStorage("enableBackgroundRunTracking") var enableBackgroundRunTracking = true
-    
+
+    // Durable draft of the in-progress session so a run survives process death.
+    private let draftStore = CodableFileStore<RunDraft>.activeRunDraft
+    @ObservationIgnored private var lastDraftPersistAt: Date? = nil
+    private let draftPersistMinInterval: TimeInterval = 5
+
     override init() {
         authorizationStatus = manager.authorizationStatus
         super.init()
@@ -90,6 +95,8 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
             // manager.showsBackgroundLocationIndicator = true // Enable if you want the blue banner in background
             #endif
         }
+
+        restorePersistedDraftIfAvailable()
     }
     
     func requestAuthorization(startAfterAuth: Bool = false) {
@@ -149,6 +156,8 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         if resetPlannedTarget {
             plannedTarget = nil
         }
+
+        clearPersistedDraft()
     }
 
     func startRun() {
@@ -169,6 +178,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
                                          paceSecondsPerUnit: nil,
                                          distanceUnit: distanceUnit,
                                          activityType: activityType)
+        persistDraft(force: true)
     }
     
     func pauseRun() {
@@ -192,6 +202,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
                                               distanceUnit: distanceUnit,
                                               isPaused: true)
         }
+        persistDraft(force: true)
     }
     
     func resumeRun() {
@@ -221,6 +232,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
                                               distanceUnit: distanceUnit,
                                               isPaused: false)
         }
+        persistDraft(force: true)
     }
     
     func stopRun() -> RunningSession? {
@@ -359,6 +371,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
                                                       paceSecondsPerUnit: self.smoothedPaceSecondsPerUnit,
                                                       distanceUnit: self.distanceUnit)
                 }
+                self.persistDraft()
             }
         }
     }
@@ -391,6 +404,117 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
     private func stopTimer() {
         timer?.invalidate()
         timer = nil
+    }
+
+    // MARK: - Durable run draft (survives process death)
+
+    /// Draft persistence is disabled for UI tests and previews so fixtures and
+    /// snapshots stay deterministic; both already skip location side effects.
+    private var isDraftPersistenceEnabled: Bool {
+        !AppLaunchConfiguration.current.isUITest
+            && ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] != "1"
+    }
+
+    private func currentActiveDuration(now: Date = Date()) -> TimeInterval {
+        guard isRunning, let s = startDate else { return duration }
+        return max(0, now.timeIntervalSince(s) - pausedDuration)
+    }
+
+    private func makeDraft(now: Date) -> RunDraft? {
+        guard let startDate else { return nil }
+        let persistedRoute = downsampleRouteForStorage(
+            route,
+            maxPoints: routePersistMaxPoints,
+            minDistance: routePersistMinDistanceMeters
+        )
+        let points = persistedRoute.map {
+            RunDraft.RoutePoint(
+                latitude: $0.coordinate.latitude,
+                longitude: $0.coordinate.longitude,
+                altitude: $0.altitude,
+                timestamp: $0.timestamp
+            )
+        }
+        return RunDraft(
+            activityType: activityType,
+            startDate: startDate,
+            savedAt: now,
+            wasRunning: isRunning,
+            pausedAt: pausedAt,
+            pausedDuration: pausedDuration,
+            duration: currentActiveDuration(now: now),
+            distanceMeters: distance,
+            route: points,
+            plannedTarget: plannedTarget.map(RunDraft.PlannedTarget.init)
+        )
+    }
+
+    /// Snapshot the in-progress session to disk. Lifecycle transitions persist
+    /// immediately (`force`); periodic callers are throttled.
+    func persistDraft(force: Bool = false) {
+        guard isDraftPersistenceEnabled, hasRecoverableActivity else { return }
+        let now = Date()
+        if !force, let last = lastDraftPersistAt, now.timeIntervalSince(last) < draftPersistMinInterval {
+            return
+        }
+        guard let draft = makeDraft(now: now) else { return }
+        lastDraftPersistAt = now
+        draftStore.save(draft)
+    }
+
+    private func clearPersistedDraft() {
+        lastDraftPersistAt = nil
+        guard isDraftPersistenceEnabled else { return }
+        draftStore.clear()
+    }
+
+    /// Rehydrate an interrupted session at launch. The run is restored paused
+    /// (dead time never counts toward the run), which plugs into the existing
+    /// recovery UX: `hasRecoverableActivity` drives the Home resume card, the
+    /// Runs banner, and the paused Resume/Save controls.
+    private func restorePersistedDraftIfAvailable() {
+        guard isDraftPersistenceEnabled else { return }
+        guard let draft = draftStore.load() else { return }
+        let now = Date()
+        guard draft.isRecoverable(now: now) else {
+            draftStore.clear()
+            return
+        }
+
+        let restored = draft.restoredState(now: now)
+        activityType = restored.activityType
+        startDate = restored.startDate
+        pausedAt = restored.pausedAt
+        pausedDuration = restored.pausedDuration
+        duration = restored.duration
+        distance = restored.distanceMeters
+        plannedTarget = draft.plannedTarget?.scheduledRunTarget
+        route = draft.route.map { point in
+            CLLocation(
+                coordinate: CLLocationCoordinate2D(latitude: point.latitude, longitude: point.longitude),
+                altitude: point.altitude ?? 0,
+                horizontalAccuracy: 10,
+                verticalAccuracy: point.altitude == nil ? -1 : 10,
+                timestamp: point.timestamp ?? restored.startDate
+            )
+        }
+        isRunning = false
+        shouldSkipNextDistanceSample = true
+        lastDistanceLocation = nil
+    }
+
+    /// After relaunch, a surviving Live Activity still shows the state from
+    /// before the app died. Once the orphan is adopted, freeze it to the
+    /// restored paused snapshot.
+    func pushPausedLiveActivityUpdateIfNeeded() {
+        guard !isRunning, hasRecoverableActivity, let s = startDate else { return }
+        guard LiveActivityManager.shared.isActive else { return }
+        LiveActivityManager.shared.update(startDate: s,
+                                          duration: duration,
+                                          distanceMeters: distance,
+                                          paceSecondsPerUnit: smoothedPaceSecondsPerUnit,
+                                          distanceUnit: distanceUnit,
+                                          isPaused: true)
     }
 
     private func maybeRequestAlwaysAuthorizationUpgradeIfNeeded() {
@@ -470,6 +594,8 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
                 smoothedPaceSecondsPerUnit = secPerUnit
             }
         }
+
+        persistDraft()
     }
 
     private func shouldAcceptForRoute(_ location: CLLocation) -> Bool {
@@ -504,6 +630,32 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
             // Stop any attempt to auto-start
             pendingStartAfterAuth = false
         }
+    }
+}
+
+extension RunDraft.PlannedTarget {
+    init(_ target: ScheduledRunTarget) {
+        self.init(
+            sessionID: target.sessionID,
+            sessionType: target.sessionType,
+            targetDistanceMeters: target.targetDistanceMeters,
+            targetDurationSeconds: target.targetDurationSeconds,
+            targetPaceMinPerMile: target.targetPaceMinPerMile,
+            intensityLevel: target.intensityLevel,
+            notes: target.notes
+        )
+    }
+
+    var scheduledRunTarget: ScheduledRunTarget {
+        ScheduledRunTarget(
+            sessionID: sessionID,
+            sessionType: sessionType,
+            targetDistanceMeters: targetDistanceMeters,
+            targetDurationSeconds: targetDurationSeconds,
+            targetPaceMinPerMile: targetPaceMinPerMile,
+            intensityLevel: intensityLevel,
+            notes: notes
+        )
     }
 }
 
