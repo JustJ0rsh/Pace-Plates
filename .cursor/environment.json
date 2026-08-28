@@ -1,0 +1,4 @@
+{
+  "name": "Pace & Plates",
+  "install": "bash .cursor/install.sh"
+}
