@@ -292,6 +292,15 @@ struct EditExerciseLogView: View {
             .scrollContentBackground(.hidden)
             .scrollDismissesKeyboard(.immediately)
             .gesture(DragGesture().onChanged { _ in dismissKeyboard() })
+            // Reps/weight/distance use number pads, which have no return key.
+            .keyboardToolbar {
+                repsFocused = false
+                weightFocused = false
+                durationFocused = false
+                distanceFocused = false
+                notesFocused = false
+                dismissKeyboard()
+            }
             .onAppear {
                 if isCardioExercise {
                     // Focus on duration for cardio
