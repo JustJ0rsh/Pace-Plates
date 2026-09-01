@@ -47,6 +47,13 @@ struct AIChatSheet: View {
     @State private var autoFollow: Bool = true
     @State private var userIsDragging: Bool = false
     @FocusState private var draftQuestionFocused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Layout/scroll animations collapse to none under Reduce Motion so content
+    /// appears in place instead of sliding.
+    private func motion(_ animation: Animation) -> Animation? {
+        reduceMotion ? nil : animation
+    }
 
     private let quickPrompts: [QuickAskPrompt] = [
         QuickAskPrompt(
@@ -153,7 +160,11 @@ struct AIChatSheet: View {
 
                         ForEach(messages) { msg in
                             messageRow(msg)
-                                .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity))
+                                .transition(
+                                    reduceMotion
+                                        ? .opacity
+                                        : .asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity)
+                                )
                                 .id(msg.id)
                         }
                         if isStreaming && messages.last?.id != lastStreamedAssistantID {
@@ -239,13 +250,13 @@ struct AIChatSheet: View {
                 .onChange(of: messages.count) { _, _ in
                     // Only auto-scroll when new messages are added, not during streaming
                     if !isStreaming {
-                        withAnimation(.snappy) { proxy.scrollTo(messages.last?.id, anchor: .bottom) }
+                        withAnimation(motion(.snappy)) { proxy.scrollTo(messages.last?.id, anchor: .bottom) }
                     }
                 }
                 .onChange(of: displayedText) { _, _ in
                     // While streaming, follow new content until user scrolls up
                     if isStreaming && autoFollow {
-                        withAnimation(.linear(duration: 0.12)) {
+                        withAnimation(motion(.linear(duration: 0.12))) {
                             if let streamingID = lastStreamedAssistantID {
                                 proxy.scrollTo(streamingID, anchor: .bottom)
                             } else {
@@ -365,7 +376,7 @@ struct AIChatSheet: View {
         Haptics.playImpact(.light)
 
         if appendUserMessage {
-            withAnimation(.snappy) {
+            withAnimation(motion(.snappy)) {
                 messages.append(.init(role: .user, text: userMessage))
             }
         }
@@ -404,7 +415,7 @@ struct AIChatSheet: View {
                 fullBufferedText = ""
                 let placeholder = Message(role: .assistant, text: "Generating…")
                 assistantID = placeholder.id
-                withAnimation(.snappy) { messages.append(placeholder) }
+                withAnimation(motion(.snappy)) { messages.append(placeholder) }
                 lastStreamedAssistantID = placeholder.id
                 withAnimation(.easeInOut(duration: 0.25)) {
                     streamingOpacity = 1.0
@@ -492,7 +503,7 @@ struct AIChatSheet: View {
                        let idx = messages.lastIndex(where: { $0.id == assistantID }) {
                         messages[idx].text = resetText
                     } else {
-                        withAnimation(.snappy) {
+                        withAnimation(motion(.snappy)) {
                             messages.append(Message(role: .assistant, text: resetText))
                         }
                     }
@@ -584,7 +595,7 @@ struct AIChatSheet: View {
         waitingForFirstChunk = false
         
         // Clear all state
-        withAnimation(.snappy) {
+        withAnimation(motion(.snappy)) {
             messages.removeAll()
         }
         displayedText = ""
@@ -836,8 +847,12 @@ struct AIChatSheet: View {
                     .fill(AppTheme.accentColor)
                     .frame(width: 6, height: 6)
                     .opacity(0.7)
-                    .scaleEffect(animationPhase(i))
-                    .animation(.easeInOut(duration: 0.8).repeatForever().delay(Double(i) * 0.2), value: isStreaming)
+                    // The pulsing dots are pure decoration; hold them still under Reduce Motion.
+                    .scaleEffect(reduceMotion ? 1.0 : animationPhase(i))
+                    .animation(
+                        reduceMotion ? nil : .easeInOut(duration: 0.8).repeatForever().delay(Double(i) * 0.2),
+                        value: isStreaming
+                    )
             }
         }
         .padding(10)

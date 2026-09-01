@@ -409,7 +409,7 @@ struct RunLogView: View {
                                 .padding(12)
                                 .background(AppTheme.secondaryBackgroundColor)
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                                .motionAwareTransition(.opacity.combined(with: .scale(scale: 0.95)))
                             }
                         }
                     }
@@ -615,7 +615,7 @@ struct RunLogView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 24))
                         .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
                     }
-                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                    .motionAwareTransition(.opacity.combined(with: .scale(scale: 0.9)))
                     .animation(.easeInOut(duration: 0.2), value: loadingSessionId)
                 }
             }
