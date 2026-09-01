@@ -2397,16 +2397,10 @@ struct RunSessionDetailView: View {
     @State private var selectedTab: Int = 0
 
     private var hasActual: Bool { (session.calories ?? 0) > 0 }
-    private let mapSimplifyMaxPoints: Int = 700
-    private let mapSimplifyMinDistanceMeters: Double = 6
     private let routeDecodePrefix = "⏱️ Run detail"
 
     // Build map region around the route
     @State private var camera: MapCameraPosition = .automatic
-
-    // Speed thresholds (m/s)
-    private let walkMax: Double = 1.5   // ~3.4 mph
-    private let jogMax: Double = 3.0    // ~6.7 mph; above this is running
 
     // Segment representation
     private struct Segment: Identifiable {
@@ -2416,13 +2410,22 @@ struct RunSessionDetailView: View {
     }
     
     @State private var decodedCoordinates: [RunCoordinate] = []
-    @State private var simplifiedMapCoordinates: [CLLocationCoordinate2D] = []
     @State private var cachedSegments: [Segment] = []
+    // True from the moment a route needs decoding until the background
+    // preparation lands, so the tile shows a spinner instead of flashing the
+    // "No Route Recorded" empty state.
+    @State private var isPreparingRoute: Bool
+    @State private var routePreparationTask: Task<Void, Never>? = nil
     @State private var showMap: Bool = false
     @State private var heartRateSamples: [(timestamp: Date, bpm: Double)] = []
     @State private var isLoadingHeartRate: Bool = false
     @State private var detailAppearStart: Date? = nil
     @State private var hasLoggedFirstMapRender = false
+
+    init(session: RunningSession) {
+        self.session = session
+        _isPreparingRoute = State(initialValue: !session.locations.isEmpty)
+    }
 
     private var coordinates: [CLLocationCoordinate2D] {
         decodedCoordinates.map(\.cl)
@@ -2431,45 +2434,13 @@ struct RunSessionDetailView: View {
     private var fullCoordinates: [RunCoordinate] {
         decodedCoordinates
     }
-    
-    private func buildSegments(from points: [CLLocationCoordinate2D]) -> [Segment] {
-        guard points.count > 1 else { return [] }
-        // Approximate time between points using session duration evenly (fallback)
-        let total = Double(points.count - 1)
-        let avgDt = max(session.duration / max(total, 1), 1)
-        var segs: [Segment] = []
-        var currentColor: Color? = nil
-        var currentPoints: [CLLocationCoordinate2D] = []
 
-        func colorForSpeed(_ v: Double) -> Color {
-            if v <= walkMax { return .blue }
-            if v <= jogMax { return .orange }
-            return .red
+    private static func color(for pace: RoutePaceClass) -> Color {
+        switch pace {
+        case .walk: return .blue
+        case .jog: return .orange
+        case .run: return .red
         }
-
-        for i in 0..<(points.count - 1) {
-            let a = points[i]
-            let b = points[i+1]
-            let da = MKMapPoint(a).distance(to: MKMapPoint(b)) // meters
-            let v = da / max(avgDt, 1) // m/s
-            let c = colorForSpeed(v)
-            if currentColor == nil {
-                currentColor = c
-                currentPoints = [a, b]
-            } else if c == currentColor {
-                currentPoints.append(b)
-            } else {
-                if currentPoints.count >= 2, let cc = currentColor {
-                    segs.append(Segment(points: currentPoints, color: cc))
-                }
-                currentColor = c
-                currentPoints = [a, b]
-            }
-        }
-        if currentPoints.count >= 2, let cc = currentColor {
-            segs.append(Segment(points: currentPoints, color: cc))
-        }
-        return segs
     }
 
     var body: some View {
@@ -2546,7 +2517,9 @@ struct RunSessionDetailView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Route")
                             .font(.headline)
-                        if !coordinates.isEmpty {
+                        if isPreparingRoute {
+                            ProgressView().frame(maxWidth: .infinity, minHeight: 260)
+                        } else if !coordinates.isEmpty {
                             if showMap {
                                 Map(position: $camera) {
                                     ForEach(cachedSegments) { seg in
@@ -2651,6 +2624,9 @@ struct RunSessionDetailView: View {
         .onChange(of: session.locations) { _, _ in
             refreshDecodedRouteCaches()
         }
+        .onDisappear {
+            routePreparationTask?.cancel()
+        }
     }
 
     // Reduce number of points to speed map rendering/storage. Keep up to ~1200 points and at least 5 m apart
@@ -2667,58 +2643,37 @@ struct RunSessionDetailView: View {
         return reduced
     }
 
+    /// Decodes and simplifies the stored route on a background task, then applies
+    /// the result on the main actor. Model access happens up front so the
+    /// SwiftData object never crosses actors; a newer request cancels any
+    /// in-flight one so a stale route cannot overwrite a fresh one.
     private func refreshDecodedRouteCaches() {
+        routePreparationTask?.cancel()
+
+        let locations = session.locations
+        let duration = session.duration
+        guard !locations.isEmpty else {
+            decodedCoordinates = []
+            cachedSegments = []
+            isPreparingRoute = false
+            return
+        }
+
+        isPreparingRoute = true
         let startedAt = Date()
-        decodedCoordinates = decodeCoordinates(from: session.locations)
-        simplifiedMapCoordinates = simplifyCoordinatesForMap(decodedCoordinates.map(\.cl))
-        cachedSegments = buildSegments(from: simplifiedMapCoordinates)
-        let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
-        print("\(routeDecodePrefix) decode/cache prep: \(elapsedMs)ms (\(decodedCoordinates.count) route pts -> \(simplifiedMapCoordinates.count) map pts)")
-    }
+        routePreparationTask = Task { @MainActor in
+            let prepared = await Task.detached(priority: .userInitiated) {
+                RouteRenderPreparation.make(from: locations, duration: duration)
+            }.value
+            guard !Task.isCancelled else { return }
 
-    private func decodeCoordinates(from data: Data) -> [RunCoordinate] {
-        guard !data.isEmpty else { return [] }
-        return (try? JSONDecoder().decode([RunCoordinate].self, from: data)) ?? []
-    }
+            decodedCoordinates = prepared.decoded
+            cachedSegments = prepared.segments.map { Segment(points: $0.points, color: Self.color(for: $0.pace)) }
+            isPreparingRoute = false
 
-    private func simplifyCoordinatesForMap(_ points: [CLLocationCoordinate2D]) -> [CLLocationCoordinate2D] {
-        guard points.count > 2 else { return points }
-        var reduced: [CLLocationCoordinate2D] = [points[0]]
-        reduced.reserveCapacity(min(points.count, mapSimplifyMaxPoints))
-        var last = CLLocation(latitude: points[0].latitude, longitude: points[0].longitude)
-
-        for point in points.dropFirst().dropLast() {
-            let current = CLLocation(latitude: point.latitude, longitude: point.longitude)
-            if current.distance(from: last) >= mapSimplifyMinDistanceMeters {
-                reduced.append(point)
-                last = current
-            }
+            let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+            print("\(routeDecodePrefix) decode/cache prep: \(elapsedMs)ms (\(prepared.decoded.count) route pts -> \(prepared.simplified.count) map pts)")
         }
-        reduced.append(points[points.count - 1])
-        return trimToMaxPoints(reduced, maxPoints: mapSimplifyMaxPoints)
-    }
-
-    private func trimToMaxPoints(_ points: [CLLocationCoordinate2D], maxPoints: Int) -> [CLLocationCoordinate2D] {
-        guard points.count > maxPoints, maxPoints > 2 else { return points }
-        let first = points[0]
-        let last = points[points.count - 1]
-        let interiorLimit = maxPoints - 2
-        let interiorCount = points.count - 2
-        if interiorCount <= interiorLimit { return points }
-
-        var trimmed: [CLLocationCoordinate2D] = [first]
-        trimmed.reserveCapacity(maxPoints)
-        let step = Double(interiorCount) / Double(interiorLimit)
-        var lastIndex = 0
-        for i in 1...interiorLimit {
-            let raw = Int((Double(i) * step).rounded(.down))
-            let index = min(max(1, raw), points.count - 2)
-            if index == lastIndex { continue }
-            trimmed.append(points[index])
-            lastIndex = index
-        }
-        trimmed.append(last)
-        return trimmed
     }
 
     private func logFirstMapRenderIfNeeded() {
