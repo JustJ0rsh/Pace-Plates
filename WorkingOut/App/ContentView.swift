@@ -66,6 +66,7 @@ struct ContentView: View {
                 }
                 HealthKitManager.shared.startWorkoutChangeObservationIfNeeded()
                 AIProviderManager.cleanUpLegacyOpenRouterArtifacts()
+                DataBackupService.removeStaleExportFiles()
             }
             // Seed + cleanup the exercise library safely (idempotent)
             ExerciseLibrary.populateInitialExercises(context: persistenceController.container.mainContext)

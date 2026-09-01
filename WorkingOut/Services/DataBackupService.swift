@@ -240,6 +240,42 @@ struct BackupFile: Codable {
 
 @MainActor
 enum DataBackupService {
+    /// Upper bound for a backup file accepted by `import(from:)`. A complete
+    /// multi-year history with route payloads is on the order of a few MB, so
+    /// this leaves ample headroom while preventing a hostile or corrupted file
+    /// from being read fully into memory before `JSONDecoder` runs.
+    static let maxImportFileSizeBytes = 64 * 1_024 * 1_024
+
+    private static let backupFileNamePrefix = "Pace&Plates-Backup-"
+
+    enum ImportError: LocalizedError {
+        case fileTooLarge(bytes: Int)
+
+        var errorDescription: String? {
+            switch self {
+            case .fileTooLarge(let bytes):
+                let size = ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+                let limit = ByteCountFormatter.string(
+                    fromByteCount: Int64(DataBackupService.maxImportFileSizeBytes),
+                    countStyle: .file
+                )
+                return "This backup is \(size), which exceeds the \(limit) limit for imports."
+            }
+        }
+    }
+
+    /// Deletes any backup files a previous export left in the temporary
+    /// directory (for example when the app was terminated while the share sheet
+    /// was open), so plaintext health and location data does not linger on disk.
+    static func removeStaleExportFiles() {
+        let fm = FileManager.default
+        let tmp = fm.temporaryDirectory
+        guard let contents = try? fm.contentsOfDirectory(at: tmp, includingPropertiesForKeys: nil) else { return }
+        for url in contents where url.lastPathComponent.hasPrefix(backupFileNamePrefix) {
+            try? fm.removeItem(at: url)
+        }
+    }
+
     static func exportAll(context: ModelContext) throws -> URL {
         // A backup must be complete. Propagate fetch failures instead of silently
         // writing an apparently successful file with an empty entity collection.
@@ -486,17 +522,27 @@ enum DataBackupService {
         encoder.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
         let data = try encoder.encode(file)
 
+        removeStaleExportFiles()
+
         let fm = FileManager.default
         let tmp = fm.temporaryDirectory
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd-HHmmss"
-        let name = "Pace&Plates-Backup-\(formatter.string(from: Date())).json"
+        let name = "\(backupFileNamePrefix)\(formatter.string(from: Date())).json"
         let url = tmp.appendingPathComponent(name)
-        try data.write(to: url, options: .atomic)
+        // The file holds GPS routes, body weight, and AI conversations in plaintext.
+        // `.completeFileProtectionUnlessOpen` keeps it encrypted at rest whenever
+        // the device is locked, while still letting a share extension that already
+        // opened it finish reading.
+        try data.write(to: url, options: [.atomic, .completeFileProtectionUnlessOpen])
         return url
     }
 
     static func `import`(from url: URL, context: ModelContext) throws {
+        if let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+           size > maxImportFileSizeBytes {
+            throw ImportError.fileTooLarge(bytes: size)
+        }
         let data = try Data(contentsOf: url)
         let decoder = JSONDecoder()
         let file = try decoder.decode(BackupFile.self, from: data)

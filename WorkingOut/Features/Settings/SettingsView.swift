@@ -66,6 +66,12 @@ struct SettingsView: View {
         .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
         .sheet(item: $exportURL, onDismiss: {
             exportURL = nil
+            // The share sheet has finished handing the file off; remove the
+            // plaintext copy from tmp instead of waiting for the system to purge it.
+            if let url = lastExportedBackupURL {
+                try? FileManager.default.removeItem(at: url)
+                lastExportedBackupURL = nil
+            }
             if pendingExportConfirmation {
                 alertTitle = "Backup"
                 alertMessage = "Export complete"
@@ -90,13 +96,13 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) {}
             Button("Export") { exportTapped() }
         } message: {
-            Text("Create a backup file to share or save?")
+            Text("This creates an unencrypted backup file containing your workouts, runs with GPS routes, body weight history, and AI coach conversations. Only share or store it somewhere you trust.")
         }
         .alert("Import Data?", isPresented: $confirmImport) {
             Button("Cancel", role: .cancel) {}
             Button("Import") { showImporter = true }
         } message: {
-            Text("Importing will replace existing items when conflicts occur.")
+            Text("Records from the backup are added to this device. Items that already exist here are kept and not overwritten.")
         }
         .alert("Remove Duplicates?", isPresented: $confirmDedup) {
             Button("Cancel", role: .cancel) {}
@@ -618,6 +624,7 @@ struct SettingsView: View {
     @State private var showImporter: Bool = false
     private struct IdentifiableURL: Identifiable { let id = UUID(); let url: URL }
     @State private var exportURL: IdentifiableURL? = nil
+    @State private var lastExportedBackupURL: URL? = nil
     @State private var pendingExportConfirmation: Bool = false
     // Use URL-bound sheet to avoid blank first presentation
     @State private var showAlert: Bool = false
@@ -1019,6 +1026,7 @@ struct SettingsView: View {
     private func exportTapped() {
         do {
             let url = try DataBackupService.exportAll(context: modelContext)
+            lastExportedBackupURL = url
             exportURL = IdentifiableURL(url: url)
             pendingExportConfirmation = true
         } catch {
@@ -1030,10 +1038,13 @@ struct SettingsView: View {
     private func importFrom(url: URL) {
         let didStart = url.startAccessingSecurityScopedResource()
         defer { if didStart { url.stopAccessingSecurityScopedResource() } }
+        // Copy into our sandbox first to avoid security-scope hiccups. The copy
+        // contains the user's full history in plaintext, so remove it on every
+        // exit path rather than leaving it for the system to purge eventually.
+        let fm = FileManager.default
+        let tmp = fm.temporaryDirectory.appendingPathComponent(url.lastPathComponent)
+        defer { try? fm.removeItem(at: tmp) }
         do {
-            // Copy into our sandbox first to avoid security-scope hiccups
-            let fm = FileManager.default
-            let tmp = fm.temporaryDirectory.appendingPathComponent(url.lastPathComponent)
             if fm.fileExists(atPath: tmp.path) { try? fm.removeItem(at: tmp) }
             try fm.copyItem(at: url, to: tmp)
             try DataBackupService.import(from: tmp, context: modelContext)
@@ -1180,6 +1191,8 @@ struct SettingsView: View {
         weights.forEach { modelContext.delete($0) }
         try modelContext.save()
         WearableWorkoutInboxService.completeLocalDataPurge()
+        // The reverse-geocode cache is derived from run start points; drop it too.
+        Task { await MapSearchService.shared.clearAll() }
     }
 }
 
