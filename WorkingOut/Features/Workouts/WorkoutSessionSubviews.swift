@@ -272,7 +272,9 @@ struct WorkoutSessionExerciseRow: View {
                 if session.sourceTemplateID != nil {
                     Button {
                         log.isCompleted.toggle()
-                        _ = PersistenceSave.commit(modelContext, action: "save changes")
+                        if PersistenceSave.commit(modelContext, action: "save changes") {
+                            Haptics.playImpact(log.isCompleted ? .medium : .light)
+                        }
                     } label: {
                         Image(systemName: log.isCompleted ? "checkmark.circle.fill" : "circle")
                             .font(.title2)
@@ -280,6 +282,9 @@ struct WorkoutSessionExerciseRow: View {
                     }
                     .buttonStyle(.plain)
                     .padding(.trailing, 4)
+                    .accessibilityLabel("Set \(log.setNumber) complete")
+                    .accessibilityValue(log.isCompleted ? "On" : "Off")
+                    .accessibilityAddTraits(.isToggle)
                 }
                 
                 Button {
@@ -327,6 +332,7 @@ struct WorkoutSessionExerciseRow: View {
                     Image(systemName: "trash")
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Delete set \(log.setNumber)")
             }
             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                 Button(role: .destructive) {

@@ -295,6 +295,7 @@ struct RunAssistantDashboardView: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(!canGoPrev)
+                .accessibilityLabel("Previous week")
 
                 Button {
                     guard canGoNext else { return }
@@ -305,6 +306,7 @@ struct RunAssistantDashboardView: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(!canGoNext)
+                .accessibilityLabel("Next week")
             }
 
             if week.isEmpty {
@@ -327,6 +329,7 @@ struct RunAssistantDashboardView: View {
                             HStack(spacing: 8) {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundStyle(.green)
+                                    .accessibilityLabel("Completed")
                                 Button("Undo") {
                                     RunAssistantService.shared.markSession(
                                         session.id,
@@ -343,6 +346,7 @@ struct RunAssistantDashboardView: View {
                             HStack(spacing: 8) {
                                 Image(systemName: "minus.circle.fill")
                                     .foregroundStyle(.orange)
+                                    .accessibilityLabel("Skipped")
                                 Button("Undo") {
                                     RunAssistantService.shared.markSession(
                                         session.id,
@@ -382,6 +386,7 @@ struct RunAssistantDashboardView: View {
                                     Image(systemName: "checkmark.circle")
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityLabel("Mark completed")
 
                                 Button {
                                     RunAssistantService.shared.markSession(
@@ -395,6 +400,7 @@ struct RunAssistantDashboardView: View {
                                     Image(systemName: "minus.circle")
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityLabel("Mark skipped")
                             }
                         }
                     }

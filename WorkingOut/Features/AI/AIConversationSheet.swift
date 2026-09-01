@@ -1044,6 +1044,7 @@ private extension AIConversationSheet {
                             .frame(width: 36, height: 36)
                             .background(Circle().fill(AppTheme.textColor.opacity(0.10)))
                     }
+                    .accessibilityLabel("Share plan")
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)

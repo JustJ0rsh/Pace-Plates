@@ -511,6 +511,7 @@ struct ExerciseLogRow: View {
                     Image(systemName: "pencil.circle.fill")
                         .foregroundStyle(AppTheme.accentColor)
                 }
+                .accessibilityLabel("Edit set")
             }
             
             if log.isCardio {

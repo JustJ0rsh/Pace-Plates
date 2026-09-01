@@ -1126,6 +1126,7 @@ struct RunTrackingProView: View {
                     }
                     .disabled(runTracker.authorizationStatus == .denied || runTracker.authorizationStatus == .restricted)
                     .help("Center on current location")
+                    .accessibilityLabel("Center map on current location")
 
                     Button("Done") {
                         handleDone()
@@ -1147,6 +1148,7 @@ struct RunTrackingProView: View {
                     }
                     .disabled(runTracker.authorizationStatus == .denied || runTracker.authorizationStatus == .restricted)
                     .help("Center on current location")
+                    .accessibilityLabel("Center map on current location")
                     
                     Button("Done") {
                         handleDone()
@@ -1292,11 +1294,12 @@ struct RunTrackingProView: View {
             // Reset tracker so the next start is a brand-new run (not resume)
             runTracker.clearCurrentRun(resetActivityType: true)
 
+            Haptics.notify(.success)
             shouldFollowUser = false
             isSavingRun = false
             dismiss()
         } catch {
-            
+            Haptics.notify(.error)
             alertMessage = "Failed to save run to database: \(error.localizedDescription)"
             showingAlert = true
             isSavingRun = false
