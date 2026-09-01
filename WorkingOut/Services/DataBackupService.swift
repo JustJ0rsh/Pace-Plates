@@ -244,9 +244,9 @@ enum DataBackupService {
     /// multi-year history with route payloads is on the order of a few MB, so
     /// this leaves ample headroom while preventing a hostile or corrupted file
     /// from being read fully into memory before `JSONDecoder` runs.
-    static let maxImportFileSizeBytes = 64 * 1_024 * 1_024
+    nonisolated static let maxImportFileSizeBytes = 64 * 1_024 * 1_024
 
-    private static let backupFileNamePrefix = "Pace&Plates-Backup-"
+    nonisolated private static let backupFileNamePrefix = "Pace&Plates-Backup-"
 
     enum ImportError: LocalizedError {
         case fileTooLarge(bytes: Int)
