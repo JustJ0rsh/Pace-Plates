@@ -39,23 +39,17 @@ struct WorkingOutXApp: App {
         }
     }
 
+    /// Workouts only arrive as `.paceandplates` / `.paceplate` / `.ppworkout`
+    /// documents (declared in Info.plist). The app registers no custom URL
+    /// scheme, so any non-file URL is ignored rather than parsed.
     private func handleIncomingWorkout(_ url: URL) {
+        guard url.isFileURL else { return }
         do {
-            if url.isFileURL {
-                importedWorkout = try WorkoutSharingService.shared.parseWorkoutFile(url: url)
-            } else if let session = try WorkoutSharingService.shared.parseShareURL(url) {
-                importedWorkout = session
-            } else {
-                presentImportError("Invalid workout link.")
-            }
+            importedWorkout = try WorkoutSharingService.shared.parseWorkoutFile(url: url)
         } catch let limitError as SharedWorkoutImportError {
             presentImportError(limitError.localizedDescription)
         } catch {
-            presentImportError(
-                url.isFileURL
-                    ? "Could not open the workout file. It might be corrupted or incompatible."
-                    : "Invalid workout link."
-            )
+            presentImportError("Could not open the workout file. It might be corrupted or incompatible.")
         }
     }
 

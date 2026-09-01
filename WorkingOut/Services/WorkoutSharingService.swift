@@ -235,10 +235,6 @@ extension SharedWorkoutSession: Transferable {
 class WorkoutSharingService {
     static let shared = WorkoutSharingService()
     
-    private let scheme = "paceandplates"
-    private let host = "share"
-    private let path = "/workout"
-    
     private init() {}
     
     // MARK: - File Export
@@ -275,64 +271,6 @@ class WorkoutSharingService {
         )
     }
 
-    // MARK: - URL Scheme (Legacy/Fallback)
-    
-    /// Generates a shareable URL for the given workout session
-    func generateShareURL(from session: WorkoutSession) -> URL? {
-        let sharedSession = convertToShared(session)
-        
-        do {
-            let jsonData = try JSONEncoder().encode(sharedSession)
-            // Compress or base64 encode the data to fit in URL
-            // For simplicity, we'll just base64 encode it. 
-            // In a real app with large data, we might want to use a backend or compression.
-            let base64String = jsonData.base64EncodedString()
-            
-            var components = URLComponents()
-            components.scheme = scheme
-            components.host = host
-            components.path = path
-            components.queryItems = [
-                URLQueryItem(name: "data", value: base64String),
-                URLQueryItem(name: "title", value: session.title) // Readable title for preview
-            ]
-            
-            return components.url
-        } catch {
-            print("Failed to encode workout session: \(error)")
-            return nil
-        }
-    }
-    
-    /// Parses a share URL and returns the SharedWorkoutSession. Throws
-    /// `SharedWorkoutImportError` when the payload violates import limits;
-    /// returns nil when the URL is not a recognizable workout link.
-    func parseShareURL(_ url: URL) throws -> SharedWorkoutSession? {
-        guard url.scheme == scheme,
-              url.host == host,
-              url.path == path else {
-            return nil
-        }
-        
-        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
-              let queryItems = components.queryItems,
-              let dataString = queryItems.first(where: { $0.name == "data" })?.value else {
-            return nil
-        }
-
-        // Base64 expands by 4/3, so bound the encoded string before decoding it.
-        guard dataString.utf8.count <= SharedWorkoutLimits.maxPayloadBytes * 4 / 3 + 4 else {
-            throw SharedWorkoutImportError.payloadTooLarge
-        }
-        guard let data = Data(base64Encoded: dataString) else {
-            return nil
-        }
-
-        return try SharedWorkoutSession.decodeUntrusted(data)
-    }
-    
-    // MARK: - Conversion Helpers
-    
     // MARK: - Conversion Helpers
     
     func convertToShared(_ session: WorkoutSession) -> SharedWorkoutSession {
