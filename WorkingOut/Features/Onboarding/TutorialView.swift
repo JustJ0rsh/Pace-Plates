@@ -25,19 +25,20 @@ struct TutorialView: View {
         self.onFinish = onFinish
 
         let defaults = UserDefaults.standard
+        let profile = UserProfileStore.shared
         let storedMeasurementSystem = defaults.string(forKey: "measurementSystem") ?? "imperial"
-        let storedAge = defaults.integer(forKey: "age")
-        let storedTargetWeight = defaults.double(forKey: "targetWeight")
+        let storedAge = profile.age
+        let storedTargetWeight = profile.targetWeight
 
         _selectedFocus = State(
             initialValue: defaults.string(forKey: "onboardingPrimaryGoal")
                 .flatMap(OnboardingFocus.init(rawValue:))
         )
         _measurementSystem = State(initialValue: storedMeasurementSystem)
-        _sex = State(initialValue: defaults.string(forKey: "sex") ?? "")
+        _sex = State(initialValue: profile.sex)
         _experienceLevel = State(initialValue: defaults.string(forKey: "experienceLevel") ?? "")
         _ageText = State(initialValue: storedAge > 0 ? String(storedAge) : "")
-        _heightValue = State(initialValue: defaults.double(forKey: "heightValue"))
+        _heightValue = State(initialValue: profile.heightValue)
         _heightUnit = State(
             initialValue: defaults.string(forKey: "heightUnit")
                 ?? (storedMeasurementSystem == "metric" ? "cm" : "in")
@@ -605,27 +606,15 @@ struct TutorialView: View {
         defaults.set(heightUnit, forKey: "heightUnit")
         defaults.set(weightUnit, forKey: "weightUnit")
 
-        persistOptional(sex, forKey: "sex", in: defaults)
         persistOptional(experienceLevel, forKey: "experienceLevel", in: defaults)
         persistOptional(weightGoal, forKey: "weightGoal", in: defaults)
 
-        if let age = Int(ageText), age > 0 {
-            defaults.set(age, forKey: "age")
-        } else {
-            defaults.removeObject(forKey: "age")
-        }
-
-        if heightValue > 0 {
-            defaults.set(heightValue, forKey: "heightValue")
-        } else {
-            defaults.removeObject(forKey: "heightValue")
-        }
-
-        if let targetWeight = Double(goalWeightText), targetWeight > 0 {
-            defaults.set(targetWeight, forKey: "targetWeight")
-        } else {
-            defaults.removeObject(forKey: "targetWeight")
-        }
+        // Personal attributes go to the Keychain-backed store; 0 / "" mean unset.
+        let profile = UserProfileStore.shared
+        profile.sex = sex
+        profile.age = Int(ageText).map { max(0, $0) } ?? 0
+        profile.heightValue = max(0, heightValue)
+        profile.targetWeight = Double(goalWeightText).map { max(0, $0) } ?? 0
     }
 
     private func persistOptional(_ value: String, forKey key: String, in defaults: UserDefaults) {

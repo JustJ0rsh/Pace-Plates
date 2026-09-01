@@ -86,6 +86,9 @@ struct AppLaunchConfiguration {
             UserDefaults.standard.removePersistentDomain(forName: bundleIdentifier)
         }
 
+        // The profile keys (age, heightValue, targetWeight, sex) are read once by
+        // UserProfileStore, which runs in-memory during UI tests and seeds itself
+        // from these values instead of touching the simulator keychain.
         let defaults: [String: Any] = [
             "didShowTutorial": true,
             "didCompleteProfileSetup": true,

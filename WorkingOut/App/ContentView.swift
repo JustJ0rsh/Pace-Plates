@@ -8,8 +8,6 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("didShowTutorial") private var didShowTutorial: Bool = false
     @AppStorage("didCompleteProfileSetup") private var didCompleteProfileSetup: Bool = false
-    @AppStorage("age") private var age: Int = 0
-    @AppStorage("heightValue") private var heightValue: Double = 0
     @State private var showTutorial: Bool = false
     @AppStorage("measurementSystem") private var measurementSystem: String = "imperial"
     @AppStorage("weightUnit") private var weightUnit: String = "lbs"
@@ -115,7 +113,7 @@ struct ContentView: View {
                 didShowTutorial = true
                 showTutorial = false
             } else {
-                let hasProfileData = age > 0 && heightValue > 0
+                let hasProfileData = UserProfileStore.shared.hasBasicProfile
                 if !didCompleteProfileSetup && !hasProfileData {
                     showTutorial = true
                 } else {

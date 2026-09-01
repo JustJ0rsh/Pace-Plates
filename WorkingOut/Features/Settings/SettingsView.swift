@@ -14,10 +14,33 @@ struct SettingsView: View {
     @AppStorage("distanceUnit") private var distanceUnit = "mi"
     @AppStorage("weightGoal") private var weightGoal: String = "lose" // lose | maintain | gain
     @AppStorage("heightUnit") private var heightUnit: String = "in" // or "cm"
-    @AppStorage("heightValue") private var heightValue: Double = 0
-    @AppStorage("targetWeight") private var targetWeight: Double = 0
-    @AppStorage("age") private var age: Int = 0
-    @AppStorage("sex") private var sex: String = "male" // "male" or "female"
+    // Age, sex, height, and goal weight are personal data and live in the
+    // Keychain-backed profile store rather than UserDefaults.
+    @Bindable private var profile = UserProfileStore.shared
+    private var heightValue: Double {
+        get { profile.heightValue }
+        nonmutating set { profile.heightValue = newValue }
+    }
+    private var targetWeight: Double {
+        get { profile.targetWeight }
+        nonmutating set { profile.targetWeight = newValue }
+    }
+    private var age: Int {
+        get { profile.age }
+        nonmutating set { profile.age = newValue }
+    }
+    private var sex: String {
+        get { profile.sex }
+        nonmutating set { profile.sex = newValue }
+    }
+    /// The segmented picker has no "not set" state, so an unset sex displays as
+    /// Male (the previous UserDefaults default) without writing anything back.
+    private var sexSelection: Binding<String> {
+        Binding(
+            get: { profile.sex.isEmpty ? "male" : profile.sex },
+            set: { profile.sex = $0 }
+        )
+    }
     @AppStorage("experienceLevel") private var experienceLevel: String = "beginner" // "beginner" or "experienced"
     @AppStorage("useStructuredPlanView") private var useStructuredPlanView: Bool = false
     @AppStorage("enableWeeklyWeightReminder") private var enableWeeklyWeightReminder: Bool = false
@@ -184,7 +207,7 @@ struct SettingsView: View {
 
     private var profileSection: some View {
         Section("Profile") {
-            Picker("Sex", selection: $sex) {
+            Picker("Sex", selection: sexSelection) {
                 Text("Male").tag("male")
                 Text("Female").tag("female")
             }
@@ -203,7 +226,7 @@ struct SettingsView: View {
     }
 
     private var ageRow: some View {
-        Picker("Age", selection: $age) {
+        Picker("Age", selection: $profile.age) {
             Text("Not Set").tag(0)
             ForEach(13...120, id: \.self) { value in
                 Text("\(value)").tag(value)
@@ -225,7 +248,7 @@ struct SettingsView: View {
         }
         .buttonStyle(.plain)
         .sheet(isPresented: $showHeightPicker) {
-            HeightPickerSheet(heightUnit: $heightUnit, heightValue: $heightValue)
+            HeightPickerSheet(heightUnit: $heightUnit, heightValue: $profile.heightValue)
                 .presentationDetents([.height(340), .medium])
                 .presentationDragIndicator(.visible)
         }
@@ -246,7 +269,7 @@ struct SettingsView: View {
         .sheet(isPresented: $showGoalWeightPicker) {
             GoalWeightPickerSheet(
                 weightUnit: weightUnit,
-                targetWeight: $targetWeight
+                targetWeight: $profile.targetWeight
             )
             .presentationDetents([.height(340), .medium])
             .presentationDragIndicator(.visible)
@@ -675,7 +698,7 @@ struct SettingsView: View {
                 }
             }
             
-            if sex == "male" { // default value, might not be set yet
+            if sex.isEmpty {
                 if let healthSex = try? HealthKitManager.shared.getBiologicalSex() {
                     sex = healthSex
                 }
