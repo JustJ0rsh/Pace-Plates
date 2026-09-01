@@ -6,6 +6,9 @@ struct AIHistoryView: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: [SortDescriptor<AIConversation>(\.date, order: .reverse)]) var conversations: [AIConversation]
     @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
+    // Captured as models rather than offsets so the confirmation survives any
+    // reordering that happens while the dialog is up.
+    @State private var conversationsPendingDeletion: [AIConversation] = []
 
     var body: some View {
         Group {
@@ -39,7 +42,7 @@ struct AIHistoryView: View {
                             }
                         }
                     }
-                    .onDelete(perform: delete)
+                    .onDelete(perform: requestDelete)
                 }
             }
         }
@@ -54,11 +57,34 @@ struct AIHistoryView: View {
         .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
         .appBackground(AppTheme.gradientAI)
         .foregroundColor(AppTheme.textColor)
+        .confirmationDialog(
+            conversationsPendingDeletion.count == 1
+                ? "Delete this conversation?"
+                : "Delete \(conversationsPendingDeletion.count) conversations?",
+            isPresented: Binding(
+                get: { !conversationsPendingDeletion.isEmpty },
+                set: { if !$0 { conversationsPendingDeletion = [] } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) { deletePending() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Generated plans and answers can't be recovered once deleted.")
+        }
     }
 
-    private func delete(at offsets: IndexSet) {
-        guard let modelContext = conversations.first?.modelContext else { return }
-        for index in offsets { modelContext.delete(conversations[index]) }
+    private func requestDelete(at offsets: IndexSet) {
+        conversationsPendingDeletion = offsets.compactMap { index in
+            conversations.indices.contains(index) ? conversations[index] : nil
+        }
+    }
+
+    private func deletePending() {
+        let targets = conversationsPendingDeletion
+        conversationsPendingDeletion = []
+        guard let modelContext = targets.first?.modelContext else { return }
+        for conversation in targets { modelContext.delete(conversation) }
         _ = PersistenceSave.commit(modelContext, action: "save changes")
     }
     

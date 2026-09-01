@@ -21,6 +21,7 @@ struct CardioInboxView: View {
     private var runningSessions: [RunningSession]
 
     @State private var linkingItem: CardioWorkoutInboxItem?
+    @State private var itemPendingDismissal: CardioWorkoutInboxItem?
     @State private var createdSession: RunningSession?
     @State private var workingItemID: UUID?
     @State private var isSyncing = false
@@ -53,7 +54,7 @@ struct CardioInboxView: View {
                             },
                             onReview: { linkingItem = item },
                             onCreate: { createActivity(from: item) },
-                            onDismiss: { dismissItem(item) }
+                            onDismiss: { itemPendingDismissal = item }
                         )
                     }
                 }
@@ -85,6 +86,20 @@ struct CardioInboxView: View {
         }
         .navigationDestination(item: $createdSession) { session in
             RunSessionDetailView(session: session)
+        }
+        .confirmationDialog(
+            "Dismiss this workout?",
+            isPresented: Binding(
+                get: { itemPendingDismissal != nil },
+                set: { if !$0 { itemPendingDismissal = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: itemPendingDismissal
+        ) { item in
+            Button("Dismiss", role: .destructive) { dismissItem(item) }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("It stays in Apple Health, but Pace & Plates won't offer it in this inbox again.")
         }
         .id(appTheme)
     }
