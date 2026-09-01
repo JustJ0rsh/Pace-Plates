@@ -13,13 +13,33 @@ actor MapSearchService {
 
     // Persistent cache using UserDefaults
     private let cacheKey = "MapSearchService.locationCache"
+    // Each entry is a rounded coordinate the user has been to. Bounding the map
+    // keeps the on-disk location history finite and keeps the UserDefaults
+    // dictionary (deserialized on every miss) from growing with each run.
+    private let maxPersistentEntries = 400
     private var persistentCache: [String: String] {
         get {
             UserDefaults.standard.dictionary(forKey: cacheKey) as? [String: String] ?? [:]
         }
         set {
-            UserDefaults.standard.set(newValue, forKey: cacheKey)
+            var trimmed = newValue
+            if trimmed.count > maxPersistentEntries {
+                // Dictionary order is arbitrary, so this evicts an arbitrary subset;
+                // evicted names are simply re-resolved on the next lookup.
+                let surplusKeys = Array(trimmed.keys.prefix(trimmed.count - maxPersistentEntries))
+                for key in surplusKeys {
+                    trimmed.removeValue(forKey: key)
+                }
+            }
+            UserDefaults.standard.set(trimmed, forKey: cacheKey)
         }
+    }
+
+    /// Drops every cached coordinate-to-place mapping. Called from "Delete All
+    /// Data" so the derived location history goes away with the runs it came from.
+    func clearAll() {
+        cache.removeAll()
+        UserDefaults.standard.removeObject(forKey: cacheKey)
     }
 
     // Allow up to ~25 requests/minute (minDelay ~2.4s between calls) to stay well under Apple's limits
