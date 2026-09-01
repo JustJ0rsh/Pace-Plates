@@ -29,23 +29,7 @@ struct WorkingOutXApp: App {
         WindowGroup {
             ContentView(importedWorkout: $importedWorkout)
                 .onOpenURL { url in
-                    // Handle file import
-                    if url.isFileURL {
-                        if let session = WorkoutSharingService.shared.parseWorkoutFile(url: url) {
-                            importedWorkout = session
-                        } else {
-                            importErrorMessage = "Could not open the workout file. It might be corrupted or incompatible."
-                            showImportError = true
-                        }
-                    } else {
-                        // Handle deep link
-                        if let session = WorkoutSharingService.shared.parseShareURL(url) {
-                            importedWorkout = session
-                        } else {
-                            importErrorMessage = "Invalid workout link."
-                            showImportError = true
-                        }
-                    }
+                    handleIncomingWorkout(url)
                 }
                 .alert("Import Failed", isPresented: $showImportError) {
                     Button("OK", role: .cancel) { }
@@ -53,5 +37,30 @@ struct WorkingOutXApp: App {
                     Text(importErrorMessage)
                 }
         }
+    }
+
+    private func handleIncomingWorkout(_ url: URL) {
+        do {
+            if url.isFileURL {
+                importedWorkout = try WorkoutSharingService.shared.parseWorkoutFile(url: url)
+            } else if let session = try WorkoutSharingService.shared.parseShareURL(url) {
+                importedWorkout = session
+            } else {
+                presentImportError("Invalid workout link.")
+            }
+        } catch let limitError as SharedWorkoutImportError {
+            presentImportError(limitError.localizedDescription)
+        } catch {
+            presentImportError(
+                url.isFileURL
+                    ? "Could not open the workout file. It might be corrupted or incompatible."
+                    : "Invalid workout link."
+            )
+        }
+    }
+
+    private func presentImportError(_ message: String) {
+        importErrorMessage = message
+        showImportError = true
     }
 }

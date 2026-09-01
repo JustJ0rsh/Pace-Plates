@@ -44,6 +44,105 @@ struct SharedExerciseSet: Codable, Identifiable {
 import UniformTypeIdentifiers
 import CoreTransferable
 
+// MARK: - Import limits
+
+/// Bounds applied to any `SharedWorkoutSession` that originates outside the app
+/// (a `.paceplate` file, a drag/drop payload, or a share link). Shared workouts
+/// are small by construction, so these limits are far above anything the app
+/// itself produces while stopping a crafted payload from exhausting memory or
+/// flooding the template library.
+enum SharedWorkoutLimits {
+    static let maxPayloadBytes = 2 * 1_024 * 1_024
+    static let maxExercises = 200
+    static let maxSetsPerExercise = 100
+    static let maxTitleLength = 200
+    static let maxExerciseNameLength = 200
+    static let maxNotesLength = 4_000
+    static let maxReps = 10_000
+    static let maxWeight = 10_000.0
+    static let maxDurationSeconds = 7 * 24 * 60 * 60
+    static let maxDistance = 10_000.0
+}
+
+enum SharedWorkoutImportError: LocalizedError {
+    case payloadTooLarge
+    case tooManyExercises(Int)
+    case tooManySets(exercise: String, count: Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .payloadTooLarge:
+            return "This workout file is too large to import."
+        case .tooManyExercises(let count):
+            return "This workout lists \(count) exercises, which is more than Pace & Plates can import (\(SharedWorkoutLimits.maxExercises))."
+        case .tooManySets(let exercise, let count):
+            return "\"\(exercise)\" has \(count) sets, which is more than Pace & Plates can import per exercise (\(SharedWorkoutLimits.maxSetsPerExercise))."
+        }
+    }
+}
+
+extension SharedWorkoutSession {
+    /// Single entry point for decoding untrusted shared-workout bytes. Enforces
+    /// the size cap before `JSONDecoder` touches the data and normalizes the
+    /// result so downstream code can rely on bounded, finite values.
+    static func decodeUntrusted(_ data: Data) throws -> SharedWorkoutSession {
+        guard data.count <= SharedWorkoutLimits.maxPayloadBytes else {
+            throw SharedWorkoutImportError.payloadTooLarge
+        }
+        return try JSONDecoder().decode(SharedWorkoutSession.self, from: data).sanitizedForImport()
+    }
+
+    /// Rejects structurally abusive payloads and clamps individual fields into
+    /// sane ranges. Out-of-range numbers and overlong strings are coerced rather
+    /// than rejected so a slightly odd but genuine file still imports.
+    func sanitizedForImport() throws -> SharedWorkoutSession {
+        guard exercises.count <= SharedWorkoutLimits.maxExercises else {
+            throw SharedWorkoutImportError.tooManyExercises(exercises.count)
+        }
+
+        var copy = self
+        copy.title = Self.clampString(title, maxLength: SharedWorkoutLimits.maxTitleLength, fallback: "Shared Workout")
+        copy.notes = notes.map { Self.clampString($0, maxLength: SharedWorkoutLimits.maxNotesLength, fallback: "") }
+        copy.exercises = try exercises.map { exercise in
+            guard exercise.sets.count <= SharedWorkoutLimits.maxSetsPerExercise else {
+                throw SharedWorkoutImportError.tooManySets(exercise: exercise.name, count: exercise.sets.count)
+            }
+            var exercise = exercise
+            exercise.name = Self.clampString(exercise.name, maxLength: SharedWorkoutLimits.maxExerciseNameLength, fallback: "Exercise")
+            exercise.type = exercise.type == "cardio" ? "cardio" : "strength"
+            exercise.order = max(0, exercise.order)
+            exercise.muscleGroup = exercise.muscleGroup.map {
+                Self.clampString($0, maxLength: SharedWorkoutLimits.maxExerciseNameLength, fallback: "Other")
+            }
+            exercise.sets = exercise.sets.map { set in
+                var set = set
+                set.setNumber = max(0, set.setNumber)
+                set.reps = min(max(0, set.reps), SharedWorkoutLimits.maxReps)
+                set.weight = Self.clampNumber(set.weight, max: SharedWorkoutLimits.maxWeight)
+                set.weightUnit = UnitConverter.canonicalWeightUnit(set.weightUnit)
+                set.durationSeconds = set.durationSeconds.map { min(max(0, $0), SharedWorkoutLimits.maxDurationSeconds) }
+                set.distance = set.distance.map { Self.clampNumber($0, max: SharedWorkoutLimits.maxDistance) }
+                set.distanceUnit = set.distanceUnit.map(UnitConverter.canonicalDistanceUnit)
+                set.notes = set.notes.map { Self.clampString($0, maxLength: SharedWorkoutLimits.maxNotesLength, fallback: "") }
+                return set
+            }
+            return exercise
+        }
+        return copy
+    }
+
+    private static func clampString(_ value: String, maxLength: Int, fallback: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return fallback }
+        return String(trimmed.prefix(maxLength))
+    }
+
+    private static func clampNumber(_ value: Double, max upper: Double) -> Double {
+        guard value.isFinite else { return 0 }
+        return min(max(0, value), upper)
+    }
+}
+
 private enum WorkoutShareFileExtension {
     static let preferred = "paceandplates"
     static let legacy = "paceplate"
@@ -69,29 +168,37 @@ extension SharedWorkoutSession: Transferable {
             )
             return SentTransferredFile(fileURL)
         } importing: { received in
-            let data = try Data(contentsOf: received.file)
-            return try JSONDecoder().decode(SharedWorkoutSession.self, from: data)
+            try SharedWorkoutSession.decodeUntrusted(try readBoundedFile(received.file))
         }
 
         DataRepresentation(contentType: .paceplate) { session in
             try encodedData(for: session, prettyPrinted: true)
         } importing: { data in
-            try JSONDecoder().decode(SharedWorkoutSession.self, from: data)
+            try SharedWorkoutSession.decodeUntrusted(data)
         }
 
         // Backward compatibility: also accept legacy .ppworkout
         DataRepresentation(contentType: .paceAndPlatesWorkout) { session in
             try encodedData(for: session, prettyPrinted: true)
         } importing: { data in
-            try JSONDecoder().decode(SharedWorkoutSession.self, from: data)
+            try SharedWorkoutSession.decodeUntrusted(data)
         }
         FileRepresentation(contentType: .paceAndPlatesWorkout) { session in
             let fileURL = try makeTransferFile(for: session, fileExtension: WorkoutShareFileExtension.olderLegacy)
             return SentTransferredFile(fileURL)
         } importing: { received in
-            let data = try Data(contentsOf: received.file)
-            return try JSONDecoder().decode(SharedWorkoutSession.self, from: data)
+            try SharedWorkoutSession.decodeUntrusted(try readBoundedFile(received.file))
         }
+    }
+
+    /// Reads a shared-workout file only after confirming it is within the payload
+    /// limit, so an oversized file is rejected without being loaded into memory.
+    fileprivate static func readBoundedFile(_ url: URL) throws -> Data {
+        if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+           size > SharedWorkoutLimits.maxPayloadBytes {
+            throw SharedWorkoutImportError.payloadTooLarge
+        }
+        return try Data(contentsOf: url)
     }
 
     fileprivate static func encodedData(for session: SharedWorkoutSession, prettyPrinted: Bool = false) throws -> Data {
@@ -152,8 +259,9 @@ class WorkoutSharingService {
         }
     }
     
-    /// Parses a workout from a file URL
-    func parseWorkoutFile(url: URL) -> SharedWorkoutSession? {
+    /// Parses a workout from a file URL. Throws `SharedWorkoutImportError` when
+    /// the file violates import limits, or a decoding error when it is malformed.
+    func parseWorkoutFile(url: URL) throws -> SharedWorkoutSession {
         // Start accessing security scoped resource if needed
         let isAccessing = url.startAccessingSecurityScopedResource()
         defer {
@@ -161,15 +269,10 @@ class WorkoutSharingService {
                 url.stopAccessingSecurityScopedResource()
             }
         }
-        
-        do {
-            let data = try Data(contentsOf: url)
-            let decoder = JSONDecoder()
-            return try decoder.decode(SharedWorkoutSession.self, from: data)
-        } catch {
-            print("Error parsing workout file: \(error)")
-            return nil
-        }
+
+        return try SharedWorkoutSession.decodeUntrusted(
+            try SharedWorkoutSession.readBoundedFile(url)
+        )
     }
 
     // MARK: - URL Scheme (Legacy/Fallback)
@@ -201,8 +304,10 @@ class WorkoutSharingService {
         }
     }
     
-    /// Parses a share URL and returns the SharedWorkoutSession
-    func parseShareURL(_ url: URL) -> SharedWorkoutSession? {
+    /// Parses a share URL and returns the SharedWorkoutSession. Throws
+    /// `SharedWorkoutImportError` when the payload violates import limits;
+    /// returns nil when the URL is not a recognizable workout link.
+    func parseShareURL(_ url: URL) throws -> SharedWorkoutSession? {
         guard url.scheme == scheme,
               url.host == host,
               url.path == path else {
@@ -214,18 +319,16 @@ class WorkoutSharingService {
               let dataString = queryItems.first(where: { $0.name == "data" })?.value else {
             return nil
         }
-        
+
+        // Base64 expands by 4/3, so bound the encoded string before decoding it.
+        guard dataString.utf8.count <= SharedWorkoutLimits.maxPayloadBytes * 4 / 3 + 4 else {
+            throw SharedWorkoutImportError.payloadTooLarge
+        }
         guard let data = Data(base64Encoded: dataString) else {
             return nil
         }
-        
-        do {
-            let sharedSession = try JSONDecoder().decode(SharedWorkoutSession.self, from: data)
-            return sharedSession
-        } catch {
-            print("Failed to decode workout session: \(error)")
-            return nil
-        }
+
+        return try SharedWorkoutSession.decodeUntrusted(data)
     }
     
     // MARK: - Conversion Helpers
