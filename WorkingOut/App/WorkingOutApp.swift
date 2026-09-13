@@ -29,23 +29,7 @@ struct WorkingOutXApp: App {
         WindowGroup {
             ContentView(importedWorkout: $importedWorkout)
                 .onOpenURL { url in
-                    // Handle file import
-                    if url.isFileURL {
-                        if let session = WorkoutSharingService.shared.parseWorkoutFile(url: url) {
-                            importedWorkout = session
-                        } else {
-                            importErrorMessage = "Could not open the workout file. It might be corrupted or incompatible."
-                            showImportError = true
-                        }
-                    } else {
-                        // Handle deep link
-                        if let session = WorkoutSharingService.shared.parseShareURL(url) {
-                            importedWorkout = session
-                        } else {
-                            importErrorMessage = "Invalid workout link."
-                            showImportError = true
-                        }
-                    }
+                    handleIncomingWorkout(url)
                 }
                 .alert("Import Failed", isPresented: $showImportError) {
                     Button("OK", role: .cancel) { }
@@ -53,5 +37,24 @@ struct WorkingOutXApp: App {
                     Text(importErrorMessage)
                 }
         }
+    }
+
+    /// Workouts only arrive as `.paceandplates` / `.paceplate` / `.ppworkout`
+    /// documents (declared in Info.plist). The app registers no custom URL
+    /// scheme, so any non-file URL is ignored rather than parsed.
+    private func handleIncomingWorkout(_ url: URL) {
+        guard url.isFileURL else { return }
+        do {
+            importedWorkout = try WorkoutSharingService.shared.parseWorkoutFile(url: url)
+        } catch let limitError as SharedWorkoutImportError {
+            presentImportError(limitError.localizedDescription)
+        } catch {
+            presentImportError("Could not open the workout file. It might be corrupted or incompatible.")
+        }
+    }
+
+    private func presentImportError(_ message: String) {
+        importErrorMessage = message
+        showImportError = true
     }
 }

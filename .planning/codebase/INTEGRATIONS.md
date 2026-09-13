@@ -135,8 +135,8 @@
 - File open callbacks into `WorkingOut/App/WorkingOutApp.swift` for custom workout documents declared in `WorkingOut/Info.plist`
   - Verification: files are decoded as `SharedWorkoutSession` in `WorkingOut/Services/WorkoutSharingService.swift`
   - Supported types: `com.justj0rsh.paceandplates.ppworkout` and `com.justj0rsh.paceandplates.paceplate`
-- Legacy deep-link parsing for `paceandplates://share/workout` exists in `WorkingOut/Services/WorkoutSharingService.swift`
-  - Registration: no `CFBundleURLTypes` entry was detected in `WorkingOut/Info.plist`
+  - Incoming payloads are size-capped and sanitized by `SharedWorkoutSession.decodeUntrusted` before use
+- No custom URL scheme is registered or parsed; the former `paceandplates://share/workout` deep-link code was removed
 - Quick Look thumbnail callbacks are handled by `WorkoutThumbnailExtension/ThumbnailProvider.swift`
 
 **Outgoing:**

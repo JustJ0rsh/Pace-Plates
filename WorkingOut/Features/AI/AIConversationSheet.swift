@@ -49,6 +49,7 @@ struct AIConversationSheet: View {
     @State private var createdTemplatesCount = 0
     @State private var waitingForFirstChunk = true
     @State private var conversationID = UUID()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(mode: Mode, request: WorkoutPlanRequest) {
         self.mode = mode
@@ -143,7 +144,9 @@ struct AIConversationSheet: View {
                 .onChange(of: displayedText) { _, _ in
                     // Follow stream while autoFollow is active
                     if isStreaming && autoFollow {
-                        withAnimation(.linear(duration: 0.12)) { proxy.scrollTo("streamText", anchor: .bottom) }
+                        withAnimation(reduceMotion ? nil : .linear(duration: 0.12)) {
+                            proxy.scrollTo("streamText", anchor: .bottom)
+                        }
                     }
                 }
             }
@@ -1044,6 +1047,7 @@ private extension AIConversationSheet {
                             .frame(width: 36, height: 36)
                             .background(Circle().fill(AppTheme.textColor.opacity(0.10)))
                     }
+                    .accessibilityLabel("Share plan")
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)

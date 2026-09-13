@@ -28,6 +28,11 @@ struct AppLaunchConfiguration {
     let shouldShowOnboardingForTesting: Bool
 
     init(processInfo: ProcessInfo) {
+        // Automation hooks can wipe UserDefaults, swap in an in-memory store, and
+        // stub AI availability. Only honor them in Debug builds (UI tests and the
+        // fastlane Snapfile both build Debug) so a Release binary launched with
+        // crafted arguments behaves exactly like a normal launch.
+        #if DEBUG
         let environment = processInfo.environment
         let arguments = processInfo.arguments
 
@@ -40,6 +45,13 @@ struct AppLaunchConfiguration {
         shouldResetState = environment["UITEST_RESET_STATE"] == "1"
         startTab = environment["UITEST_START_TAB"].flatMap(UITestStartTab.init(rawValue:))
         shouldShowOnboardingForTesting = environment["UITEST_SHOW_ONBOARDING"] == "1"
+        #else
+        isUITest = false
+        fixtureName = nil
+        shouldResetState = false
+        startTab = nil
+        shouldShowOnboardingForTesting = false
+        #endif
     }
 
     var shouldSkipAutomationSideEffects: Bool {
@@ -74,6 +86,9 @@ struct AppLaunchConfiguration {
             UserDefaults.standard.removePersistentDomain(forName: bundleIdentifier)
         }
 
+        // The profile keys (age, heightValue, targetWeight, sex) are read once by
+        // UserProfileStore, which runs in-memory during UI tests and seeds itself
+        // from these values instead of touching the simulator keychain.
         let defaults: [String: Any] = [
             "didShowTutorial": true,
             "didCompleteProfileSetup": true,

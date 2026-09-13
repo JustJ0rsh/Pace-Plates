@@ -94,6 +94,11 @@ struct PastRunLogView: View {
             .appBackground(AppTheme.gradientRuns)
             .scrollContentBackground(.hidden)
             .scrollDismissesKeyboard(.immediately)
+            // Distance and calories use the decimal pad, which has no return key.
+            .keyboardToolbar {
+                distanceFocused = false
+                dismissKeyboard()
+            }
             .navigationTitle("Log Past Run")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -149,8 +154,10 @@ struct PastRunLogView: View {
             action: "log past run",
             onFailure: { message in saveErrorMessage = message }
         ) {
+            Haptics.notify(.success)
             dismiss()
         } else {
+            Haptics.notify(.error)
             modelContext.delete(session)
         }
     }

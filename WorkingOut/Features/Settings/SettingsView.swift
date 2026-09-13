@@ -14,10 +14,33 @@ struct SettingsView: View {
     @AppStorage("distanceUnit") private var distanceUnit = "mi"
     @AppStorage("weightGoal") private var weightGoal: String = "lose" // lose | maintain | gain
     @AppStorage("heightUnit") private var heightUnit: String = "in" // or "cm"
-    @AppStorage("heightValue") private var heightValue: Double = 0
-    @AppStorage("targetWeight") private var targetWeight: Double = 0
-    @AppStorage("age") private var age: Int = 0
-    @AppStorage("sex") private var sex: String = "male" // "male" or "female"
+    // Age, sex, height, and goal weight are personal data and live in the
+    // Keychain-backed profile store rather than UserDefaults.
+    @Bindable private var profile = UserProfileStore.shared
+    private var heightValue: Double {
+        get { profile.heightValue }
+        nonmutating set { profile.heightValue = newValue }
+    }
+    private var targetWeight: Double {
+        get { profile.targetWeight }
+        nonmutating set { profile.targetWeight = newValue }
+    }
+    private var age: Int {
+        get { profile.age }
+        nonmutating set { profile.age = newValue }
+    }
+    private var sex: String {
+        get { profile.sex }
+        nonmutating set { profile.sex = newValue }
+    }
+    /// The segmented picker has no "not set" state, so an unset sex displays as
+    /// Male (the previous UserDefaults default) without writing anything back.
+    private var sexSelection: Binding<String> {
+        Binding(
+            get: { profile.sex.isEmpty ? "male" : profile.sex },
+            set: { profile.sex = $0 }
+        )
+    }
     @AppStorage("experienceLevel") private var experienceLevel: String = "beginner" // "beginner" or "experienced"
     @AppStorage("useStructuredPlanView") private var useStructuredPlanView: Bool = false
     @AppStorage("enableWeeklyWeightReminder") private var enableWeeklyWeightReminder: Bool = false
@@ -34,6 +57,7 @@ struct SettingsView: View {
     @AppStorage("reminderMinute") private var reminderMinute: Int = 0
     @State private var reminderTime: Date = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date()) ?? Date()
     @State private var confirmExport: Bool = false
+    @State private var isProcessingBackup = false
     @State private var confirmImport: Bool = false
     @State private var confirmDedup: Bool = false
     @State private var isRefreshingHealthData: Bool = false
@@ -66,6 +90,12 @@ struct SettingsView: View {
         .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
         .sheet(item: $exportURL, onDismiss: {
             exportURL = nil
+            // The share sheet has finished handing the file off; remove the
+            // plaintext copy from tmp instead of waiting for the system to purge it.
+            if let url = lastExportedBackupURL {
+                try? FileManager.default.removeItem(at: url)
+                lastExportedBackupURL = nil
+            }
             if pendingExportConfirmation {
                 alertTitle = "Backup"
                 alertMessage = "Export complete"
@@ -90,13 +120,13 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) {}
             Button("Export") { exportTapped() }
         } message: {
-            Text("Create a backup file to share or save?")
+            Text("This creates an unencrypted backup file containing your workouts, runs with GPS routes, body weight history, and AI coach conversations. Only share or store it somewhere you trust.")
         }
         .alert("Import Data?", isPresented: $confirmImport) {
             Button("Cancel", role: .cancel) {}
             Button("Import") { showImporter = true }
         } message: {
-            Text("Importing will replace existing items when conflicts occur.")
+            Text("Records from the backup are added to this device. Items that already exist here are kept and not overwritten.")
         }
         .alert("Remove Duplicates?", isPresented: $confirmDedup) {
             Button("Cancel", role: .cancel) {}
@@ -178,7 +208,7 @@ struct SettingsView: View {
 
     private var profileSection: some View {
         Section("Profile") {
-            Picker("Sex", selection: $sex) {
+            Picker("Sex", selection: sexSelection) {
                 Text("Male").tag("male")
                 Text("Female").tag("female")
             }
@@ -197,7 +227,7 @@ struct SettingsView: View {
     }
 
     private var ageRow: some View {
-        Picker("Age", selection: $age) {
+        Picker("Age", selection: $profile.age) {
             Text("Not Set").tag(0)
             ForEach(13...120, id: \.self) { value in
                 Text("\(value)").tag(value)
@@ -219,7 +249,7 @@ struct SettingsView: View {
         }
         .buttonStyle(.plain)
         .sheet(isPresented: $showHeightPicker) {
-            HeightPickerSheet(heightUnit: $heightUnit, heightValue: $heightValue)
+            HeightPickerSheet(heightUnit: $heightUnit, heightValue: $profile.heightValue)
                 .presentationDetents([.height(340), .medium])
                 .presentationDragIndicator(.visible)
         }
@@ -240,7 +270,7 @@ struct SettingsView: View {
         .sheet(isPresented: $showGoalWeightPicker) {
             GoalWeightPickerSheet(
                 weightUnit: weightUnit,
-                targetWeight: $targetWeight
+                targetWeight: $profile.targetWeight
             )
             .presentationDetents([.height(340), .medium])
             .presentationDragIndicator(.visible)
@@ -530,17 +560,20 @@ struct SettingsView: View {
     private var backupDataSettingsPage: some View {
         settingsSubpage(title: "Backup & Data") {
             Section("Backup") {
+                if isProcessingBackup { ProgressView("Processing backup…") }
                 Button {
                     confirmExport = true
                 } label: {
                     Label("Export Data", systemImage: "square.and.arrow.up")
                 }
+                .disabled(isProcessingBackup)
 
                 Button {
                     confirmImport = true
                 } label: {
                     Label("Import Data", systemImage: "square.and.arrow.down")
                 }
+                .disabled(isProcessingBackup)
                 .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
                     switch result {
                     case .success(let url):
@@ -618,6 +651,7 @@ struct SettingsView: View {
     @State private var showImporter: Bool = false
     private struct IdentifiableURL: Identifiable { let id = UUID(); let url: URL }
     @State private var exportURL: IdentifiableURL? = nil
+    @State private var lastExportedBackupURL: URL? = nil
     @State private var pendingExportConfirmation: Bool = false
     // Use URL-bound sheet to avoid blank first presentation
     @State private var showAlert: Bool = false
@@ -668,7 +702,7 @@ struct SettingsView: View {
                 }
             }
             
-            if sex == "male" { // default value, might not be set yet
+            if sex.isEmpty {
                 if let healthSex = try? HealthKitManager.shared.getBiologicalSex() {
                     sex = healthSex
                 }
@@ -813,7 +847,7 @@ struct SettingsView: View {
                 continue
             }
 
-            let meters = workout.totalDistance?.doubleValue(for: .meter()) ?? 0
+            let meters = HealthKitManager.recordedDistanceMeters(for: workout)
             let distanceValue: Double = (unit == "mi") ? (meters / 1609.34) : (meters / 1000.0)
             let endDate = workout.endDate
             let duration = workout.duration
@@ -1017,38 +1051,39 @@ struct SettingsView: View {
     }
     
     private func exportTapped() {
-        do {
-            let url = try DataBackupService.exportAll(context: modelContext)
-            exportURL = IdentifiableURL(url: url)
-            pendingExportConfirmation = true
-        } catch {
-            alertMessage = "Export failed: \(error.localizedDescription)"
-            showAlert = true
+        guard !isProcessingBackup else { return }
+        isProcessingBackup = true
+        Task { @MainActor in
+            defer { isProcessingBackup = false }
+            do {
+                let url = try await DataBackupService.exportAll(context: modelContext)
+                lastExportedBackupURL = url
+                exportURL = IdentifiableURL(url: url)
+                pendingExportConfirmation = true
+            } catch {
+                alertMessage = "Export failed: \(error.localizedDescription)"
+                showAlert = true
+            }
         }
     }
-    
+
     private func importFrom(url: URL) {
-        let didStart = url.startAccessingSecurityScopedResource()
-        defer { if didStart { url.stopAccessingSecurityScopedResource() } }
-        do {
-            // Copy into our sandbox first to avoid security-scope hiccups
-            let fm = FileManager.default
-            let tmp = fm.temporaryDirectory.appendingPathComponent(url.lastPathComponent)
-            if fm.fileExists(atPath: tmp.path) { try? fm.removeItem(at: tmp) }
-            try fm.copyItem(at: url, to: tmp)
-            try DataBackupService.import(from: tmp, context: modelContext)
-            // Clean up duplicates and ensure built-ins remain after import
-            PersistenceController.shared.deduplicateExerciseDefinitions()
-            PersistenceController.shared.ensureDefaultExercisesPresent()
-            alertMessage = "Import complete"
-            Haptics.playImpact(.light)
-            showAlert = true
-        } catch {
-            alertMessage = "Import failed: \(error.localizedDescription)"
+        guard !isProcessingBackup else { return }
+        isProcessingBackup = true
+        Task { @MainActor in
+            defer { isProcessingBackup = false }
+            do {
+                try await DataBackupService.import(from: url, context: modelContext)
+                PersistenceController.shared.reconcileExerciseLibraryIfNeeded(force: true)
+                alertMessage = "Import complete"
+                Haptics.playImpact(.light)
+            } catch {
+                alertMessage = "Import failed: \(error.localizedDescription)"
+            }
             showAlert = true
         }
     }
-    
+
     private func deduplicateAllData() {
         do {
             var totalRemoved = 0
@@ -1180,6 +1215,11 @@ struct SettingsView: View {
         weights.forEach { modelContext.delete($0) }
         try modelContext.save()
         WearableWorkoutInboxService.completeLocalDataPurge()
+        RunTracker.shared.pauseRun()
+        RunTracker.shared.clearCurrentRun(resetActivityType: true)
+        LiveActivityManager.shared.end()
+        // The reverse-geocode cache is derived from run start points; drop it too.
+        Task { await MapSearchService.shared.clearAll() }
     }
 }
 

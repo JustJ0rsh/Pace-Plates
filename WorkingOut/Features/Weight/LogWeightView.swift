@@ -35,6 +35,11 @@ struct LogWeightView: View {
             .scrollContentBackground(.hidden)
             .scrollDismissesKeyboard(.immediately)
             .gesture(DragGesture().onChanged { _ in dismissKeyboard() })
+            // The decimal pad has no return key, so give it an explicit Done.
+            .keyboardToolbar {
+                weightFocused = false
+                dismissKeyboard()
+            }
             .navigationTitle("Log Weight")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -71,8 +76,10 @@ struct LogWeightView: View {
             action: "save weight entry",
             onFailure: { message in saveErrorMessage = message }
         ) {
+            Haptics.notify(.success)
             dismiss()
         } else {
+            Haptics.notify(.error)
             modelContext.delete(newEntry)
         }
     }

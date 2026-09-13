@@ -26,6 +26,7 @@ struct WeatherSummaryView: View {
                         .foregroundColor(AppTheme.accentColor)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Refresh weather")
             }
 
             if let s = displayedSummary {
@@ -42,7 +43,8 @@ struct WeatherSummaryView: View {
                             }
                         }()
                         Text(tempDisplay)
-                            .font(.system(size: 28, weight: .semibold))
+                            // `.title` is 28pt at the default size and scales with Dynamic Type.
+                            .font(.title.weight(.semibold))
                         Text(s.condition)
                             .foregroundStyle(AppTheme.secondaryTextColor)
                     }

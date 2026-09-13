@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import CryptoKit
 
 @MainActor
 @Observable
@@ -113,6 +114,29 @@ class PersistenceController {
                 fatalError("Could not initialize local ModelContainer: \(error)")
             }
         }
+    }
+
+    /// The signature changes after imports, cloud merges, library edits, or a
+    /// maintenance-version bump. Only successful maintenance advances the gate.
+    func reconcileExerciseLibraryIfNeeded(force: Bool = false) {
+        let context = container.mainContext
+        let key = "exerciseLibrary.maintenance.v1"
+        func signature() throws -> String {
+            let definitions = try context.fetch(FetchDescriptor<ExerciseDefinition>())
+            let rows = definitions.map {
+                "\($0.id.uuidString)|\($0.name)|\($0.muscleGroup)|\($0.isUserDefined)"
+            }.sorted().joined(separator: "\n")
+            return SHA256.hash(data: Data(rows.utf8)).map { String(format: "%02x", $0) }.joined()
+        }
+        guard let before = try? signature() else { return }
+        guard force || UserDefaults.standard.string(forKey: key) != before else { return }
+        ExerciseLibrary.populateInitialExercises(context: context)
+        deduplicateExerciseDefinitions()
+        ensureDefaultExercisesPresent()
+        unifySynonymousExerciseDefinitions()
+        guard PersistenceSave.commit(context, action: "maintain exercise library"),
+              let after = try? signature() else { return }
+        UserDefaults.standard.set(after, forKey: key)
     }
 
     // Re-seed the library definitions if they were removed

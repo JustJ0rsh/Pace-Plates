@@ -6,6 +6,35 @@ final class WorkingOutUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testOptimizationDataPaths() {
+        let app = launchApp(startTab: "home", fixture: "optimization_checks")
+        defer { app.terminate() }
+        XCTAssertTrue(app.staticTexts["Optimization checks passed"].waitForExistence(timeout: 60),
+                      app.staticTexts["optimization.checks"].label)
+    }
+
+    func testInterruptedRunRestoresPausedAfterRelaunch() {
+        let app = launchApp(startTab: "home", fixture: nil, recovery: true)
+        defer { app.terminate() }
+        waitForElement(app.buttons["home.quickActions.startRun"])
+        app.buttons["home.quickActions.startRun"].tap()
+        waitForElement(app.buttons["Start"])
+        app.buttons["Start"].tap()
+        waitForElement(app.buttons["Pause"])
+        app.buttons["Pause"].tap()
+        waitForElement(app.buttons["Resume"])
+        app.terminate()
+        app.launchEnvironment["UITEST_RESET_STATE"] = "0"
+        app.launch()
+        let recovered = app.alerts["Recovered unfinished activity"]
+        XCTAssertTrue(recovered.waitForExistence(timeout: 10))
+        recovered.buttons["OK"].tap()
+        waitForElement(app.buttons["home.activeActivity.resume"])
+        app.buttons["home.activeActivity.resume"].tap()
+        waitForElement(app.buttons["Resume"])
+        XCTAssertFalse(app.buttons["Pause"].exists, "Recovered activity must stay paused")
+    }
+
     func testHomeScreenshot() {
         let app = launchApp(startTab: "home")
 
@@ -536,10 +565,12 @@ final class WorkingOutUITests: XCTestCase {
     private func launchApp(
         startTab: String,
         fixture: String? = "core_tabs",
-        contentSizeCategory: String? = nil
+        contentSizeCategory: String? = nil,
+        recovery: Bool = false
     ) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["UITEST_MODE"] = "1"
+        if recovery { app.launchEnvironment["UITEST_RUN_RECOVERY"] = "1" }
         if let fixture {
             app.launchEnvironment["UITEST_FIXTURE"] = fixture
         }

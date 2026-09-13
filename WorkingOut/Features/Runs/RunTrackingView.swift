@@ -27,6 +27,95 @@ struct Coordinate: Codable, Identifiable {
 @Observable
 class RunTracker: NSObject, CLLocationManagerDelegate {
     static let shared = RunTracker()
+    private var activeSessionID = UUID()
+    @ObservationIgnored private var preparedSession: RunningSession?
+    private var lastCheckpointAt: Date?
+    private var attemptedRecovery = false
+    private var recoveryIdentityKey: String {
+        AppLaunchConfiguration.current.isUITest ? "runRecovery.uiTestIdentity" : "runRecovery.activeIdentity"
+    }
+    private var recoveryStore: RunRecoveryStore? {
+        #if DEBUG
+        if AppLaunchConfiguration.current.isUITest,
+           ProcessInfo.processInfo.environment["UITEST_RUN_RECOVERY"] == "1" {
+            return Self.uiTestRecoveryStore
+        }
+        #endif
+        return AppLaunchConfiguration.current.shouldSkipAutomationSideEffects ? nil : .shared
+    }
+
+    #if DEBUG
+    private static let uiTestRecoveryStore = RunRecoveryStore(url:
+        FileManager.default.temporaryDirectory.appendingPathComponent("UITestActiveRun/recovery.json"))
+    #endif
+
+    func checkpointRun(force: Bool = false) {
+        guard let startDate, let recoveryStore else { return }
+        let now = Date()
+        guard force || lastCheckpointAt.map({ now.timeIntervalSince($0) >= 15 }) != false else { return }
+        lastCheckpointAt = now
+        let activeDuration = max(0, (pausedAt ?? now).timeIntervalSince(startDate) - pausedDuration)
+        let points = downsampleRouteForStorage(route, maxPoints: routePersistMaxPoints, minDistance: routePersistMinDistanceMeters)
+        UserDefaults.standard.set(activeSessionID.uuidString, forKey: recoveryIdentityKey)
+        recoveryStore.save(.init(
+            sessionID: activeSessionID, startDate: startDate, duration: activeDuration,
+            distanceMeters: distance, distanceUnit: distanceUnit, activityType: activityType,
+            plannedTarget: plannedTarget, points: points.map {
+                .init(latitude: $0.coordinate.latitude, longitude: $0.coordinate.longitude,
+                      altitude: $0.altitude, timestamp: $0.timestamp)
+            }, recordedAt: pausedAt ?? now, completedPauses: completedPauses
+        ))
+    }
+
+    @MainActor
+    func restoreInterruptedRun(context: ModelContext) async -> Bool {
+        guard !attemptedRecovery, let recoveryStore else { return false }
+        attemptedRecovery = true
+        let purgeGeneration = WearableWorkoutInboxService.localDataPurgeGeneration
+        guard let snapshot = await recoveryStore.load(),
+              WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(purgeGeneration),
+              startDate == nil, !hasRecoverableActivity else { return false }
+        guard UserDefaults.standard.string(forKey: recoveryIdentityKey) == snapshot.sessionID.uuidString else {
+            recoveryStore.clear()
+            return false
+        }
+        if let cutoff = WearableWorkoutInboxService.localDataPurgeCutoffDate,
+           snapshot.startDate <= cutoff {
+            recoveryStore.clear()
+            return false
+        }
+        let id = snapshot.sessionID
+        let descriptor = FetchDescriptor<RunningSession>(predicate: #Predicate { $0.id == id })
+        // A crash after the database save but before checkpoint removal must
+        // not offer the same completed activity for saving again.
+        guard let existing = try? context.fetchCount(descriptor) else { return false }
+        guard existing == 0 else {
+            recoveryStore.clear()
+            return false
+        }
+        let now = Date()
+        activeSessionID = snapshot.sessionID
+        startDate = snapshot.startDate
+        duration = snapshot.duration
+        distance = snapshot.distanceMeters
+        distanceUnit = snapshot.distanceUnit
+        activityType = snapshot.activityType
+        plannedTarget = snapshot.plannedTarget
+        let checkpointTime = snapshot.recordedAt ?? snapshot.startDate.addingTimeInterval(snapshot.duration)
+        pausedAt = min(checkpointTime, now)
+        completedPauses = snapshot.completedPauses ?? []
+        pausedDuration = (pausedAt ?? now).timeIntervalSince(snapshot.startDate) - snapshot.duration
+        route = snapshot.points.map {
+            CLLocation(coordinate: .init(latitude: $0.latitude, longitude: $0.longitude),
+                       altitude: $0.altitude, horizontalAccuracy: 0, verticalAccuracy: 0,
+                       timestamp: $0.timestamp)
+        }
+        isRunning = false
+        lastDistanceLocation = nil
+        shouldSkipNextDistanceSample = true
+        LiveActivityManager.shared.end()
+        return true
+    }
     
     private let manager = CLLocationManager()
     var authorizationStatus: CLAuthorizationStatus
@@ -38,6 +127,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
     var startDate: Date? = nil
     private var pausedAt: Date? = nil
     private var pausedDuration: TimeInterval = 0.0
+    private var completedPauses: [DateInterval] = []
     private var shouldSkipNextDistanceSample = false
     // UI refresh timer; duration is computed from dates
     var timer: Timer? = nil
@@ -59,7 +149,8 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
     private var lastLiveActivityUpdateAt: Date? = nil
     private var lastLiveActivityDistanceMeters: Double = 0
     private var lastLiveActivityPace: Double? = nil
-    private let liveActivityMinUpdateInterval: TimeInterval = 1
+    private let liveActivityMinUpdateInterval: TimeInterval = 5
+    private let liveActivityHeartbeatInterval: TimeInterval = 60
     private let liveActivityDistanceDeltaMeters: Double = 20
     private let liveActivityPaceDeltaSeconds: Double = 8
     private let routeAccuracyThresholdMeters: Double = 65
@@ -76,6 +167,12 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
     override init() {
         authorizationStatus = manager.authorizationStatus
         super.init()
+        #if DEBUG
+        if AppLaunchConfiguration.current.isUITest,
+           ProcessInfo.processInfo.environment["UITEST_RESET_STATE"] == "1" {
+            Self.uiTestRecoveryStore.clear()
+        }
+        #endif
         manager.delegate = self
         manager.activityType = .fitness
         manager.desiredAccuracy = kCLLocationAccuracyBest
@@ -127,12 +224,18 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         resetActivityType: Bool = false,
         resetPlannedTarget: Bool = true
     ) {
+        UserDefaults.standard.removeObject(forKey: recoveryIdentityKey)
+        recoveryStore?.clear()
+        activeSessionID = UUID()
+        preparedSession = nil
+        lastCheckpointAt = nil
         route.removeAll()
         distance = 0.0
         duration = 0.0
         startDate = nil
         pausedAt = nil
         pausedDuration = 0.0
+        completedPauses.removeAll()
         shouldSkipNextDistanceSample = false
         lastDistanceLocation = nil
         location = nil
@@ -163,6 +266,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         }
         startTimer()
         isRunning = true
+        checkpointRun(force: true)
         // Start Live Activity (if available)
         LiveActivityManager.shared.start(startDate: startDate ?? Date(),
                                          distanceMeters: 0,
@@ -180,6 +284,8 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         manager.stopUpdatingLocation()
         stopTimer()
         isRunning = false
+        if let startDate { duration = max(0, (pausedAt ?? Date()).timeIntervalSince(startDate) - pausedDuration) }
+        checkpointRun(force: true)
 
         // Push immediate update so the widget freezes the timer
         if let s = startDate {
@@ -197,7 +303,9 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
     func resumeRun() {
 
         if let pausedAt {
-            pausedDuration += Date().timeIntervalSince(pausedAt)
+            let now = Date()
+            pausedDuration += now.timeIntervalSince(pausedAt)
+            if now > pausedAt { completedPauses.append(DateInterval(start: pausedAt, end: now)) }
             self.pausedAt = nil
         }
         shouldSkipNextDistanceSample = true
@@ -210,6 +318,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         manager.startUpdatingLocation()
         startTimer()
         isRunning = true
+        checkpointRun(force: true)
 
         // Push immediate update so the widget resumes the live timer
         if let s = startDate {
@@ -223,22 +332,19 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         }
     }
     
+    func pauseIntervals(endingAt end: Date) -> [DateInterval] {
+        var intervals = completedPauses
+        if let pausedAt, end > pausedAt { intervals.append(DateInterval(start: pausedAt, end: end)) }
+        return intervals
+    }
+
     func stopRun() -> RunningSession? {
-        if let pausedAt {
-            pausedDuration += Date().timeIntervalSince(pausedAt)
-            self.pausedAt = nil
+        pauseRun()
+        if let startDate {
+            duration = max(0, (pausedAt ?? Date()).timeIntervalSince(startDate) - pausedDuration)
         }
-        updateBackgroundLocationMode(isActiveRun: false)
-        manager.stopUpdatingLocation()
-        stopTimer()
-        isRunning = false
-        
-        if let s = startDate {
-            let activeDuration = max(0, Date().timeIntervalSince(s) - pausedDuration)
-            duration = max(duration, activeDuration)
-        }
-        startDate = nil
-        
+        checkpointRun(force: true)
+
         // Downsample route for persisted payload size while preserving start/end.
         let persistedRoute = downsampleRouteForStorage(
             route,
@@ -260,18 +366,22 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         // Calculate elevation metrics from route
         let elevationMetrics = calculateElevationMetrics(from: route)
         
-        // Create RunningSession object (but don't save it here)
-        return RunningSession(distance: distance / (distanceUnit == "km" ? 1000 : 1609.34), // Convert meters to selected unit
-                              distanceUnit: distanceUnit,
-                              duration: duration,
-                              notes: plannedTarget?.notes,
-                              locations: locationsData,
-                              plannedSessionID: plannedTarget?.sessionID,
-                              activityType: activityType,
-                              totalAscent: elevationMetrics?.ascent,
-                              totalDescent: elevationMetrics?.descent,
-                              minElevation: elevationMetrics?.min,
-                              maxElevation: elevationMetrics?.max)
+        // Reuse the same object after a failed save; retrying must not insert
+        // a second SwiftData row for the same active activity.
+        let session = preparedSession ?? RunningSession(id: activeSessionID, distance: 0, duration: 0)
+        session.distance = distance / (distanceUnit == "km" ? 1000 : 1609.34)
+        session.distanceUnit = distanceUnit
+        session.duration = duration
+        session.notes = plannedTarget?.notes
+        session.locations = locationsData
+        session.plannedSessionID = plannedTarget?.sessionID
+        session.activityType = activityType
+        session.totalAscent = elevationMetrics?.ascent
+        session.totalDescent = elevationMetrics?.descent
+        session.minElevation = elevationMetrics?.min
+        session.maxElevation = elevationMetrics?.max
+        preparedSession = session
+        return session
     }
 
     private func downsampleRouteForStorage(_ route: [CLLocation], maxPoints: Int, minDistance: Double) -> [CLLocation] {
@@ -352,6 +462,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
             guard let self = self else { return }
             if self.isRunning, let s = self.startDate {
                 self.duration = max(0, Date().timeIntervalSince(s) - self.pausedDuration)
+                self.checkpointRun()
                 if self.shouldUpdateLiveActivity(now: Date()) {
                     LiveActivityManager.shared.update(startDate: s,
                                                       duration: self.duration,
@@ -380,7 +491,8 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         }()
         let significantChange = distanceDelta >= liveActivityDistanceDeltaMeters || paceDelta >= liveActivityPaceDeltaSeconds
 
-        guard intervalReached || significantChange else { return false }
+        let heartbeatDue = lastLiveActivityUpdateAt.map { now.timeIntervalSince($0) >= liveActivityHeartbeatInterval } ?? true
+        guard intervalReached && (significantChange || heartbeatDue) else { return false }
 
         lastLiveActivityUpdateAt = now
         lastLiveActivityDistanceMeters = distance
@@ -431,6 +543,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         
         // Only track distance/route while running
         guard isRunning else { return }
+        defer { checkpointRun() }
 
         // Balanced sampling: use only the latest valid point per callback to avoid burst over-capture.
         let newLocation = latestLocation
@@ -1126,6 +1239,7 @@ struct RunTrackingProView: View {
                     }
                     .disabled(runTracker.authorizationStatus == .denied || runTracker.authorizationStatus == .restricted)
                     .help("Center on current location")
+                    .accessibilityLabel("Center map on current location")
 
                     Button("Done") {
                         handleDone()
@@ -1147,6 +1261,7 @@ struct RunTrackingProView: View {
                     }
                     .disabled(runTracker.authorizationStatus == .denied || runTracker.authorizationStatus == .restricted)
                     .help("Center on current location")
+                    .accessibilityLabel("Center map on current location")
                     
                     Button("Done") {
                         handleDone()
@@ -1214,6 +1329,7 @@ struct RunTrackingProView: View {
         let routeSnapshot: [CLLocation] = runTracker.route
         let distanceMeters: Double = runTracker.distance
         let completedPlannedTarget = runTracker.plannedTarget
+        let pauses = runTracker.pauseIntervals(endingAt: endTime)
 
         guard let session = runTracker.stopRun() else {
             
@@ -1226,7 +1342,7 @@ struct RunTrackingProView: View {
         // Persist end time onto the session date
         session.date = endTime
 
-        modelContext.insert(session)
+        if session.modelContext == nil { modelContext.insert(session) }
         do {
             if let completedPlannedTarget {
                 _ = RunAssistantService.shared.completeScheduledSession(
@@ -1255,7 +1371,8 @@ struct RunTrackingProView: View {
                         distanceMeters: distanceMeters,
                         energyBurned: nil,
                         activityType: activityType,
-                        localSessionID: session.id
+                        localSessionID: session.id,
+                        pauseIntervals: pauses
                     )
                     session.healthWorkoutUUID = workout.uuid.uuidString
                     if !PersistenceSave.commit(modelContext, action: "link saved run with Health workout UUID") {
@@ -1292,11 +1409,12 @@ struct RunTrackingProView: View {
             // Reset tracker so the next start is a brand-new run (not resume)
             runTracker.clearCurrentRun(resetActivityType: true)
 
+            Haptics.notify(.success)
             shouldFollowUser = false
             isSavingRun = false
             dismiss()
         } catch {
-            
+            Haptics.notify(.error)
             alertMessage = "Failed to save run to database: \(error.localizedDescription)"
             showingAlert = true
             isSavingRun = false

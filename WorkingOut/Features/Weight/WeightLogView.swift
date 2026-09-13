@@ -750,7 +750,7 @@ private struct WeightChartSection: View {
                 .padding(12)
                 .background(AppTheme.secondaryBackgroundColor)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                .motionAwareTransition(.opacity.combined(with: .scale(scale: 0.95)))
             }
 
             // Latest vs oldest summary

@@ -418,7 +418,7 @@ Rules:
 
     #if canImport(HealthKit)
     private func hkMiles(for workout: HKWorkout) -> Double {
-        (workout.totalDistance?.doubleValue(for: .meter()) ?? 0) / 1609.34
+        HealthKitManager.recordedDistanceMeters(for: workout) / 1609.34
     }
 
     private func hkActivityLabel(_ type: HKWorkoutActivityType) -> String {

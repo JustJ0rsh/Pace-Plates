@@ -46,6 +46,9 @@ final class CardioWorkoutInboxItem {
     var linkedRunningSessionID: UUID? = nil
     var suggestedRunningSessionID: UUID? = nil
     var createdAt: Date = Date()
+    /// Attempts, including unavailable metrics, advance the persisted refresh queue.
+    var healthDetailsLastAttemptAt: Date? = nil
+    var healthDistanceLastAttemptAt: Date? = nil
 
     var status: Status {
         get { Status(rawValue: statusRaw) ?? .pending }

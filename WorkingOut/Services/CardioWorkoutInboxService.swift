@@ -25,6 +25,7 @@ enum CardioWorkoutInboxService {
         let healthWorkoutUUID: String
         let sourceName: String
         let sourceBundleIdentifier: String
+        let distanceMeters: Double
         let calories: Double?
         let heartRate: HealthKitManager.WorkoutHeartRateSummary
         let avgCadence: Double?
@@ -43,6 +44,7 @@ enum CardioWorkoutInboxService {
         let workout: HKWorkout
         let sourceName: String
         let sourceBundleIdentifier: String
+        let distanceMeters: Double
         let calories: Double?
         let heartRate: HealthKitManager.WorkoutHeartRateSummary
     }
@@ -61,13 +63,14 @@ enum CardioWorkoutInboxService {
         pageLimit: Int = 50,
         requestAuthorization: Bool = false
     ) async -> SyncResult {
-        refreshSuggestedMatches(context: context)
-
         guard !syncInProgress else { return .noChanges }
         guard HKHealthStore.isHealthDataAvailable() else { return .noChanges }
         guard !AppLaunchConfiguration.current.shouldSkipAutomationSideEffects else {
             return .noChanges
         }
+
+        syncInProgress = true
+        defer { syncInProgress = false }
 
         if requestAuthorization {
             do {
@@ -80,16 +83,13 @@ enum CardioWorkoutInboxService {
             }
         }
 
-        syncInProgress = true
-        defer { syncInProgress = false }
-
         let expectedPurgeGeneration =
             WearableWorkoutInboxService.localDataPurgeGeneration
         var totalInserted = 0
 
         // Drain a short backlog in one refresh instead of requiring repeated
         // tab visits when several wearable activities arrived together.
-        for _ in 0..<5 {
+        for pageIndex in 0..<5 {
             guard WearableWorkoutInboxService
                 .isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration) else {
                 return .noChanges
@@ -98,6 +98,7 @@ enum CardioWorkoutInboxService {
             let page = await performSingleSync(
                 context: context,
                 limit: max(pageLimit, 1),
+                forceRefresh: requestAuthorization && pageIndex == 0,
                 expectedPurgeGeneration: expectedPurgeGeneration
             )
             totalInserted += page.inserted
@@ -116,6 +117,7 @@ enum CardioWorkoutInboxService {
     private static func performSingleSync(
         context: ModelContext,
         limit: Int,
+        forceRefresh: Bool,
         expectedPurgeGeneration: Int
     ) async -> PageResult {
         let changes: HealthKitManager.CardioWorkoutChanges
@@ -171,6 +173,13 @@ enum CardioWorkoutInboxService {
                    workout.sourceRevision.source.bundleIdentifier == Bundle.main.bundleIdentifier {
                     exactSession.healthWorkoutUUID = uuid
                 }
+                if exactSession.healthWorkoutUUID == uuid,
+                   workout.sourceRevision.source.bundleIdentifier != Bundle.main.bundleIdentifier {
+                    setImportedDistance(
+                        HealthKitManager.recordedDistanceMeters(for: workout),
+                        on: exactSession
+                    )
+                }
                 continue
             }
 
@@ -202,7 +211,9 @@ enum CardioWorkoutInboxService {
                 startDate: workout.startDate,
                 endDate: workout.endDate,
                 activityType: activityType,
-                distanceMeters: workout.totalDistance?.doubleValue(for: .meter()) ?? 0,
+                distanceMeters: HealthKitManager.recordedDistanceMeters(
+                    for: workout
+                ),
                 duration: workout.duration,
                 calories: positive(caloriesValue),
                 avgHeartRate: heartRate.average,
@@ -243,6 +254,7 @@ enum CardioWorkoutInboxService {
                         apply(details, to: linkedSession)
                     }
                     applySummary(from: existing, to: linkedSession)
+                    repairImportedDistance(from: existing, on: linkedSession)
                     // Use only identifiers retained by merge. In particular, a
                     // rejected lower sync version must never be promoted to the
                     // linked session as a replacement.
@@ -268,6 +280,13 @@ enum CardioWorkoutInboxService {
         await refreshMissingMetrics(
             items: items,
             sessions: sessions,
+            forceRefresh: forceRefresh,
+            expectedPurgeGeneration: expectedPurgeGeneration
+        )
+        await refreshImportedDistances(
+            items: items,
+            sessions: sessions,
+            forceRefresh: forceRefresh,
             expectedPurgeGeneration: expectedPurgeGeneration
         )
         expireReplacementTombstones(
@@ -318,37 +337,40 @@ enum CardioWorkoutInboxService {
     private static func refreshMissingMetrics(
         items: [CardioWorkoutInboxItem],
         sessions: [RunningSession],
+        forceRefresh: Bool,
         expectedPurgeGeneration: Int
     ) async {
-        let recentLinkedCutoff = Date().addingTimeInterval(-48 * 60 * 60)
-        let missing = items
-            .filter {
-                guard $0.status != .dismissed,
-                      $0.healthDeletionObservedAt == nil else { return false }
-                let hasMissingMetric = $0.avgHeartRate == nil ||
-                    $0.maxHeartRate == nil || $0.minHeartRate == nil ||
-                    $0.calories == nil ||
-                    ($0.avgHeartRate != nil &&
-                        $0.metricSourceHealthWorkoutUUID == nil)
-                let isRecentLinked = $0.status == .linked &&
-                    $0.endDate >= recentLinkedCutoff
-                return hasMissingMetric || isRecentLinked
-            }
-            .sorted {
-                let firstIsMissing = hasMissingMetric($0)
-                let secondIsMissing = hasMissingMetric($1)
-                if firstIsMissing != secondIsMissing { return firstIsMissing }
-                return $0.endDate > $1.endDate
-            }
+        let now = Date()
+        let eligible = items.filter {
+            let recent = now.timeIntervalSince($0.endDate) < 48 * 60 * 60
+            let missing = $0.avgHeartRate == nil || $0.maxHeartRate == nil ||
+                $0.minHeartRate == nil || $0.calories == nil ||
+                ($0.avgHeartRate != nil && $0.metricSourceHealthWorkoutUUID == nil)
+            return $0.status != .dismissed && $0.healthDeletionObservedAt == nil &&
+                (missing || recent || forceRefresh) &&
+                (forceRefresh || CardioHealthRefreshPolicy.isDue(
+                    lastAttempt: $0.healthDetailsLastAttemptAt, now: now,
+                    interval: recent ? 15 * 60 : 24 * 60 * 60
+                ))
+        }
+        let selectedIDs = CardioHealthRefreshPolicy.batchIDs(eligible.map {
+            .init(id: $0.id, date: $0.endDate, lastAttempt: $0.healthDetailsLastAttemptAt)
+        }, limit: 10)
 
-        for item in missing.prefix(10) {
+        for item in eligible where selectedIDs.contains(item.id) {
             guard WearableWorkoutInboxService
                 .isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration) else {
                 return
             }
-            guard let details = await loadDetails(for: item) else {
-                continue
+            let details = await loadDetails(for: item)
+            guard WearableWorkoutInboxService
+                .isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration) else {
+                return
             }
+            item.healthDetailsLastAttemptAt = Date()
+            guard item.healthDeletionObservedAt == nil,
+                  item.status != .dismissed,
+                  let details else { continue }
             apply(details, to: item)
 
             if item.status == .linked,
@@ -356,18 +378,76 @@ enum CardioWorkoutInboxService {
                let session = sessions.first(where: { $0.id == linkedID }) {
                 apply(details, to: session)
                 applySummary(from: item, to: session)
+                repairImportedDistance(from: item, on: session)
                 applyHealthIdentity(from: item, to: session)
             }
         }
     }
 
-    private static func hasMissingMetric(
-        _ item: CardioWorkoutInboxItem
-    ) -> Bool {
-        item.avgHeartRate == nil || item.maxHeartRate == nil ||
-            item.minHeartRate == nil || item.calories == nil ||
-            (item.avgHeartRate != nil &&
-                item.metricSourceHealthWorkoutUUID == nil)
+    private static func refreshImportedDistances(
+        items: [CardioWorkoutInboxItem],
+        sessions: [RunningSession],
+        forceRefresh: Bool,
+        expectedPurgeGeneration: Int
+    ) async {
+        let now = Date()
+        let candidates = sessions.filter {
+            (forceRefresh || CardioHealthRefreshPolicy.isDue(lastAttempt: $0.healthDistanceLastAttemptAt, now: now, interval: 24 * 60 * 60)) &&
+            $0.healthWorkoutUUID.flatMap(UUID.init(uuidString:)) != nil &&
+                ["running", "walking", "hiking", "cycling", "rowing"].contains($0.activityType)
+        }
+        let selectedIDs = CardioHealthRefreshPolicy.batchIDs(candidates.map {
+            .init(id: $0.id, date: $0.date, lastAttempt: $0.healthDistanceLastAttemptAt)
+        }, limit: 50)
+        let selected = candidates.filter { selectedIDs.contains($0.id) }
+        var uuids = Set(selected.compactMap {
+            $0.healthWorkoutUUID.flatMap(UUID.init(uuidString:))
+        })
+        let eligibleItems = items.filter {
+            $0.status != .dismissed && $0.healthDeletionObservedAt == nil &&
+                (forceRefresh || CardioHealthRefreshPolicy.isDue(lastAttempt: $0.healthDistanceLastAttemptAt, now: now, interval: 24 * 60 * 60))
+        }
+        let itemIDs = CardioHealthRefreshPolicy.batchIDs(eligibleItems.map {
+            .init(id: $0.id, date: $0.endDate, lastAttempt: $0.healthDistanceLastAttemptAt)
+        }, limit: 50)
+        let selectedItems = eligibleItems.filter { itemIDs.contains($0.id) }
+        for item in selectedItems {
+            uuids.formUnion(knownHealthUUIDs(for: item).compactMap(UUID.init(uuidString:)))
+        }
+        let workouts = try? await HealthKitManager.shared.workoutsForUUIDs(uuids)
+        guard WearableWorkoutInboxService
+            .isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration) else {
+            return
+        }
+
+        // Missing/deleted or temporarily unreadable workouts must not monopolize
+        // the queue. They remain eligible for a later pass.
+        let attemptedAt = Date()
+        for session in selected { session.healthDistanceLastAttemptAt = attemptedAt }
+        for item in selectedItems { item.healthDistanceLastAttemptAt = attemptedAt }
+        guard let workouts else { return }
+        let workoutsByUUID = Dictionary(uniqueKeysWithValues: workouts.map { ($0.uuid, $0) })
+        for item in selectedItems where item.healthDeletionObservedAt == nil && item.status != .dismissed {
+            let meters = knownHealthUUIDs(for: item).compactMap(UUID.init(uuidString:))
+                .compactMap { workoutsByUUID[$0] }
+                .map { HealthKitManager.recordedDistanceMeters(for: $0) }.max() ?? 0
+            if meters > 0 { item.distanceMeters = meters }
+            if let linkedID = item.linkedRunningSessionID,
+               let session = sessions.first(where: { $0.id == linkedID }) {
+                repairImportedDistance(from: item, on: session)
+            }
+        }
+        for session in selected {
+            guard let uuid = session.healthWorkoutUUID.flatMap(UUID.init(uuidString:)),
+                  let workout = workoutsByUUID[uuid],
+                  workout.sourceRevision.source.bundleIdentifier != Bundle.main.bundleIdentifier else {
+                continue
+            }
+            setImportedDistance(
+                HealthKitManager.recordedDistanceMeters(for: workout),
+                on: session
+            )
+        }
     }
 
     static func refreshSuggestedMatches(context: ModelContext) {
@@ -442,6 +522,7 @@ enum CardioWorkoutInboxService {
             apply(details, to: session)
         }
         applySummary(from: item, to: session)
+        repairImportedDistance(from: item, on: session)
         applyHealthIdentity(from: item, to: session)
         item.status = .linked
         item.linkedRunningSessionID = session.id
@@ -467,6 +548,11 @@ enum CardioWorkoutInboxService {
             return existing
         }
 
+        let details = await loadDetails(for: item)
+        if let details {
+            apply(details, to: item)
+        }
+
         let unit = UserDefaults.standard.string(forKey: "distanceUnit") ?? "mi"
         let distance = unit == "mi"
             ? item.distanceMeters / 1609.34
@@ -488,8 +574,7 @@ enum CardioWorkoutInboxService {
         )
         context.insert(session)
         for uuid in itemUUIDs { addHealthUUID(uuid, to: session) }
-        if let details = await loadDetails(for: item) {
-            apply(details, to: item)
+        if let details {
             apply(details, to: session)
         }
         applySummary(from: item, to: session)
@@ -530,7 +615,14 @@ enum CardioWorkoutInboxService {
             preferredUUID: item.metricSourceHealthWorkoutUUID,
             primaryUUID: item.healthWorkoutUUID
         ) else { return nil }
-        return await loadDetails(for: selected)
+        let distanceMeters = representations
+            .map(\.distanceMeters)
+            .filter { $0.isFinite && $0 > 0 }
+            .max() ?? 0
+        return await loadDetails(
+            for: selected,
+            distanceMeters: distanceMeters
+        )
     }
 
     private static func loadRepresentation(
@@ -549,6 +641,9 @@ enum CardioWorkoutInboxService {
             sourceName: workout.sourceRevision.source.name,
             sourceBundleIdentifier:
                 workout.sourceRevision.source.bundleIdentifier,
+            distanceMeters: HealthKitManager.recordedDistanceMeters(
+                for: workout
+            ),
             calories: calories,
             heartRate: heartRate
         )
@@ -629,11 +724,11 @@ enum CardioWorkoutInboxService {
     }
 
     private static func loadDetails(
-        for representation: WorkoutRepresentation
+        for representation: WorkoutRepresentation,
+        distanceMeters: Double
     ) async -> WorkoutDetails {
         let workout = representation.workout
-        let avgCadence = try? await HealthKitManager.shared.averageCadence(for: workout)
-        let maxCadence = try? await HealthKitManager.shared.maxCadence(for: workout)
+        let cadence = try? await HealthKitManager.shared.cadenceStats(for: workout)
         let avgStrideLength = try? await HealthKitManager.shared.averageStrideLength(for: workout)
         let verticalOscillation = try? await HealthKitManager.shared.averageVerticalOscillation(for: workout)
         let groundContactTime = try? await HealthKitManager.shared.averageGroundContactTime(for: workout)
@@ -661,10 +756,11 @@ enum CardioWorkoutInboxService {
             healthWorkoutUUID: representation.healthWorkoutUUID,
             sourceName: representation.sourceName,
             sourceBundleIdentifier: representation.sourceBundleIdentifier,
+            distanceMeters: distanceMeters,
             calories: representation.calories,
             heartRate: representation.heartRate,
-            avgCadence: avgCadence,
-            maxCadence: maxCadence,
+            avgCadence: cadence?.average,
+            maxCadence: cadence?.maximum,
             avgStrideLength: avgStrideLength,
             verticalOscillation: verticalOscillation,
             groundContactTime: groundContactTime,
@@ -683,6 +779,36 @@ enum CardioWorkoutInboxService {
         if let value = item.avgHeartRate { session.avgHeartRate = value }
         if let value = item.maxHeartRate { session.maxHeartRate = value }
         if let value = item.minHeartRate { session.minHeartRate = value }
+    }
+
+    /// Correct only sessions whose canonical workout is one of this inbox
+    /// item's Health representations. Linking a wearable to a locally tracked
+    /// activity must enrich it without replacing its locally measured distance.
+    private static func repairImportedDistance(
+        from item: CardioWorkoutInboxItem,
+        on session: RunningSession
+    ) {
+        guard item.distanceMeters > 0,
+              let canonicalUUID = session.healthWorkoutUUID,
+              knownHealthUUIDs(for: item).contains(canonicalUUID) else {
+            return
+        }
+        setImportedDistance(item.distanceMeters, on: session)
+    }
+
+    private static func setImportedDistance(
+        _ distanceMeters: Double,
+        on session: RunningSession
+    ) {
+        guard distanceMeters.isFinite, distanceMeters > 0 else { return }
+        let currentMeters = HealthKitManager.metersFor(
+            distance: session.distance,
+            unit: session.distanceUnit
+        )
+        guard distanceMeters > currentMeters else { return }
+        session.distance = session.distanceUnit == "mi"
+            ? distanceMeters / 1609.34
+            : distanceMeters / 1000
     }
 
     /// Copies wearable identities without changing `healthWorkoutUUID`, which
@@ -709,6 +835,9 @@ enum CardioWorkoutInboxService {
         _ details: WorkoutDetails,
         to item: CardioWorkoutInboxItem
     ) {
+        if details.distanceMeters > 0 {
+            item.distanceMeters = details.distanceMeters
+        }
         if let value = details.calories { item.calories = value }
         guard details.heartRate.hasValues else { return }
         item.avgHeartRate = details.heartRate.average
