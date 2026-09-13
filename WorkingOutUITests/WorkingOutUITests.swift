@@ -421,6 +421,184 @@ final class WorkingOutUITests: XCTestCase {
         )
     }
 
+    func testBackupConfirmationsCanBeCanceledWithoutChangingHistory() {
+        let app = launchApp(startTab: "home", fixture: "core_tabs")
+        defer { app.terminate() }
+        openSettingsRoot(in: app)
+        openSettingsSubpage("Backup & Data", in: app, returnToSettings: false)
+
+        let confirmations: [(button: String, title: String)] = [
+            ("Export Data", "Export Data?"),
+            ("Import Data", "Import Data?"),
+            ("Remove All Duplicates", "Remove Duplicates?"),
+            ("Delete All Data", "Delete All Data?"),
+        ]
+        for confirmation in confirmations {
+            app.buttons[confirmation.button].tap()
+            let alert = app.alerts[confirmation.title]
+            waitForElement(alert)
+            alert.buttons["Cancel"].tap()
+            XCTAssertTrue(alert.waitForNonExistence(timeout: 5))
+        }
+
+        // Reopening also checks that cancellation resets the presentation state.
+        app.buttons["Export Data"].tap()
+        let export = app.alerts["Export Data?"]
+        waitForElement(export)
+        export.buttons["Cancel"].tap()
+        XCTAssertTrue(export.waitForNonExistence(timeout: 5))
+
+        selectBackupTestTab("Workouts", in: app)
+        waitForAnchor("workouts.ready", in: app)
+        waitForElement(app.staticTexts["Upper Body Focus"])
+        XCTAssertTrue(app.staticTexts["3 results"].exists)
+    }
+
+    func testBackupExportOpensShareSheetAndCancellationDoesNotClaimSuccess() {
+        let app = launchApp(startTab: "home", fixture: "core_tabs")
+        defer { app.terminate() }
+        openSettingsRoot(in: app)
+        openSettingsSubpage("Backup & Data", in: app, returnToSettings: false)
+
+        app.buttons["Export Data"].tap()
+        let confirmation = app.alerts["Export Data?"]
+        waitForElement(confirmation)
+        confirmation.buttons["Export"].tap()
+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 5))
+
+        // These actions exist in the real system activity controller, not in Settings.
+        let copyAction = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", "Copy")).firstMatch
+        waitForElement(copyAction)
+        let close = app.buttons.matching(
+            NSPredicate(format: "label IN %@", ["Close", "Cancel"])
+        ).firstMatch
+        waitForElement(close)
+        close.tap()
+        XCTAssertTrue(copyAction.waitForNonExistence(timeout: 5))
+        XCTAssertFalse(
+            app.staticTexts["Export complete"].waitForExistence(timeout: 1),
+            "Closing the share sheet does not mean a backup was saved."
+        )
+
+        // Verify the destination is interactive again after the system sheet closes.
+        app.buttons["Import Data"].tap()
+        let importConfirmation = app.alerts["Import Data?"]
+        waitForElement(importConfirmation)
+        importConfirmation.buttons["Cancel"].tap()
+    }
+
+    func testBackupImportOpensDocumentPickerAndCanBeCanceled() {
+        let app = launchApp(startTab: "home", fixture: "core_tabs")
+        defer { app.terminate() }
+        openSettingsRoot(in: app)
+        openSettingsSubpage("Backup & Data", in: app, returnToSettings: false)
+
+        app.buttons["Import Data"].tap()
+        let confirmation = app.alerts["Import Data?"]
+        waitForElement(confirmation)
+        confirmation.buttons["Import"].tap()
+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 5))
+
+        // The iPad document browser initially collapses Search into a toolbar button.
+        // Waiting for the source alert to disappear avoids matching its Cancel button.
+        let cancel = app.buttons.matching(
+            NSPredicate(format: "label IN %@", ["Close", "Cancel"])
+        ).firstMatch
+        waitForElement(cancel)
+        XCTAssertTrue(app.buttons["Search"].exists || app.searchFields.firstMatch.exists,
+                      "Expected the native document browser's search control.")
+        cancel.tap()
+        XCTAssertTrue(cancel.waitForNonExistence(timeout: 5))
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+
+        app.buttons["Import Data"].tap()
+        waitForElement(confirmation)
+        confirmation.buttons["Cancel"].tap()
+    }
+
+    func testBackupDeduplicateShowsCompletionAndPreservesDistinctWorkouts() {
+        let app = launchApp(startTab: "home", fixture: "core_tabs")
+        defer { app.terminate() }
+        openSettingsRoot(in: app)
+        openSettingsSubpage("Backup & Data", in: app, returnToSettings: false)
+
+        app.buttons["Remove All Duplicates"].tap()
+        let confirmation = app.alerts["Remove Duplicates?"]
+        waitForElement(confirmation)
+        confirmation.buttons["Remove"].tap()
+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 5))
+        let result = app.alerts.firstMatch
+        waitForElement(result)
+        XCTAssertTrue(
+            result.staticTexts.matching(
+                NSPredicate(format: "label == %@ OR label BEGINSWITH %@", "No duplicates found", "Removed ")
+            ).firstMatch.exists,
+            "Deduplication must report its result on the visible Backup page."
+        )
+        result.buttons["OK"].tap()
+
+        selectBackupTestTab("Workouts", in: app)
+        waitForAnchor("workouts.ready", in: app)
+        waitForElement(app.staticTexts["Upper Body Focus"])
+        XCTAssertTrue(app.staticTexts["3 results"].exists)
+    }
+
+    func testBackupDeleteRemovesOnlyIsolatedFixtureHistory() {
+        // launchApp enables UITEST_MODE: the app uses an isolated in-memory store.
+        // Keep this app process alive; relaunching would create and seed a new store.
+        let app = launchApp(startTab: "workouts", fixture: "core_tabs")
+        defer { app.terminate() }
+        waitForAnchor("workouts.ready", in: app)
+        waitForElement(app.staticTexts["Upper Body Focus"])
+        XCTAssertTrue(app.staticTexts["3 results"].exists)
+        selectBackupTestTab("Runs", in: app)
+        waitForAnchor("runs.ready", in: app)
+        XCTAssertTrue(app.staticTexts["Longest activity: 4.1 mi."].waitForExistence(timeout: 5))
+        selectBackupTestTab("Weight", in: app)
+        waitForAnchor("weight.ready", in: app)
+        XCTAssertTrue(app.staticTexts["Down 2.0 lbs over 7 days."].waitForExistence(timeout: 5))
+
+        selectBackupTestTab("Home", in: app)
+        openSettingsRoot(in: app)
+        openSettingsSubpage("Backup & Data", in: app, returnToSettings: false)
+        app.buttons["Delete All Data"].tap()
+        let confirmation = app.alerts["Delete All Data?"]
+        waitForElement(confirmation)
+        confirmation.buttons["Delete"].tap()
+        let result = app.alerts.containing(
+            .staticText,
+            identifier: "All Pace & Plates data has been removed. Apple Health data was not changed."
+        ).firstMatch
+        waitForElement(result)
+        result.buttons["OK"].tap()
+
+        selectBackupTestTab("Workouts", in: app)
+        waitForAnchor("workouts.ready", in: app)
+        waitForElement(app.staticTexts["No workouts yet"])
+        waitForElement(app.buttons["Start First Workout"])
+        XCTAssertFalse(app.staticTexts["Upper Body Focus"].exists)
+
+        selectBackupTestTab("Runs", in: app)
+        waitForAnchor("runs.ready", in: app)
+        waitForElement(app.staticTexts["No Runs Logged"])
+        waitForElement(app.buttons["Start First Run"])
+        XCTAssertFalse(app.staticTexts["Longest activity: 4.1 mi."].exists)
+
+        selectBackupTestTab("Weight", in: app)
+        waitForAnchor("weight.ready", in: app)
+        waitForElement(app.staticTexts["No Weight Logged"])
+        XCTAssertFalse(app.staticTexts["Down 2.0 lbs over 7 days."].exists)
+    }
+
+    private func selectBackupTestTab(_ title: String, in app: XCUIApplication) {
+        // iPhone exposes a tab bar; recent iPad layouts can expose the top tabs as buttons.
+        let tabBarButton = app.tabBars.buttons[title].firstMatch
+        let button = tabBarButton.exists ? tabBarButton : app.buttons[title].firstMatch
+        waitForElement(button)
+        button.tap()
+    }
+
     func testSettingsScreenshot() {
         let app = launchApp(startTab: "home")
 

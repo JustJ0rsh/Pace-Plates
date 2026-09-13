@@ -88,70 +88,6 @@ struct SettingsView: View {
         .toolbarBackground(AppTheme.backgroundColor, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
-        .sheet(item: $exportURL, onDismiss: {
-            exportURL = nil
-            // The share sheet has finished handing the file off; remove the
-            // plaintext copy from tmp instead of waiting for the system to purge it.
-            if let url = lastExportedBackupURL {
-                try? FileManager.default.removeItem(at: url)
-                lastExportedBackupURL = nil
-            }
-            if pendingExportConfirmation {
-                alertTitle = "Backup"
-                alertMessage = "Export complete"
-                Haptics.playImpact(.light)
-                showAlert = true
-                pendingExportConfirmation = false
-            }
-        }) { item in
-            ShareSheet(items: [item.url])
-        }
-        .alert(alertTitle, isPresented: $showAlert) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(alertMessage)
-        }
-        .alert("Health Sync", isPresented: $showHealthSyncResult) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(healthSyncResultMessage)
-        }
-        .alert("Export Data?", isPresented: $confirmExport) {
-            Button("Cancel", role: .cancel) {}
-            Button("Export") { exportTapped() }
-        } message: {
-            Text("This creates an unencrypted backup file containing your workouts, runs with GPS routes, body weight history, and AI coach conversations. Only share or store it somewhere you trust.")
-        }
-        .alert("Import Data?", isPresented: $confirmImport) {
-            Button("Cancel", role: .cancel) {}
-            Button("Import") { showImporter = true }
-        } message: {
-            Text("Records from the backup are added to this device. Items that already exist here are kept and not overwritten.")
-        }
-        .alert("Remove Duplicates?", isPresented: $confirmDedup) {
-            Button("Cancel", role: .cancel) {}
-            Button("Remove", role: .destructive) { deduplicateAllData() }
-        } message: {
-            Text("We will scan workouts, runs, and templates to drop duplicates.")
-        }
-        .alert("Delete All Data?", isPresented: $confirmDeleteAll) {
-            Button("Cancel", role: .cancel) {}
-            Button("Delete", role: .destructive) { deleteAllAppData() }
-        } message: {
-            let cloud = PersistenceController.shared.isCloudBacked
-            Text(
-                cloud
-                    ? "This removes Pace & Plates data from this device and the app's iCloud store. It does not delete workouts or measurements from Apple Health. This action cannot be undone."
-                    : "This removes Pace & Plates data from this device. It does not delete workouts or measurements from Apple Health. This action cannot be undone."
-            )
-        }
-        #if DEBUG
-        .modifier(DebugSampleDataAlerts(
-            confirmAddSampleData: $confirmAddSampleData,
-            confirmRemoveSampleData: $confirmRemoveSampleData,
-            modelContext: modelContext
-        ))
-        #endif
         .onAppear {
             if !launchConfiguration.shouldSkipAutomationSideEffects {
                 loadProfileFromHealthKit()
@@ -555,6 +491,11 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .alert("Health Sync", isPresented: $showHealthSyncResult) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(healthSyncResultMessage)
+        }
     }
 
     private var backupDataSettingsPage: some View {
@@ -574,15 +515,6 @@ struct SettingsView: View {
                     Label("Import Data", systemImage: "square.and.arrow.down")
                 }
                 .disabled(isProcessingBackup)
-                .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
-                    switch result {
-                    case .success(let url):
-                        importFrom(url: url)
-                    case .failure(let err):
-                        alertMessage = "Import failed: \(err.localizedDescription)"
-                        showAlert = true
-                    }
-                }
             }
 
             Section("Data") {
@@ -599,11 +531,67 @@ struct SettingsView: View {
                     Label("Delete All Data", systemImage: "trash.slash")
                 }
             }
+            .disabled(isProcessingBackup)
 
             Section("Privacy") {
                 Link(destination: URL(string: "https://paceandplates.com/privacy")!) {
                     Label("Privacy Policy", systemImage: "doc.text")
                 }
+            }
+        }
+        // Present from the visible destination, since the Settings root is offscreen.
+        .sheet(item: $exportURL, onDismiss: {
+            exportURL = nil
+            // The share sheet has finished handing the file off; remove the
+            // plaintext copy from tmp instead of waiting for the system to purge it.
+            if let url = lastExportedBackupURL {
+                try? FileManager.default.removeItem(at: url)
+                lastExportedBackupURL = nil
+            }
+        }) { item in
+            ShareSheet(items: [item.url])
+        }
+        .alert("Backup & Data", isPresented: $showAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(alertMessage)
+        }
+        .alert("Export Data?", isPresented: $confirmExport) {
+            Button("Cancel", role: .cancel) {}
+            Button("Export") { exportTapped() }
+        } message: {
+            Text("This creates an unencrypted backup file containing your workouts, runs with GPS routes, body weight history, and AI coach conversations. Only share or store it somewhere you trust.")
+        }
+        .alert("Import Data?", isPresented: $confirmImport) {
+            Button("Cancel", role: .cancel) {}
+            Button("Import") { showImporter = true }
+        } message: {
+            Text("Records from the backup are added to this device. Items that already exist here are kept and not overwritten.")
+        }
+        .alert("Remove Duplicates?", isPresented: $confirmDedup) {
+            Button("Cancel", role: .cancel) {}
+            Button("Remove", role: .destructive) { deduplicateAllData() }
+        } message: {
+            Text("We will scan workouts, runs, and templates to drop duplicates.")
+        }
+        .alert("Delete All Data?", isPresented: $confirmDeleteAll) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive) { deleteAllAppData() }
+        } message: {
+            let cloud = PersistenceController.shared.isCloudBacked
+            Text(
+                cloud
+                    ? "This removes Pace & Plates data from this device and the app's iCloud store. It does not delete workouts or measurements from Apple Health. This action cannot be undone."
+                    : "This removes Pace & Plates data from this device. It does not delete workouts or measurements from Apple Health. This action cannot be undone."
+            )
+        }
+        .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
+            switch result {
+            case .success(let url):
+                importFrom(url: url)
+            case .failure(let err):
+                alertMessage = "Import failed: \(err.localizedDescription)"
+                showAlert = true
             }
         }
     }
@@ -625,6 +613,11 @@ struct SettingsView: View {
                 }
             }
         }
+        .modifier(DebugSampleDataAlerts(
+            confirmAddSampleData: $confirmAddSampleData,
+            confirmRemoveSampleData: $confirmRemoveSampleData,
+            modelContext: modelContext
+        ))
     }
     #endif
 
@@ -650,12 +643,10 @@ struct SettingsView: View {
     // MARK: - Backup actions
     @State private var showImporter: Bool = false
     private struct IdentifiableURL: Identifiable { let id = UUID(); let url: URL }
+    // Bind the share sheet to its file so the first presentation has content.
     @State private var exportURL: IdentifiableURL? = nil
     @State private var lastExportedBackupURL: URL? = nil
-    @State private var pendingExportConfirmation: Bool = false
-    // Use URL-bound sheet to avoid blank first presentation
     @State private var showAlert: Bool = false
-    @State private var alertTitle: String = "Settings"
     @State private var alertMessage: String = ""
     @State private var confirmDeleteAll: Bool = false
     
@@ -1059,7 +1050,6 @@ struct SettingsView: View {
                 let url = try await DataBackupService.exportAll(context: modelContext)
                 lastExportedBackupURL = url
                 exportURL = IdentifiableURL(url: url)
-                pendingExportConfirmation = true
             } catch {
                 alertMessage = "Export failed: \(error.localizedDescription)"
                 showAlert = true
