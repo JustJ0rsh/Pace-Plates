@@ -5,6 +5,22 @@ import SwiftData
 final class PlannedSession {
     var id: UUID = UUID()
 
+    var sourceWeekID: String? = nil
+    var sourceSlotID: String? = nil
+    var sourceTemplateID: String? = nil
+    var phaseID: String? = nil
+    @Attribute(.externalStorage) var prescriptionData: Data? = nil
+    var revisionID: UUID? = nil
+    var originalCivilDate: String? = nil
+    var currentCivilDate: String? = nil
+    var intraDayOrder: Int = 0
+    var isOptional: Bool = false
+    var executionID: UUID? = nil
+    var scheduleRevision: Int = 0
+    var localScheduleOverride: Bool = false
+    var completionProvenance: String? = nil
+
+
     var plan: TrainingPlan?
 
     var title: String = ""

@@ -6,6 +6,17 @@ import SwiftData
 @Model
 final class TrainingPlan {
     var id: UUID = UUID()
+
+    var sourceProgramID: String? = nil
+    var sourceRevision: Int = 0
+    var fingerprint: String? = nil
+    var currentRevisionID: UUID? = nil
+    var startCivilDate: String? = nil
+    var timeZoneIdentifier: String = ""
+    var durationWeeks: Int = 0
+    var activatedAt: Date? = nil
+    var pausedAt: Date? = nil
+
     var title: String = ""
     var goal: String = ""
     var overview: String? = nil

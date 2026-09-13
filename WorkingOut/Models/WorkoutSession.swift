@@ -4,6 +4,19 @@ import SwiftData
 @Model
 final class WorkoutSession {
     var id: UUID = UUID()
+    // Old records retain their historical meaning even when set checkboxes are false.
+    var executionStatusRaw: String = "legacy_recorded"
+    var plannedSessionID: UUID? = nil
+    var coachExecutionID: UUID? = nil
+    var endedAt: Date? = nil
+    var completionProvenance: String? = nil
+
+    var countsAsPerformedActivity: Bool {
+        executionStatusRaw == "legacy_recorded"
+            || (["in_progress", "completed", "partial"].contains(executionStatusRaw)
+                && ((exerciseLogs ?? []).contains(where: { $0.isCompleted }) || (healthDuration ?? 0) > 0))
+    }
+
     var date: Date = Date()
     var title: String = ""
     var notes: String?
@@ -22,8 +35,9 @@ final class WorkoutSession {
     var healthSourceName: String? = nil
     var healthActivityType: String? = nil
     
-    init(id: UUID = UUID(), date: Date = Date(), notes: String? = nil, title: String? = nil, shouldSaveAsTemplate: Bool = false, sourceTemplateID: UUID? = nil) {
+    init(id: UUID = UUID(), date: Date = Date(), notes: String? = nil, title: String? = nil, shouldSaveAsTemplate: Bool = false, sourceTemplateID: UUID? = nil, executionStatus: CoachExecutionStatus = .inProgress) {
         self.id = id
+        self.executionStatusRaw = executionStatus.rawValue
         self.date = date
         self.notes = notes
         if let title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

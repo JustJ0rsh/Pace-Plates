@@ -5,6 +5,12 @@ import CoreLocation
 @Model
 final class RunningSession {
     var id: UUID = UUID()
+    var canonicalPlannedSessionID: UUID? = nil
+    var coachExecutionID: UUID? = nil
+    var executionStatusRaw: String = "legacy_recorded"
+    var hasMeasuredDistance: Bool = true
+    var intervalResultsData: Data? = nil
+
     var date: Date = Date()
     var distance: Double = 0
     var distanceUnit: String = "km"

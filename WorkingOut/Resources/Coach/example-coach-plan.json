@@ -1,0 +1,258 @@
+{
+  "format": "pace-and-plates.coach-program",
+  "schemaVersion": 1,
+  "programId": "coach-demo-001",
+  "revision": 1,
+  "title": "Import and Tracking Demo",
+  "goal": "Demonstrate the import format; this is not an individualized training prescription.",
+  "overview": "Two example weeks with reusable workouts, multiple sessions on one day, a timed exercise, intervals, optional targets, and reviewed progression.",
+  "preferredUnits": {
+    "weight": "kg",
+    "distance": "km"
+  },
+  "nutritionTargets": {
+    "caloriesKcal": 2400,
+    "proteinGrams": 150,
+    "carbohydrateGrams": 270,
+    "fatGrams": 80,
+    "notes": "Example values for checking import and daily target display only."
+  },
+  "recoveryTargets": {
+    "sleepHours": {
+      "min": 7,
+      "max": 8
+    },
+    "checkInFields": [
+      "sleep",
+      "soreness",
+      "energy",
+      "pain"
+    ]
+  },
+  "phases": [
+    {
+      "id": "intro",
+      "title": "Demonstration phase",
+      "advanceMode": "reviewRequired"
+    }
+  ],
+  "sessionTemplates": [
+    {
+      "kind": "strength",
+      "id": "lift-a",
+      "title": "Example Lift A",
+      "exercises": [
+        {
+          "id": "press",
+          "exercise": {
+            "key": "barbell-bench-press",
+            "name": "Barbell bench press",
+            "equipment": [
+              "barbell",
+              "bench"
+            ]
+          },
+          "prescriptionBasis": "total",
+          "loadBasis": "totalExternal",
+          "sets": [
+            {
+              "id": "work-1",
+              "role": "working",
+              "target": {
+                "kind": "reps",
+                "min": 6,
+                "max": 10
+              },
+              "effort": {
+                "scale": "rir",
+                "min": 2,
+                "max": 3
+              },
+              "restAfterSeconds": 120
+            },
+            {
+              "id": "work-2",
+              "role": "working",
+              "target": {
+                "kind": "reps",
+                "min": 6,
+                "max": 10
+              },
+              "effort": {
+                "scale": "rir",
+                "min": 2,
+                "max": 3
+              },
+              "restAfterSeconds": 120
+            }
+          ],
+          "substitutions": [
+            {
+              "key": "dumbbell-floor-press",
+              "name": "Dumbbell floor press",
+              "equipment": [
+                "dumbbells"
+              ]
+            }
+          ],
+          "notes": "Choose a comfortable load in the workout logger. Review prescription and load basis if substituting."
+        },
+        {
+          "id": "plank",
+          "exercise": {
+            "key": "front-plank",
+            "name": "Front plank",
+            "equipment": []
+          },
+          "prescriptionBasis": "total",
+          "loadBasis": "addedToBodyweight",
+          "sets": [
+            {
+              "id": "hold-1",
+              "role": "working",
+              "target": {
+                "kind": "duration",
+                "seconds": 20
+              },
+              "restAfterSeconds": 45
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "running",
+      "id": "run-walk",
+      "title": "Example Run/Walk",
+      "warmup": [
+        {
+          "kind": "segment",
+          "id": "warmup-walk",
+          "activity": "walk",
+          "target": {
+            "kind": "duration",
+            "seconds": 300
+          }
+        }
+      ],
+      "main": [
+        {
+          "kind": "repeat",
+          "id": "run-walk-block",
+          "count": 3,
+          "segments": [
+            {
+              "kind": "segment",
+              "id": "jog",
+              "activity": "jog",
+              "target": {
+                "kind": "duration",
+                "seconds": 60
+              },
+              "intensity": {
+                "rpe": {
+                  "scale": "rpe",
+                  "min": 3,
+                  "max": 4
+                },
+                "cue": "Comfortable conversation"
+              }
+            },
+            {
+              "kind": "segment",
+              "id": "walk",
+              "activity": "walk",
+              "target": {
+                "kind": "duration",
+                "seconds": 120
+              }
+            }
+          ]
+        }
+      ],
+      "cooldown": [
+        {
+          "kind": "segment",
+          "id": "cooldown-walk",
+          "activity": "walk",
+          "target": {
+            "kind": "duration",
+            "seconds": 300
+          }
+        }
+      ]
+    },
+    {
+      "kind": "rest",
+      "id": "rest",
+      "title": "Example Rest Day"
+    }
+  ],
+  "weekPatterns": [
+    {
+      "id": "example-week",
+      "title": "Example weekly layout",
+      "slots": [
+        {
+          "id": "day-1-lift",
+          "dayOffset": 0,
+          "sessionTemplateId": "lift-a"
+        },
+        {
+          "id": "day-1-run",
+          "dayOffset": 0,
+          "sessionTemplateId": "run-walk",
+          "optional": true
+        },
+        {
+          "id": "day-4-lift",
+          "dayOffset": 3,
+          "sessionTemplateId": "lift-a"
+        },
+        {
+          "id": "day-7-rest",
+          "dayOffset": 6,
+          "sessionTemplateId": "rest"
+        }
+      ]
+    }
+  ],
+  "weeks": [
+    {
+      "id": "week-01",
+      "phaseId": "intro",
+      "weekPatternId": "example-week"
+    },
+    {
+      "id": "week-02",
+      "phaseId": "intro",
+      "weekPatternId": "example-week"
+    }
+  ],
+  "progressionRules": [
+    {
+      "kind": "doubleProgression",
+      "id": "press-progression",
+      "title": "Review press load after successful sessions",
+      "sessionTemplateId": "lift-a",
+      "exerciseId": "press",
+      "requiredSuccessfulOccurrences": 2,
+      "minimumRIR": 2,
+      "increment": {
+        "value": 2.5,
+        "unit": "kg"
+      },
+      "reviewRequired": true
+    },
+    {
+      "kind": "manualReview",
+      "id": "run-review",
+      "title": "Review the next run progression",
+      "sessionTemplateIds": [
+        "run-walk"
+      ],
+      "instructions": "Review actual session results, effort, and any pain note before choosing or editing a future running prescription. Do not advance from the calendar date alone.",
+      "reviewRequired": true
+    }
+  ]
+}

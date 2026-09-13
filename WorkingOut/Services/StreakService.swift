@@ -19,7 +19,7 @@ enum StreakService {
         // Collect unique days with activity (workout session or running session)
         var daySet: Set<Date> = []
         if let workouts: [WorkoutSession] = try? context.fetch(FetchDescriptor<WorkoutSession>()) {
-            for s in workouts { daySet.insert(cal.startOfDay(for: s.date)) }
+            for s in workouts where s.countsAsPerformedActivity { daySet.insert(cal.startOfDay(for: s.date)) }
         }
         if let runs: [RunningSession] = try? context.fetch(FetchDescriptor<RunningSession>()) {
             for r in runs { daySet.insert(cal.startOfDay(for: r.date)) }
@@ -42,7 +42,7 @@ enum StreakService {
         var weekSet: Set<WeekKey> = []
 
         if let workouts: [WorkoutSession] = try? context.fetch(FetchDescriptor<WorkoutSession>()) {
-            for s in workouts {
+            for s in workouts where s.countsAsPerformedActivity {
                 let comps = cal.dateComponents([.weekOfYear, .yearForWeekOfYear], from: s.date)
                 if let w = comps.weekOfYear, let y = comps.yearForWeekOfYear { weekSet.insert(.init(year: y, week: w)) }
             }
@@ -59,8 +59,7 @@ enum StreakService {
         // Find the latest date among all activities
         var latestDate: Date? = nil
         var fdW = FetchDescriptor<WorkoutSession>(sortBy: [SortDescriptor(\.date, order: .reverse)])
-        fdW.fetchLimit = 1
-        if let lastWorkout: WorkoutSession = try? context.fetch(fdW).first {
+                if let lastWorkout: WorkoutSession = try? context.fetch(fdW).first(where: { $0.countsAsPerformedActivity }) {
             latestDate = max(latestDate ?? lastWorkout.date, lastWorkout.date)
         }
         var fdR = FetchDescriptor<RunningSession>(sortBy: [SortDescriptor(\.date, order: .reverse)])

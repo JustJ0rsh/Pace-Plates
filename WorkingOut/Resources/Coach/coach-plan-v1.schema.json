@@ -1,0 +1,1127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pace & Plates Coach Program Interchange v1",
+  "description": "Proposed portable program format. Targets and guidance only; no personal results, photos, actual dates, health records, credentials, or executable content. Additional semantic requirements are defined in coach-json-contract.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "format": {
+      "const": "pace-and-plates.coach-program"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "programId": {
+      "$ref": "#/$defs/Id"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000000
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "goal": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "overview": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8000
+    },
+    "guidance": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 16000
+    },
+    "preferredUnits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "weight": {
+          "type": "string",
+          "enum": [
+            "kg",
+            "lb"
+          ]
+        },
+        "distance": {
+          "type": "string",
+          "enum": [
+            "km",
+            "mi"
+          ]
+        }
+      },
+      "required": [
+        "weight",
+        "distance"
+      ]
+    },
+    "nutritionTargets": {
+      "$ref": "#/$defs/NutritionTargets"
+    },
+    "recoveryTargets": {
+      "$ref": "#/$defs/RecoveryTargets"
+    },
+    "phases": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Phase"
+      },
+      "minItems": 1,
+      "maxItems": 104
+    },
+    "sessionTemplates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SessionTemplate"
+      },
+      "minItems": 1,
+      "maxItems": 300
+    },
+    "weekPatterns": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/WeekPattern"
+      },
+      "minItems": 1,
+      "maxItems": 104
+    },
+    "weeks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Week"
+      },
+      "minItems": 1,
+      "maxItems": 104
+    },
+    "progressionRules": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ProgressionRule"
+      },
+      "minItems": 0,
+      "maxItems": 200
+    }
+  },
+  "required": [
+    "format",
+    "schemaVersion",
+    "programId",
+    "revision",
+    "title",
+    "goal",
+    "preferredUnits",
+    "phases",
+    "sessionTemplates",
+    "weekPatterns",
+    "weeks"
+  ],
+  "$defs": {
+    "Id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+      "description": "Opaque, case-sensitive author key. Preserve across revisions; do not use a title as identity."
+    },
+    "Weight": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "unit": {
+          "type": "string",
+          "enum": [
+            "kg",
+            "lb"
+          ]
+        }
+      },
+      "required": [
+        "value",
+        "unit"
+      ]
+    },
+    "Distance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "number",
+          "minimum": 0.001,
+          "maximum": 1000000
+        },
+        "unit": {
+          "type": "string",
+          "enum": [
+            "m",
+            "km",
+            "mi"
+          ]
+        }
+      },
+      "required": [
+        "value",
+        "unit"
+      ]
+    },
+    "RIR": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scale": {
+          "const": "rir"
+        },
+        "min": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "max": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10
+        }
+      },
+      "required": [
+        "scale",
+        "min",
+        "max"
+      ]
+    },
+    "RPE": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scale": {
+          "const": "rpe"
+        },
+        "min": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "max": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 10
+        }
+      },
+      "required": [
+        "scale",
+        "min",
+        "max"
+      ]
+    },
+    "RepsTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "reps"
+        },
+        "min": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      },
+      "required": [
+        "kind",
+        "min",
+        "max"
+      ]
+    },
+    "TimeTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "duration"
+        },
+        "seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        }
+      },
+      "required": [
+        "kind",
+        "seconds"
+      ]
+    },
+    "DistanceTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "distance"
+        },
+        "distance": {
+          "$ref": "#/$defs/Distance"
+        }
+      },
+      "required": [
+        "kind",
+        "distance"
+      ]
+    },
+    "SetTarget": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RepsTarget"
+        },
+        {
+          "$ref": "#/$defs/TimeTarget"
+        }
+      ]
+    },
+    "SegmentTarget": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/TimeTarget"
+        },
+        {
+          "$ref": "#/$defs/DistanceTarget"
+        }
+      ]
+    },
+    "ExerciseChoice": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/Id"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "equipment": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "minItems": 0,
+          "maxItems": 12
+        },
+        "catalogExerciseId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        }
+      },
+      "required": [
+        "key",
+        "name",
+        "equipment"
+      ],
+      "description": "catalogExerciseId is an optional app-provided catalog identifier. Never invent one. A name/key alone needs resolution in the import preview."
+    },
+    "StrengthSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "warmup",
+            "working",
+            "backoff",
+            "drop"
+          ]
+        },
+        "target": {
+          "$ref": "#/$defs/SetTarget"
+        },
+        "load": {
+          "$ref": "#/$defs/Weight"
+        },
+        "effort": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/RIR"
+            },
+            {
+              "$ref": "#/$defs/RPE"
+            }
+          ]
+        },
+        "restAfterSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1800
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "id",
+        "role",
+        "target"
+      ]
+    },
+    "StrengthExercise": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "exercise": {
+          "$ref": "#/$defs/ExerciseChoice"
+        },
+        "prescriptionBasis": {
+          "type": "string",
+          "enum": [
+            "total",
+            "perSide"
+          ]
+        },
+        "loadBasis": {
+          "type": "string",
+          "enum": [
+            "totalExternal",
+            "perImplement",
+            "addedToBodyweight",
+            "assistance"
+          ]
+        },
+        "sets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StrengthSet"
+          },
+          "minItems": 1,
+          "maxItems": 20
+        },
+        "substitutions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ExerciseChoice"
+          },
+          "minItems": 0,
+          "maxItems": 12
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        }
+      },
+      "required": [
+        "id",
+        "exercise",
+        "prescriptionBasis",
+        "loadBasis",
+        "sets"
+      ],
+      "description": "Array order is exercise order. Per-side and per-implement meanings must survive import and display. A substitution inherits the prescription until the user reviews changes; load does not transfer automatically."
+    },
+    "PaceRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "minSeconds": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 7200
+        },
+        "maxSeconds": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 7200
+        },
+        "per": {
+          "type": "string",
+          "enum": [
+            "km",
+            "mi"
+          ]
+        }
+      },
+      "required": [
+        "minSeconds",
+        "maxSeconds",
+        "per"
+      ],
+      "description": "Numeric pace range. minSeconds is the faster bound; maxSeconds is the slower bound."
+    },
+    "SegmentIntensity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rpe": {
+          "$ref": "#/$defs/RPE"
+        },
+        "pace": {
+          "$ref": "#/$defs/PaceRange"
+        },
+        "cue": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      },
+      "required": [],
+      "description": "All fields optional, but semantic validation requires at least one. Pace is optional and is never inferred from free text."
+    },
+    "Segment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "segment"
+        },
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "activity": {
+          "type": "string",
+          "enum": [
+            "walk",
+            "jog",
+            "run",
+            "cycle",
+            "row",
+            "swim",
+            "elliptical",
+            "other"
+          ]
+        },
+        "target": {
+          "$ref": "#/$defs/SegmentTarget"
+        },
+        "intensity": {
+          "$ref": "#/$defs/SegmentIntensity"
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "activity",
+        "target"
+      ]
+    },
+    "RepeatBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "repeat"
+        },
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 100
+        },
+        "segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Segment"
+          },
+          "minItems": 1,
+          "maxItems": 16
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "count",
+        "segments"
+      ],
+      "description": "Only segments may repeat. Nested repeat blocks are unsupported in version 1."
+    },
+    "Block": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Segment"
+        },
+        {
+          "$ref": "#/$defs/RepeatBlock"
+        }
+      ]
+    },
+    "StrengthSession": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "strength"
+        },
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "exercises": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StrengthExercise"
+          },
+          "minItems": 1,
+          "maxItems": 40
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "title",
+        "exercises"
+      ]
+    },
+    "RunningSession": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "running"
+        },
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "warmup": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Block"
+          },
+          "minItems": 0,
+          "maxItems": 32
+        },
+        "main": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Block"
+          },
+          "minItems": 1,
+          "maxItems": 32
+        },
+        "cooldown": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Block"
+          },
+          "minItems": 0,
+          "maxItems": 32
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "title",
+        "warmup",
+        "main",
+        "cooldown"
+      ]
+    },
+    "CardioSession": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "cardio"
+        },
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "warmup": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Block"
+          },
+          "minItems": 0,
+          "maxItems": 32
+        },
+        "main": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Block"
+          },
+          "minItems": 1,
+          "maxItems": 32
+        },
+        "cooldown": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Block"
+          },
+          "minItems": 0,
+          "maxItems": 32
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "title",
+        "warmup",
+        "main",
+        "cooldown"
+      ]
+    },
+    "RecoverySession": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "recovery"
+        },
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "durationSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "instructions": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "title",
+        "instructions"
+      ]
+    },
+    "RestSession": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "rest"
+        },
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "title"
+      ]
+    },
+    "SessionTemplate": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/StrengthSession"
+        },
+        {
+          "$ref": "#/$defs/RunningSession"
+        },
+        {
+          "$ref": "#/$defs/CardioSession"
+        },
+        {
+          "$ref": "#/$defs/RecoverySession"
+        },
+        {
+          "$ref": "#/$defs/RestSession"
+        }
+      ]
+    },
+    "NutritionTargets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "caloriesKcal": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "proteinGrams": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "carbohydrateGrams": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2000
+        },
+        "fatGrams": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        }
+      },
+      "required": [],
+      "description": "These are user-reviewable prescribed targets, never actual intake. At least one numeric target is required. Broad numeric bounds are input limits, not medical recommendations."
+    },
+    "RecoveryTargets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sleepHours": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "min": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 24
+            },
+            "max": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 24
+            }
+          },
+          "required": [
+            "min",
+            "max"
+          ]
+        },
+        "checkInFields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "sleep",
+              "soreness",
+              "energy",
+              "pain"
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 4,
+          "uniqueItems": true
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        }
+      },
+      "required": [],
+      "description": "At least one property is required. Check-in values are not part of portable programs."
+    },
+    "Phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "overview": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "advanceMode": {
+          "type": "string",
+          "enum": [
+            "scheduled",
+            "reviewRequired"
+          ]
+        },
+        "nutritionTargets": {
+          "$ref": "#/$defs/NutritionTargets"
+        },
+        "recoveryTargets": {
+          "$ref": "#/$defs/RecoveryTargets"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "advanceMode"
+      ],
+      "description": "reviewRequired blocks activation of this phase until the user explicitly confirms readiness. Targets replace the corresponding program-level target block; there is no hidden partial merge."
+    },
+    "Slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "dayOffset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 6
+        },
+        "sessionTemplateId": {
+          "$ref": "#/$defs/Id"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "optional": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "dayOffset",
+        "sessionTemplateId"
+      ],
+      "description": "Multiple slots may share a dayOffset. Array order is display order within that day. Omitted optional means false."
+    },
+    "WeekPattern": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "slots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Slot"
+          },
+          "minItems": 0,
+          "maxItems": 56
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "slots"
+      ],
+      "description": "Omitted days are unscheduled, not assumed rest. Use a rest template for explicit rest days."
+    },
+    "Week": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "phaseId": {
+          "$ref": "#/$defs/Id"
+        },
+        "weekPatternId": {
+          "$ref": "#/$defs/Id"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        }
+      },
+      "required": [
+        "id",
+        "phaseId",
+        "weekPatternId"
+      ],
+      "description": "Array order defines consecutive weeks. Each week is listed explicitly even when reusing a pattern."
+    },
+    "StrengthProgressionRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "doubleProgression"
+        },
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "sessionTemplateId": {
+          "$ref": "#/$defs/Id"
+        },
+        "exerciseId": {
+          "$ref": "#/$defs/Id"
+        },
+        "requiredSuccessfulOccurrences": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "minimumRIR": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "increment": {
+          "$ref": "#/$defs/Weight"
+        },
+        "reviewRequired": {
+          "const": true
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "title",
+        "sessionTemplateId",
+        "exerciseId",
+        "requiredSuccessfulOccurrences",
+        "minimumRIR",
+        "increment",
+        "reviewRequired"
+      ],
+      "description": "Suggest an increment only after consecutive eligible completed occurrences meet every working-set upper rep bound and the entered minimum RIR. No automatic application; missing effort blocks the suggestion. Increments refer to the exercise loadBasis."
+    },
+    "ManualProgressionRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "manualReview"
+        },
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "sessionTemplateIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "minItems": 1,
+          "maxItems": 100
+        },
+        "instructions": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "reviewRequired": {
+          "const": true
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "title",
+        "sessionTemplateIds",
+        "instructions",
+        "reviewRequired"
+      ],
+      "description": "Authored running or other progression instructions shown for review; never parsed as executable logic."
+    },
+    "ProgressionRule": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/StrengthProgressionRule"
+        },
+        {
+          "$ref": "#/$defs/ManualProgressionRule"
+        }
+      ]
+    }
+  }
+}

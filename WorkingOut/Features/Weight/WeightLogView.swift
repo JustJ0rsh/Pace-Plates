@@ -353,6 +353,11 @@ struct WeightLogView: View {
 
         Task(priority: .utility) {
             do {
+                if CoachPersistence.isLocal(modelContext) {
+                    _ = try await CoachWeightRepository.importHealth(context: modelContext, preferredUnit: preferredWeightUnit)
+                    weightLastHealthImportAt = Date().timeIntervalSince1970
+                    return
+                }
                 // Request authorization if needed
                 try await HealthKitManager.shared.requestAuthorization()
 

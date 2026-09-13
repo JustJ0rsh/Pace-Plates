@@ -57,14 +57,42 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         let activeDuration = max(0, (pausedAt ?? now).timeIntervalSince(startDate) - pausedDuration)
         let points = downsampleRouteForStorage(route, maxPoints: routePersistMaxPoints, minDistance: routePersistMinDistanceMeters)
         UserDefaults.standard.set(activeSessionID.uuidString, forKey: recoveryIdentityKey)
-        recoveryStore.save(.init(
+        let snapshot = RunRecoverySnapshot(
             sessionID: activeSessionID, startDate: startDate, duration: activeDuration,
             distanceMeters: distance, distanceUnit: distanceUnit, activityType: activityType,
             plannedTarget: plannedTarget, points: points.map {
                 .init(latitude: $0.coordinate.latitude, longitude: $0.coordinate.longitude,
                       altitude: $0.altitude, timestamp: $0.timestamp)
-            }, recordedAt: pausedAt ?? now, completedPauses: completedPauses
-        ))
+            }, intervalState: intervalState, recordedAt: pausedAt ?? now, completedPauses: completedPauses
+        )
+        recoveryStore.save(snapshot)
+        if plannedTarget?.canonicalOccurrenceID != nil {
+            Task { @MainActor in
+                guard self.activeSessionID == snapshot.sessionID else { return }
+                if let cutoff = WearableWorkoutInboxService.localDataPurgeCutoffDate, snapshot.startDate <= cutoff { return }
+                try? CoachExecutionCoordinator.mirrorRunCheckpoint(snapshot, context: PersistenceController.shared.container.mainContext)
+            }
+        }
+    }
+
+    @MainActor
+    func checkpointForBackup(context: ModelContext) throws {
+        guard let startDate, plannedTarget?.canonicalOccurrenceID != nil else { return }
+        let now = Date()
+        let activeDuration = max(0, (pausedAt ?? now).timeIntervalSince(startDate) - pausedDuration)
+        let points = downsampleRouteForStorage(route, maxPoints: routePersistMaxPoints, minDistance: routePersistMinDistanceMeters)
+        let checkpoint = RunRecoverySnapshot(sessionID: activeSessionID, startDate: startDate, duration: activeDuration,
+            distanceMeters: distance, distanceUnit: distanceUnit, activityType: activityType, plannedTarget: plannedTarget,
+            points: points.map { .init(latitude: $0.coordinate.latitude, longitude: $0.coordinate.longitude, altitude: $0.altitude, timestamp: $0.timestamp) },
+            intervalState: intervalState, recordedAt: pausedAt ?? now, completedPauses: completedPauses)
+        try CoachExecutionCoordinator.mirrorRunCheckpoint(checkpoint, context: context)
+    }
+
+    @MainActor
+    func restoreBackedUpRun(context: ModelContext) async -> Bool {
+        guard !hasRecoverableActivity else { return false }
+        attemptedRecovery = false
+        return await restoreInterruptedRun(context: context)
     }
 
     @MainActor
@@ -72,10 +100,13 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         guard !attemptedRecovery, let recoveryStore else { return false }
         attemptedRecovery = true
         let purgeGeneration = WearableWorkoutInboxService.localDataPurgeGeneration
-        guard let snapshot = await recoveryStore.load(),
+        let externalSnapshot = await recoveryStore.load()
+        let backedUpSnapshot = CoachPersistence.isLocal(context) ? (try? CoachExecutionCoordinator.backedUpRunCheckpoint(context: context)) : nil
+        guard let snapshot = externalSnapshot ?? backedUpSnapshot, snapshot.isValid,
               WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(purgeGeneration),
               startDate == nil, !hasRecoverableActivity else { return false }
-        guard UserDefaults.standard.string(forKey: recoveryIdentityKey) == snapshot.sessionID.uuidString else {
+        let recoveringBackup = externalSnapshot == nil && backedUpSnapshot != nil
+        guard recoveringBackup || UserDefaults.standard.string(forKey: recoveryIdentityKey) == snapshot.sessionID.uuidString else {
             recoveryStore.clear()
             return false
         }
@@ -94,6 +125,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
             return false
         }
         let now = Date()
+        UserDefaults.standard.set(snapshot.sessionID.uuidString, forKey: recoveryIdentityKey)
         activeSessionID = snapshot.sessionID
         startDate = snapshot.startDate
         duration = snapshot.duration
@@ -101,6 +133,8 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         distanceUnit = snapshot.distanceUnit
         activityType = snapshot.activityType
         plannedTarget = snapshot.plannedTarget
+        intervalState = snapshot.intervalState
+        intervalState?.restorePaused(at: snapshot.duration)
         let checkpointTime = snapshot.recordedAt ?? snapshot.startDate.addingTimeInterval(snapshot.duration)
         pausedAt = min(checkpointTime, now)
         completedPauses = snapshot.completedPauses ?? []
@@ -137,6 +171,30 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
     // Activity type: "running", "walking", or "hiking"
     var activityType: String = "running"
     var plannedTarget: ScheduledRunTarget? = nil
+    var intervalState: CoachRunIntervalState? = nil
+    var measuredDistance: Double? {
+        // Permission changes govern new samples; recorded measurements remain actuals.
+        route.count >= 2 ? distance : nil
+    }
+
+    func updateIntervals() {
+        intervalState?.observe(duration: duration, meters: measuredDistance)
+    }
+
+    func advanceInterval(skip: Bool = false, manualDistanceMeters: Double? = nil, effort: Double? = nil) {
+        guard intervalState?.current != nil else { return }
+        intervalState?.advance(duration: duration, meters: measuredDistance, method: skip ? .skip : .manual)
+        if var state = intervalState, let index = state.results.indices.last {
+            if let manualDistanceMeters, manualDistanceMeters.isFinite, manualDistanceMeters >= 0 {
+                state.results[index].distanceMeters = manualDistanceMeters
+                state.results[index].measurementSource = "manual"
+            }
+            state.results[index].effortScale = effort == nil ? nil : "rpe"
+            state.results[index].effort = effort
+            intervalState = state
+        }
+        checkpointRun(force: true)
+    }
     
     // Throttle for map follow updates
     var lastFollowUpdate: Date? = nil
@@ -228,6 +286,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         recoveryStore?.clear()
         activeSessionID = UUID()
         preparedSession = nil
+        intervalState = nil
         lastCheckpointAt = nil
         route.removeAll()
         distance = 0.0
@@ -259,10 +318,13 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         // Preserve it while clearing metrics for a fresh run.
         clearCurrentRun(resetPlannedTarget: false)
         startDate = Date()
+        if let steps = plannedTarget?.structuredSteps {
+            intervalState = CoachRunIntervalState(steps: steps, prescriptionRevisionID: plannedTarget?.prescriptionRevisionID, baselineMeters: 0)
+        }
         if !AppLaunchConfiguration.current.isUITest {
             maybeRequestAlwaysAuthorizationUpgradeIfNeeded()
             updateBackgroundLocationMode(isActiveRun: true)
-            manager.startUpdatingLocation()
+            if authorizationStatus == .authorizedAlways || authorizationStatus == .authorizedWhenInUse { manager.startUpdatingLocation() }
         }
         startTimer()
         isRunning = true
@@ -285,6 +347,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         stopTimer()
         isRunning = false
         if let startDate { duration = max(0, (pausedAt ?? Date()).timeIntervalSince(startDate) - pausedDuration) }
+        updateIntervals()
         checkpointRun(force: true)
 
         // Push immediate update so the widget freezes the timer
@@ -315,7 +378,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         }
         maybeRequestAlwaysAuthorizationUpgradeIfNeeded()
         updateBackgroundLocationMode(isActiveRun: true)
-        manager.startUpdatingLocation()
+        if !AppLaunchConfiguration.current.isUITest, authorizationStatus == .authorizedAlways || authorizationStatus == .authorizedWhenInUse { manager.startUpdatingLocation() }
         startTimer()
         isRunning = true
         checkpointRun(force: true)
@@ -374,7 +437,10 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         session.duration = duration
         session.notes = plannedTarget?.notes
         session.locations = locationsData
-        session.plannedSessionID = plannedTarget?.sessionID
+        session.plannedSessionID = plannedTarget?.legacySessionID
+        session.canonicalPlannedSessionID = plannedTarget?.canonicalOccurrenceID
+        session.coachExecutionID = plannedTarget?.executionID
+        if plannedTarget?.canonicalOccurrenceID != nil { session.hasMeasuredDistance = measuredDistance != nil }
         session.activityType = activityType
         session.totalAscent = elevationMetrics?.ascent
         session.totalDescent = elevationMetrics?.descent
@@ -462,6 +528,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
             guard let self = self else { return }
             if self.isRunning, let s = self.startDate {
                 self.duration = max(0, Date().timeIntervalSince(s) - self.pausedDuration)
+                self.updateIntervals()
                 self.checkpointRun()
                 if self.shouldUpdateLiveActivity(now: Date()) {
                     LiveActivityManager.shared.update(startDate: s,
@@ -541,8 +608,9 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         }
         */
         
-        // Only track distance/route while running
-        guard isRunning else { return }
+        // A queued callback after permission revocation must not extend the route.
+        guard isRunning,
+              authorizationStatus == .authorizedAlways || authorizationStatus == .authorizedWhenInUse else { return }
         defer { checkpointRun() }
 
         // Balanced sampling: use only the latest valid point per callback to avoid burst over-capture.
@@ -559,6 +627,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
             let segmentDistance = newLocation.distance(from: lastDistanceLocation)
             if segmentDistance.isFinite, segmentDistance >= 0, segmentDistance <= maxDistanceStepMeters {
                 distance += segmentDistance
+                updateIntervals()
             }
         }
         lastDistanceLocation = newLocation
@@ -596,7 +665,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
         
         // Handle error appropriately (e.g., show alert to user)
         if let clError = error as? CLError, clError.code == .denied {
-             pauseRun() // Stop run if permissions denied
+             if plannedTarget?.canonicalOccurrenceID == nil { pauseRun() } // Structured time/manual intervals remain available.
              // Maybe show an alert directing user to settings?
         }
     }
@@ -637,6 +706,9 @@ struct RunTrackingProView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     
     @State private var runTracker = RunTracker.shared
+    @State private var showingPartialConfirmation = false
+    @State private var manualIntervalDistance: Double?
+    @State private var intervalEffort: Double?
     @State private var showingAlert = false
     @State private var alertMessage = ""
     @State private var showingSettingsPrompt = false
@@ -892,7 +964,7 @@ struct RunTrackingProView: View {
     }
 
     @ViewBuilder
-    private func trackingStat(label: String, value: String) -> some View {
+    private func trackingStat(label: String, value: String, identifier: String = "") -> some View {
         VStack(spacing: 3) {
             Text(value)
                 .font(.title2.monospacedDigit())
@@ -906,6 +978,7 @@ struct RunTrackingProView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label)
         .accessibilityValue(value)
+        .accessibilityIdentifier(identifier)
     }
     
     var body: some View {
@@ -917,7 +990,7 @@ struct RunTrackingProView: View {
                         HStack(spacing: 12) {
                             Image(systemName: "location.fill")
                                 .foregroundStyle(.yellow)
-                            Text("We need your location to track this \(activityDisplayName.lowercased()).")
+                            Text(effectivePlannedTarget?.canonicalOccurrenceID != nil ? "Location is optional for time or manual intervals. Allow it to measure distance and pace." : "We need your location to track this \(activityDisplayName.lowercased()).")
                                 .font(.callout)
                                 .fixedSize(horizontal: false, vertical: true)
                             Spacer()
@@ -933,7 +1006,7 @@ struct RunTrackingProView: View {
                         HStack(spacing: 12) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.orange)
-                            Text("Location access is off. Enable it in Settings to start this \(activityDisplayName.lowercased()).")
+                            Text(effectivePlannedTarget?.canonicalOccurrenceID != nil ? "Location is off. Time and manual intervals are available; measured distance and pace are unavailable." : "Location access is off. Enable it in Settings to start this \(activityDisplayName.lowercased()).")
                                 .font(.callout)
                                 .fixedSize(horizontal: false, vertical: true)
                             Spacer()
@@ -1046,17 +1119,22 @@ struct RunTrackingProView: View {
                             .padding([.horizontal, .top])
                     }
 
+                    if let intervals = runTracker.intervalState {
+                        intervalCard(intervals).padding(.horizontal)
+                    }
+
                     // Stats Display
                     let distanceInUnit = runTracker.distance / metersPerDistanceUnit
                     ViewThatFits(in: .horizontal) {
                         HStack(spacing: 20) {
                             trackingStat(
                                 label: "Duration",
-                                value: formatDuration(runTracker.duration)
+                                value: formatDuration(runTracker.duration),
+                                identifier: "run.tracking.duration"
                             )
                             trackingStat(
                                 label: "Distance (\(runTracker.distanceUnit))",
-                                value: formattedDistance(distanceInUnit)
+                                value: runTracker.plannedTarget?.canonicalOccurrenceID != nil && runTracker.measuredDistance == nil ? "Not available" : formattedDistance(distanceInUnit)
                             )
                             trackingStat(
                                 label: "Pace per \(runTracker.distanceUnit)",
@@ -1066,11 +1144,12 @@ struct RunTrackingProView: View {
                         VStack(spacing: 12) {
                             trackingStat(
                                 label: "Duration",
-                                value: formatDuration(runTracker.duration)
+                                value: formatDuration(runTracker.duration),
+                                identifier: "run.tracking.duration"
                             )
                             trackingStat(
                                 label: "Distance (\(runTracker.distanceUnit))",
-                                value: formattedDistance(distanceInUnit)
+                                value: runTracker.plannedTarget?.canonicalOccurrenceID != nil && runTracker.measuredDistance == nil ? "Not available" : formattedDistance(distanceInUnit)
                             )
                             trackingStat(
                                 label: "Pace per \(runTracker.distanceUnit)",
@@ -1087,7 +1166,7 @@ struct RunTrackingProView: View {
                 if !runTracker.isRunning {
                     Button {
                         #if os(iOS)
-                        if AppLaunchConfiguration.current.isUITest {
+                        if AppLaunchConfiguration.current.isUITest || effectivePlannedTarget?.canonicalOccurrenceID != nil {
                             if runTracker.duration == 0 { runTracker.startRun() } else { runTracker.resumeRun() }
                             shouldFollowUser = true
                             runTracker.lastFollowUpdate = nil
@@ -1128,7 +1207,7 @@ struct RunTrackingProView: View {
 
                     if runTracker.duration > 0 {
                         Button {
-                            saveRun()
+                            requestSaveRun()
                         } label: {
                             ZStack {
                                 Label("Stop & Save", systemImage: "stop.fill")
@@ -1182,7 +1261,7 @@ struct RunTrackingProView: View {
                     .shadow(color: .black.opacity(0.25), radius: 6, x: 0, y: 4)
 
                     Button {
-                        saveRun()
+                        requestSaveRun()
                     } label: {
                         ZStack {
                             Label("Stop & Save", systemImage: "stop.fill")
@@ -1274,6 +1353,10 @@ struct RunTrackingProView: View {
         .onDisappear {
             // Intentionally do not stop tracking on dismiss; tracking persists via shared RunTracker
         }
+        .confirmationDialog("Finish before all intervals are completed?", isPresented: $showingPartialConfirmation, titleVisibility: .visible) {
+            Button("Save Partial") { saveRun() }
+            Button("Continue", role: .cancel) {}
+        } message: { Text("Known interval measurements will be preserved. Remaining work will stay unfinished.") }
         .alert("Error", isPresented: $showingAlert) {
             Button("OK") { }
         } message: {
@@ -1297,6 +1380,9 @@ struct RunTrackingProView: View {
         if runTracker.isRunning {
             // Actively running: preserve tracking and the Live Activity.
             dismiss()
+        } else if runTracker.duration > 0, runTracker.plannedTarget?.canonicalOccurrenceID != nil {
+            runTracker.checkpointRun(force: true)
+            dismiss()
         } else if runTracker.duration > 0 {
             showingDiscardConfirmation = true
         } else {
@@ -1317,6 +1403,55 @@ struct RunTrackingProView: View {
         dismiss()
     }
     
+    @ViewBuilder
+    private func intervalCard(_ state: CoachRunIntervalState) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let step = state.current {
+                Text("Interval \(state.stepIndex + 1) of \(state.steps.count): \(step.label)").font(.headline)
+                Text(step.targetSeconds.map { "Target \(Int($0)) active seconds" } ?? step.targetMeters.map { "Target \(Int($0)) meters" } ?? "Manual")
+                Text("\(Int(max(0, runTracker.duration - state.baselineDuration))) active seconds so far")
+                if let guidance = step.guidance { Text(guidance).font(.caption) }
+                TextField("Optional measured interval distance, meters", value: $manualIntervalDistance, format: .number).keyboardType(.decimalPad)
+                TextField("Optional interval RPE (0–10)", value: $intervalEffort, format: .number).keyboardType(.decimalPad)
+                HStack {
+                    Button("Complete Interval") {
+                        guard manualIntervalDistance.map({ $0.isFinite && $0 >= 0 }) ?? true,
+                              intervalEffort.map({ $0.isFinite && (0...10).contains($0) }) ?? true else {
+                            alertMessage = "Distance must be nonnegative and RPE must be from 0 to 10."; showingAlert = true; return
+                        }
+                        runTracker.advanceInterval(manualDistanceMeters: manualIntervalDistance, effort: intervalEffort)
+                        manualIntervalDistance = nil; intervalEffort = nil
+                    }
+                    Button("Skip Interval") { runTracker.advanceInterval(skip: true) }
+                }.buttonStyle(.bordered).disabled(runTracker.startDate == nil)
+            } else {
+                Text(state.completedAll ? "All intervals completed" : "Intervals resolved with skipped or partial work").font(.headline)
+            }
+            if !state.results.isEmpty {
+                NavigationLink("Review recorded intervals") {
+                    CoachRunResultsView(state: state) { result in
+                        guard var current = runTracker.intervalState, let index = current.results.firstIndex(where: { $0.id == result.id }) else { throw CoachRepositoryError.missingRecord }
+                        current.results[index] = result
+                        guard current.isValid else { throw CoachRepositoryError.invalidValue("interval measurement") }
+                        runTracker.intervalState = current
+                        runTracker.checkpointRun(force: true)
+                    }
+                }
+            }
+            if state.recoveredGap { Text("Restored paused from the last checkpoint. The interruption gap is excluded from interval results.").font(.caption).foregroundStyle(.secondary) }
+            Text("Distance and pace require GPS or your measured input. Completing an interval manually preserves its original target.").font(.caption).foregroundStyle(.secondary)
+        }
+        .padding().background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .accessibilityIdentifier("coach.run.interval")
+    }
+
+    private func requestSaveRun() {
+        if let state = runTracker.intervalState, !state.completedAll {
+            runTracker.pauseRun()
+            showingPartialConfirmation = true
+        } else { saveRun() }
+    }
+
     private func saveRun() {
         guard !isSavingRun else { return }
         isSavingRun = true
@@ -1345,11 +1480,13 @@ struct RunTrackingProView: View {
         if session.modelContext == nil { modelContext.insert(session) }
         do {
             if let completedPlannedTarget {
-                _ = RunAssistantService.shared.completeScheduledSession(
-                    completedPlannedTarget.sessionID,
-                    with: session,
-                    context: modelContext
-                )
+                if completedPlannedTarget.canonicalOccurrenceID != nil {
+                    var finalIntervals = runTracker.intervalState
+                    finalIntervals?.finishEarly(duration: session.duration, meters: runTracker.measuredDistance)
+                    try CoachExecutionCoordinator.saveRun(session, target: completedPlannedTarget, intervalState: finalIntervals, context: modelContext)
+                } else if let legacyID = completedPlannedTarget.legacySessionID {
+                    _ = RunAssistantService.shared.completeScheduledSession(legacyID, with: session, context: modelContext)
+                }
             }
             try modelContext.save()
 
@@ -1364,6 +1501,7 @@ struct RunTrackingProView: View {
             }
             let activityType = session.activityType
             Task { @MainActor in
+                guard session.hasMeasuredDistance else { return }
                 do {
                     let workout = try await HealthKitManager.shared.saveRunWorkout(
                         start: startTime,

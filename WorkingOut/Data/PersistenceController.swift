@@ -13,6 +13,11 @@ class PersistenceController {
     static let shared: PersistenceController = {
         let launchConfiguration = AppLaunchConfiguration.current
         if launchConfiguration.usesIsolatedStore {
+            #if DEBUG
+            if ProcessInfo.processInfo.environment["UITEST_COACH_DISK"] == "1" {
+                return PersistenceController(isolatedUITestReset: launchConfiguration.shouldResetState)
+            }
+            #endif
             return PersistenceController(inMemory: true, cloudKitMode: .none)
         }
         return PersistenceController()
@@ -52,11 +57,77 @@ class PersistenceController {
         return controller
     }()
     
-    let container: ModelContainer
+    private(set) var container: ModelContainer
     private(set) var isCloudBacked: Bool = false
+    private(set) var isCoachLocal: Bool = false
+    private(set) var storageError: String?
+    private(set) var storageGeneration = UUID()
+
+    static var legacyModelTypes: [any PersistentModel.Type] {
+        [ExerciseDefinition.self, WorkoutSession.self, ExerciseLog.self,
+         RunningSession.self, RunningPlan.self, RunningPlanSession.self,
+         TrainingPlan.self, PlannedSession.self, WeightEntry.self,
+         AIConversation.self, WorkoutTemplate.self, TemplateExercise.self,
+         HealthWorkoutInboxItem.self, CardioWorkoutInboxItem.self]
+    }
+
+    static var coachSchema: Schema { Schema(legacyModelTypes + CoachPersistence.modelTypes) }
+
+    #if DEBUG
+    private init(isolatedUITestReset: Bool) {
+        // A fixed, app-owned test directory lets lifecycle tests reopen synthetic
+        // history without ever selecting or clearing the normal application store.
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("UITestCoachHistory", isDirectory: true)
+        do {
+            if isolatedUITestReset, FileManager.default.fileExists(atPath: directory.path) {
+                try FileManager.default.removeItem(at: directory)
+            }
+            try CoachLocalOwnership.prepareDirectory(directory)
+            container = try Self.makeLocalContainer(url: directory.appendingPathComponent("test.store"))
+            isCoachLocal = true
+        } catch { fatalError("Could not initialize disposable lifecycle-test storage: \(error)") }
+    }
+    #endif
+
+    private static func makeLocalContainer(url: URL? = nil, inMemory: Bool = false) throws -> ModelContainer {
+        let schema = coachSchema
+        let configuration: ModelConfiguration
+        if let url {
+            configuration = ModelConfiguration(CoachPersistence.configurationName, schema: schema, url: url,
+                                               cloudKitDatabase: .none)
+        } else {
+            configuration = ModelConfiguration(CoachPersistence.configurationName, schema: schema,
+                                               isStoredInMemoryOnly: inMemory, cloudKitDatabase: .none)
+        }
+        return try ModelContainer(for: schema, configurations: [configuration])
+    }
     
     // Modify init to accept inMemory flag
     init(inMemory: Bool = false, cloudKitMode: CloudKitMode = .automatic) {
+        if inMemory {
+            do {
+                container = try Self.makeLocalContainer(inMemory: true)
+                isCoachLocal = true
+                return
+            } catch { fatalError("Could not initialize isolated preview storage: \(error)") }
+        }
+        do {
+            if let selectedURL = try CoachLocalOwnership.selectedStoreURL() {
+                guard FileManager.default.fileExists(atPath: selectedURL.path) else {
+                    throw CoachLocalOwnership.OwnershipError.unavailable("The selected local store is missing. Your retained legacy store has not been substituted for your newer history.")
+                }
+                container = try Self.makeLocalContainer(url: selectedURL)
+                isCoachLocal = true
+                return
+            }
+        } catch {
+            // Fail closed; opening the old store would expose stale history as
+            // current and could send new personal records back to CloudKit.
+            do { container = try Self.makeLocalContainer(inMemory: true) }
+            catch { fatalError("Could not initialize storage recovery screen: \(error)") }
+            storageError = error.localizedDescription
+            return
+        }
         let schema = Schema([
             ExerciseDefinition.self,
             WorkoutSession.self,
@@ -114,6 +185,42 @@ class PersistenceController {
                 fatalError("Could not initialize local ModelContainer: \(error)")
             }
         }
+    }
+
+    /// Called only from the explicit first-use storage review. The selected-store
+    /// marker is the final commit, so an interruption cannot select a partial copy.
+    func adoptLocalOwnership() async throws {
+        guard !isCoachLocal, storageError == nil else { return }
+        guard !RunTracker.shared.hasRecoverableActivity else {
+            throw CoachLocalOwnership.OwnershipError.unavailable("Save or discard the active run before changing storage.")
+        }
+        try container.mainContext.save()
+        let sourceContainer = container
+        guard let source = sourceContainer.configurations.first?.url else {
+            throw CoachLocalOwnership.OwnershipError.unavailable("The original store location could not be resolved.")
+        }
+        let before = try CoachLocalOwnership.identityInventory(sourceContainer.mainContext)
+        let contentBefore = try CoachLocalOwnership.snapshotDigest(sourceContainer.mainContext)
+        let destination = try CoachLocalOwnership.newStagingStore()
+        try await Task.detached(priority: .userInitiated) {
+            try CoachLocalOwnership.copyStore(from: source, to: destination)
+            try CoachLocalOwnership.copyAuxiliaryFiles(from: source, to: destination)
+        }.value
+        let localContainer = try Self.makeLocalContainer(url: destination)
+        let after = try CoachLocalOwnership.identityInventory(localContainer.mainContext)
+        let freshSource = ModelContext(sourceContainer)
+        let latest = try CoachLocalOwnership.identityInventory(freshSource)
+        let contentAfter = try CoachLocalOwnership.snapshotDigest(localContainer.mainContext)
+        let contentLatest = try CoachLocalOwnership.snapshotDigest(freshSource)
+        guard before == after, before == latest, contentBefore == contentAfter,
+              contentBefore == contentLatest, !sourceContainer.mainContext.hasChanges else {
+            throw CoachLocalOwnership.OwnershipError.unavailable("Records changed while preparing the local copy. Nothing was switched. Please retry.")
+        }
+        try CoachLocalOwnership.select(destination, legacy: source)
+        container = localContainer
+        isCloudBacked = false
+        isCoachLocal = true
+        storageGeneration = UUID()
     }
 
     /// The signature changes after imports, cloud merges, library edits, or a

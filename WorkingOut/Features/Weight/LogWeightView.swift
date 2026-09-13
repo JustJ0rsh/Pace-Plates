@@ -69,6 +69,7 @@ struct LogWeightView: View {
         guard let weightValue = weight else { return }
         
         let newEntry = WeightEntry(weight: weightValue, weightUnit: weightUnit)
+        if CoachPersistence.isLocal(modelContext) { newEntry.provenance = "manual" }
         modelContext.insert(newEntry)
 
         if PersistenceSave.commit(

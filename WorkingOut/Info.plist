@@ -40,6 +40,18 @@
 				<string>com.justj0rsh.paceandplates.paceplate</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Pace &amp; Plates Coach Program</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.justjorshin.paceandplates.coach-program</string>
+			</array>
+		</dict>
 	</array>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.healthcare-fitness</string>
@@ -52,7 +64,7 @@
 	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
 	<string>We add your training plan to your Calendar and set reminders for workouts.</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>We read your workouts, steps, and running routes from Health to display your activity and track progress in the app.</string>
+	<string>Read workouts, body weight, sleep, steps, and running routes from Apple Health to display your chosen activity and recovery sources.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>We save your runs to Health so your fitness data stays in one place.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
@@ -149,6 +161,25 @@
 					<string>application/x-paceandplates</string>
 					<string>application/x-paceplate</string>
 				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.justjorshin.paceandplates.coach-program</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.json</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Pace &amp; Plates Coach Program</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>coachplan</string>
+				</array>
+				<key>public.mime-type</key>
+				<string>application/json</string>
 			</dict>
 		</dict>
 	</array>

@@ -26,7 +26,7 @@ struct StreakCalendarView: View {
         let runDays = runningSessions.map { calendar.startOfDay(for: $0.date) }
         set.formUnion(runDays)
         // Cardio logged within gym sessions
-        for s in workoutSessions {
+        for s in workoutSessions where s.countsAsPerformedActivity {
             if sessionHasCardio(s) { set.insert(calendar.startOfDay(for: s.date)) }
         }
         return set
@@ -34,7 +34,7 @@ struct StreakCalendarView: View {
 
     private var liftDays: Set<Date> {
         var set = Set<Date>()
-        for s in workoutSessions {
+        for s in workoutSessions where s.countsAsPerformedActivity {
             if sessionHasStrength(s) { set.insert(calendar.startOfDay(for: s.date)) }
         }
         return set
