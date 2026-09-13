@@ -116,7 +116,7 @@ struct HomeView: View {
         let startOfWindow = last7DaysDomain.lowerBound
         
         // workoutSessions is sorted by date descending
-        let relevantSessions = workoutSessions.prefix { $0.date >= startOfWindow }
+        let relevantSessions = workoutSessions.prefix { $0.date >= startOfWindow }.filter(\.countsAsPerformedActivity)
         
         let perSession: [(date: Date, volume: Double)] = relevantSessions.map { session in
             let total = (session.exerciseLogs ?? []).reduce(0.0) { acc, log in
@@ -320,7 +320,7 @@ struct HomeView: View {
     private var activityDailyStreakDays: Int {
         let calendar = Calendar.current
         let runDays = runningSessions.map { calendar.startOfDay(for: $0.date) }
-        let workoutDays = workoutSessions.map { calendar.startOfDay(for: $0.date) }
+        let workoutDays = workoutSessions.filter(\.countsAsPerformedActivity).map { calendar.startOfDay(for: $0.date) }
         let activityDays = Set(runDays + workoutDays)
         guard !activityDays.isEmpty else { return 0 }
         let today = calendar.startOfDay(for: Date())
@@ -347,7 +347,7 @@ struct HomeView: View {
 
     private var activityWeeklyStreakWeeks: Int {
         let calendar = Calendar.current
-        let allDates = runningSessions.map { $0.date } + workoutSessions.map { $0.date }
+        let allDates = runningSessions.map { $0.date } + workoutSessions.filter(\.countsAsPerformedActivity).map { $0.date }
         guard !allDates.isEmpty else { return 0 }
         let weeksWithActivity: Set<Date> = Set(allDates.map { calendar.startOfWeek(for: $0) })
         let thisWeek = calendar.startOfWeek(for: Date())

@@ -5,6 +5,17 @@ import SwiftData
 final class ExerciseLog {
     var id: UUID = UUID()
     
+    // Optional actuals for Coach records; old nonoptional fields remain for legacy history.
+    var coachSetResultID: String? = nil
+    var actualReps: Int? = nil
+    var actualWeight: Double? = nil
+    var actualDurationSeconds: Double? = nil
+    var actualEffortScale: String? = nil
+    var actualEffort: Double? = nil
+    var performedExerciseKey: String? = nil
+    var prescriptionBasis: String? = nil
+    var loadBasis: String? = nil
+
     // Strength training fields
     var reps: Int = 0
     var weight: Double = 0

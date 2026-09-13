@@ -46,6 +46,7 @@ struct AIConversationSheet: View {
     @State private var autoFollow: Bool = true
     @State private var userIsDragging: Bool = false
     @State private var showTemplateSuccess = false
+    @State private var coachDraft: CoachLegacyDraftRequest?
     @State private var createdTemplatesCount = 0
     @State private var waitingForFirstChunk = true
     @State private var conversationID = UUID()
@@ -194,6 +195,12 @@ struct AIConversationSheet: View {
         }
         .sheet(isPresented: $showShare) {
             ShareSheet(items: [content])
+        }
+        .sheet(item: $coachDraft) { draft in
+            NavigationStack {
+                CoachPlanBuilderView(document: draft.document)
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { coachDraft = nil } } }
+            }
         }
         .sheet(isPresented: $showScheduleOptions) {
             NavigationStack {
@@ -950,6 +957,17 @@ struct AIConversationSheet: View {
     }
     
     private func saveAsTemplates() {
+        if CoachPersistence.isLocal(modelContext) {
+            do {
+                guard let structuredPlanJSON else {
+                    calendarError = "This response has no structured program. Copy its guidance into a manual Coach draft and review each prescription."
+                    return
+                }
+                let document = try CoachLegacyPlanAdapter.draft(json: structuredPlanJSON, sourceID: conversationID, goal: request.goal)
+                coachDraft = CoachLegacyDraftRequest(document: document)
+            } catch { calendarError = "Review this legacy plan manually: \(error.localizedDescription)" }
+            return
+        }
         // Create a temporary conversation object to parse
         let promptText: String
         if !request.extraContext.isEmpty {

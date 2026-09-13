@@ -25,6 +25,12 @@ struct BackupFile: Codable, Sendable {
         let healthAvgHeartRate: Double?
         let healthSourceName: String?
         let healthActivityType: String?
+        var executionStatusRaw: String? = nil
+        var plannedSessionID: UUID? = nil
+        var coachExecutionID: UUID? = nil
+        var endedAt: Date? = nil
+
+        var completionProvenance: String? = nil
     }
 
     struct ExerciseLogDTO: Codable, Sendable {
@@ -47,6 +53,16 @@ struct BackupFile: Codable, Sendable {
         let notes: String?
         let isCompleted: Bool?
         let isIsolated: Bool?
+        var coachSetResultID: String? = nil
+        var actualReps: Int? = nil
+        var actualWeight: Double? = nil
+        var actualDurationSeconds: Double? = nil
+        var actualEffortScale: String? = nil
+        var actualEffort: Double? = nil
+        var performedExerciseKey: String? = nil
+        var prescriptionBasis: String? = nil
+        var loadBasis: String? = nil
+
     }
 
     struct RunningSessionDTO: Codable, Sendable {
@@ -81,6 +97,12 @@ struct BackupFile: Codable, Sendable {
         let maxElevation: Double?
         let avgPower: Double?
         let maxPower: Double?
+        var canonicalPlannedSessionID: UUID? = nil
+        var coachExecutionID: UUID? = nil
+        var executionStatusRaw: String? = nil
+        var hasMeasuredDistance: Bool? = nil
+        var intervalResultsData: Data? = nil
+
     }
 
     struct HealthWorkoutInboxItemDTO: Codable, Sendable {
@@ -136,6 +158,9 @@ struct BackupFile: Codable, Sendable {
         let date: Date
         let weight: Double
         let weightUnit: String
+        var sourceHealthSampleID: String? = nil
+        var sourceName: String? = nil
+        var provenance: String? = nil
     }
 
     struct RunningPlanDTO: Codable, Sendable {
@@ -222,7 +247,8 @@ struct BackupFile: Codable, Sendable {
         let templateId: UUID?
     }
 
-    var formatVersion: Int? = 4
+    var formatVersion: Int? = 5
+    var coach: CoachBackupGraph? = nil
     var exportedAt: Date
     var exerciseDefinitions: [ExerciseDefinitionDTO]
     var workoutSessions: [WorkoutSessionDTO]
@@ -240,6 +266,7 @@ struct BackupFile: Codable, Sendable {
 
 @MainActor
 enum DataBackupService {
+    private static var restoreInProgress = false
     /// Upper bound for a backup file accepted by `import(from:)`. A complete
     /// multi-year history with route payloads is on the order of a few MB, so
     /// this leaves ample headroom while preventing a hostile or corrupted file
@@ -276,7 +303,7 @@ enum DataBackupService {
         }
     }
 
-    static func exportAll(context: ModelContext) async throws -> URL {
+    static func capture(context: ModelContext) throws -> BackupFile {
         // A backup must be complete. Propagate fetch failures instead of silently
         // writing an apparently successful file with an empty entity collection.
         let defs = try context.fetch(FetchDescriptor<ExerciseDefinition>())
@@ -297,7 +324,7 @@ enum DataBackupService {
         let cardioInboxItems = try context.fetch(FetchDescriptor<CardioWorkoutInboxItem>())
             .filter { $0.healthDeletionObservedAt == nil }
 
-        let file = BackupFile(
+        var file = BackupFile(
             exportedAt: Date(),
             exerciseDefinitions: defs.map { .init(id: $0.id, name: $0.name, muscleGroup: $0.muscleGroup, isUserDefined: $0.isUserDefined) },
             workoutSessions: sessions.map {
@@ -315,7 +342,12 @@ enum DataBackupService {
                     healthCalories: $0.healthCalories,
                     healthAvgHeartRate: $0.healthAvgHeartRate,
                     healthSourceName: $0.healthSourceName,
-                    healthActivityType: $0.healthActivityType
+                    healthActivityType: $0.healthActivityType,
+                    executionStatusRaw: $0.executionStatusRaw,
+                    plannedSessionID: $0.plannedSessionID,
+                    coachExecutionID: $0.coachExecutionID,
+                    endedAt: $0.endedAt,
+                    completionProvenance: $0.completionProvenance
                 )
             },
             exerciseLogs: logs.map {
@@ -337,7 +369,16 @@ enum DataBackupService {
                     avgHeartRate: $0.avgHeartRate,
                     notes: $0.notes,
                     isCompleted: $0.isCompleted,
-                    isIsolated: $0.isIsolated
+                    isIsolated: $0.isIsolated,
+                    coachSetResultID: $0.coachSetResultID,
+                    actualReps: $0.actualReps,
+                    actualWeight: $0.actualWeight,
+                    actualDurationSeconds: $0.actualDurationSeconds,
+                    actualEffortScale: $0.actualEffortScale,
+                    actualEffort: $0.actualEffort,
+                    performedExerciseKey: $0.performedExerciseKey,
+                    prescriptionBasis: $0.prescriptionBasis,
+                    loadBasis: $0.loadBasis
                 )
             },
             runningSessions: runs.map {
@@ -370,10 +411,15 @@ enum DataBackupService {
                     minElevation: $0.minElevation,
                     maxElevation: $0.maxElevation,
                     avgPower: $0.avgPower,
-                    maxPower: $0.maxPower
+                    maxPower: $0.maxPower,
+                    canonicalPlannedSessionID: $0.canonicalPlannedSessionID,
+                    coachExecutionID: $0.coachExecutionID,
+                    executionStatusRaw: $0.executionStatusRaw,
+                    hasMeasuredDistance: $0.hasMeasuredDistance,
+                    intervalResultsData: $0.intervalResultsData
                 )
             },
-            weightEntries: weights.map { .init(id: $0.id, date: $0.date, weight: $0.weight, weightUnit: $0.weightUnit) },
+            weightEntries: weights.map { .init(id: $0.id, date: $0.date, weight: $0.weight, weightUnit: $0.weightUnit, sourceHealthSampleID: $0.sourceHealthSampleID, sourceName: $0.sourceName, provenance: $0.provenance) },
             runningPlans: plans.map {
                 .init(
                     id: $0.id,
@@ -518,45 +564,93 @@ enum DataBackupService {
             }
         )
 
-        removeStaleExportFiles()
-        return try await Task.detached(priority: .userInitiated) {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
-            let data = try encoder.encode(file)
+        file.coach = try CoachBackupGraph.capture(context: context)
+        return file
+    }
 
-            let fm = FileManager.default
-            let tmp = fm.temporaryDirectory
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyyMMdd-HHmmss"
-            let name = "\(backupFileNamePrefix)\(formatter.string(from: Date())).json"
-            let url = tmp.appendingPathComponent(name)
-            // The file holds GPS routes, body weight, and AI conversations in plaintext.
-            // `.completeFileProtectionUnlessOpen` keeps it encrypted at rest whenever
-            // the device is locked, while still letting a share extension that already
-            // opened it finish reading.
-            try data.write(to: url, options: [.atomic, .completeFileProtectionUnlessOpen])
-            return url
+    static func exportAll(context: ModelContext, includePhotos: Bool = true) async throws -> URL {
+        try RunTracker.shared.checkpointForBackup(context: context)
+        let generation = WearableWorkoutInboxService.localDataPurgeGeneration
+        var file = try capture(context: context)
+        if !includePhotos { file.coach?.photos = [] }
+        removeStaleExportFiles()
+        let snapshot = file
+        let exportedURL = try await Task.detached(priority: .userInitiated) {
+            try CoachHistoryArchive.export(snapshot, includePhotos: includePhotos)
         }.value
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation), !Task.isCancelled else {
+            try? FileManager.default.removeItem(at: exportedURL)
+            throw CancellationError()
+        }
+        return exportedURL
     }
 
     static func `import`(from url: URL, context: ModelContext) async throws {
-        let purgeGeneration = WearableWorkoutInboxService.localDataPurgeGeneration
-        let file = try await Task.detached(priority: .userInitiated) {
-            let accessed = url.startAccessingSecurityScopedResource()
-            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-            if let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
-               size > maxImportFileSizeBytes {
-                throw ImportError.fileTooLarge(bytes: size)
-            }
-            let data = try Data(contentsOf: url)
-            let decoder = JSONDecoder()
-            return try decoder.decode(BackupFile.self, from: data)
+        guard !restoreInProgress else { throw CoachRepositoryError.invalidValue("one restore at a time") }
+        restoreInProgress = true
+        defer { restoreInProgress = false }
+        let generation = WearableWorkoutInboxService.localDataPurgeGeneration
+        let prepared = try await Task.detached(priority: .userInitiated) {
+            try CoachHistoryArchive.prepareImport(from: url)
         }.value
-        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(purgeGeneration) else {
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation) else {
+            prepared.discard(); throw CancellationError()
+        }
+        do { try Task.checkCancellation() } catch { prepared.discard(); throw error }
+        try await restorePrepared(prepared, context: context)
+    }
+
+    static func resumePendingRestores(context: ModelContext) async throws {
+        guard !restoreInProgress else { throw CoachRepositoryError.invalidValue("one restore at a time") }
+        restoreInProgress = true
+        defer { restoreInProgress = false }
+        let generation = WearableWorkoutInboxService.localDataPurgeGeneration
+        let pending = try await Task.detached(priority: .utility) { try CoachHistoryArchive.pendingRestores() }.value
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation), !Task.isCancelled else {
+            for var prepared in pending {
+                try prepared.markForRollback(); prepared.rollbackOnly = true
+                try await restorePrepared(prepared, context: context)
+            }
             throw CancellationError()
         }
-        try Task.checkCancellation()
+        for prepared in pending { try await restorePrepared(prepared, context: context) }
+    }
 
+    private static func restorePrepared(_ prepared: CoachPreparedRestore, context: ModelContext) async throws {
+        let generation = WearableWorkoutInboxService.localDataPurgeGeneration
+        let isolated = ModelContext(context.container)
+        isolated.autosaveEnabled = false
+        func rollbackAssets() async throws {
+            let referenced = CoachPersistence.isLocal(context)
+                ? Set(try ModelContext(context.container).fetch(FetchDescriptor<CoachProgressPhoto>()).map(\.assetKey)) : []
+            try await Task.detached(priority: .utility) { try prepared.rollbackAssets(keeping: referenced) }.value
+            prepared.discard()
+        }
+        if prepared.rollbackOnly { try await rollbackAssets(); return }
+        do {
+            try prepared.file.validateForRestore()
+            if prepared.file.coach?.hasPersonalRecords == true && !CoachPersistence.isLocal(context) { throw CoachRepositoryError.localOwnershipRequired }
+            try await Task.detached(priority: .userInitiated) { try prepared.installAssets() }.value
+            guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation), !Task.isCancelled else { throw CancellationError() }
+            try restore(prepared.file, context: isolated)
+            prepared.discard()
+        } catch {
+            isolated.rollback()
+            // Persist rollback intent before touching files. A second interruption
+            // therefore cannot turn a failed/canceled restore into a later import.
+            try prepared.markForRollback()
+            try await rollbackAssets()
+            throw error
+        }
+    }
+
+    /// Restores stable snapshots without rebuilding schedules from today's date.
+    /// The caller owns its isolated context and decides how to handle save failure.
+    static func restore(_ file: BackupFile, context: ModelContext) throws {
+        guard (1...5).contains(file.formatVersion ?? 1) else { throw CoachHistoryArchive.ArchiveError.invalid("Unsupported backup version") }
+        try file.validateForRestore()
+        if file.coach?.hasPersonalRecords == true && !CoachPersistence.isLocal(context) { throw CoachRepositoryError.localOwnershipRequired }
+        try file.coach?.validateMerge(context: context)
         let existingDefs = try context.fetch(FetchDescriptor<ExerciseDefinition>())
         let existingDefIDs = Set(existingDefs.map(\.id))
         var defsByNameGroup: [String: ExerciseDefinition] = {
@@ -622,7 +716,7 @@ enum DataBackupService {
             }
 
             let key = dto.name.lowercased().trimmingCharacters(in: .whitespacesAndNewlines) + "||" + dto.muscleGroup.lowercased()
-            if let existingByName = defsByNameGroup[key] {
+            if file.coach == nil, let existingByName = defsByNameGroup[key] {
                 defsById[dto.id] = existingByName
                 continue
             }
@@ -645,7 +739,7 @@ enum DataBackupService {
             }
 
             let dtoLogs = importedLogsBySessionID[dto.id] ?? []
-            if let duplicate = existingSessions.first(where: {
+            if file.coach == nil, let duplicate = existingSessions.first(where: {
                 areWorkoutSessionContentsEqual(dto: dto, logs: dtoLogs, model: $0)
             }) {
                 sessionsById[dto.id] = duplicate
@@ -668,6 +762,12 @@ enum DataBackupService {
             model.healthAvgHeartRate = dto.healthAvgHeartRate
             model.healthSourceName = dto.healthSourceName
             model.healthActivityType = dto.healthActivityType
+            model.executionStatusRaw = dto.executionStatusRaw ?? "legacy_recorded"
+            model.plannedSessionID = dto.plannedSessionID
+            model.coachExecutionID = dto.coachExecutionID
+            model.endedAt = dto.endedAt
+            model.completionProvenance = dto.completionProvenance
+
             context.insert(model)
             sessionsById[dto.id] = model
             existingSessions.append(model)
@@ -696,6 +796,16 @@ enum DataBackupService {
                 isCompleted: dto.isCompleted ?? false
             )
             model.isIsolated = dto.isIsolated ?? false
+            model.coachSetResultID = dto.coachSetResultID
+            model.actualReps = dto.actualReps
+            model.actualWeight = dto.actualWeight
+            model.actualDurationSeconds = dto.actualDurationSeconds
+            model.actualEffortScale = dto.actualEffortScale
+            model.actualEffort = dto.actualEffort
+            model.performedExerciseKey = dto.performedExerciseKey
+            model.prescriptionBasis = dto.prescriptionBasis
+            model.loadBasis = dto.loadBasis
+
 
             if let defId = dto.exerciseDefinitionId, let resolved = defsById[defId] {
                 model.exerciseDefinition = resolved
@@ -785,7 +895,7 @@ enum DataBackupService {
                 runsByBackupID[dto.id] = existing
                 continue
             }
-            if let duplicate = existingRuns.first(where: {
+            if file.coach == nil, let duplicate = existingRuns.first(where: {
                 areRunningSessionContentsEqual(dto: dto, model: $0)
             }) {
                 mergeRunningHealthLinks(from: dto, into: duplicate)
@@ -824,6 +934,11 @@ enum DataBackupService {
                 maxPower: dto.maxPower
             )
             model.isSampleData = dto.isSampleData ?? false
+            model.canonicalPlannedSessionID = dto.canonicalPlannedSessionID
+            model.coachExecutionID = dto.coachExecutionID
+            model.executionStatusRaw = dto.executionStatusRaw ?? "legacy_recorded"
+            model.hasMeasuredDistance = dto.hasMeasuredDistance ?? true
+            model.intervalResultsData = dto.intervalResultsData
             context.insert(model)
             existingRuns.append(model)
             runsByBackupID[dto.id] = model
@@ -832,11 +947,14 @@ enum DataBackupService {
         for dto in file.weightEntries {
             if existingWeightIDs.contains(dto.id) { continue }
 
-            if existingWeights.contains(where: {
+            if file.coach == nil, existingWeights.contains(where: {
                 areWeightEntryContentsEqual(dto: dto, model: $0)
             }) { continue }
 
             let model = WeightEntry(id: dto.id, date: dto.date, weight: dto.weight, weightUnit: dto.weightUnit)
+            model.sourceHealthSampleID = dto.sourceHealthSampleID
+            model.sourceName = dto.sourceName
+            model.provenance = dto.provenance ?? "manual_or_legacy"
             context.insert(model)
             existingWeights.append(model)
         }
@@ -960,6 +1078,12 @@ enum DataBackupService {
             }
             context.insert(template)
             templatesById[dto.id] = template
+        }
+
+        for dto in file.workoutSessions {
+            if let generatedID = dto.generatedTemplateID, let session = sessionsById[dto.id], session.generatedTemplate == nil {
+                session.generatedTemplate = templatesById[generatedID]
+            }
         }
 
         for dto in file.templateExercises ?? [] {
@@ -2006,6 +2130,7 @@ enum DataBackupService {
             }
         }
 
+        try file.coach?.restore(context: context)
         try context.save()
     }
 
@@ -2019,7 +2144,9 @@ enum DataBackupService {
         _ rhs: WorkoutSession
     ) -> Bool {
         if lhs.id == rhs.id { return true }
-
+        guard lhs.plannedSessionID == rhs.plannedSessionID,
+              lhs.coachExecutionID == rhs.coachExecutionID,
+              lhs.executionStatusRaw == rhs.executionStatusRaw else { return false }
         return sessionContent(for: lhs) == sessionContent(for: rhs)
             && exerciseContents(for: lhs.exerciseLogs ?? [])
                 == exerciseContents(for: rhs.exerciseLogs ?? [])
@@ -2029,7 +2156,7 @@ enum DataBackupService {
         _ lhs: RunningSession,
         _ rhs: RunningSession
     ) -> Bool {
-        lhs.id == rhs.id || runningSessionContent(for: lhs) == runningSessionContent(for: rhs)
+        lhs.id == rhs.id || (lhs.canonicalPlannedSessionID == rhs.canonicalPlannedSessionID && lhs.coachExecutionID == rhs.coachExecutionID && lhs.executionStatusRaw == rhs.executionStatusRaw && runningSessionContent(for: lhs) == runningSessionContent(for: rhs))
     }
 
     static func areWeightEntriesDefiniteDuplicates(
@@ -2108,6 +2235,7 @@ enum DataBackupService {
         let date: Date
         let weight: Double
         let weightUnit: String
+        let sourceHealthSampleID: String?
     }
 
     private static func areWorkoutSessionContentsEqual(
@@ -2233,7 +2361,7 @@ enum DataBackupService {
         dto: BackupFile.WeightEntryDTO,
         model: WeightEntry
     ) -> Bool {
-        WeightEntryContent(date: dto.date, weight: dto.weight, weightUnit: dto.weightUnit)
+        WeightEntryContent(date: dto.date, weight: dto.weight, weightUnit: dto.weightUnit, sourceHealthSampleID: dto.sourceHealthSampleID)
             == weightEntryContent(for: model)
     }
 
@@ -2241,7 +2369,8 @@ enum DataBackupService {
         WeightEntryContent(
             date: model.date,
             weight: model.weight,
-            weightUnit: model.weightUnit
+            weightUnit: model.weightUnit,
+            sourceHealthSampleID: model.sourceHealthSampleID
         )
     }
 

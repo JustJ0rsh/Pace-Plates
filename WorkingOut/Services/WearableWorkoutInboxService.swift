@@ -1297,7 +1297,8 @@ enum WearableWorkoutInboxService {
 
         let session = WorkoutSession(
             date: item.startDate,
-            title: activityDisplayName(for: item.activityType)
+            title: activityDisplayName(for: item.activityType),
+            executionStatus: .completed
         )
         applyMetrics(from: item, to: session)
         context.insert(session)

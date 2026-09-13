@@ -156,7 +156,7 @@ final class GameCenterService: NSObject {
         var bestDeadlift: Double = 0
         var sessionVolumeLbs: Double = 0
 
-        for log in logs where (log.isCompleted || log.workoutSession?.sourceTemplateID == nil)
+        for log in logs where (log.isCompleted || ((log.workoutSession == nil || log.workoutSession?.executionStatusRaw == "legacy_recorded") && log.workoutSession?.sourceTemplateID == nil))
             && (log.exerciseType ?? "strength") == "strength"
             && log.reps > 0
             && log.weight > 0 {

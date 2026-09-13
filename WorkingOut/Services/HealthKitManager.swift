@@ -121,6 +121,7 @@ final class HealthKitManager: ObservableObject {
         set.insert(HKObjectType.quantityType(forIdentifier: .heartRate)!)
         set.insert(HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning)!)
         if let t = HKObjectType.quantityType(forIdentifier: .distanceCycling) { set.insert(t) }
+        if let t = HKObjectType.quantityType(forIdentifier: .distanceSwimming) { set.insert(t) }
         if let t = HKObjectType.quantityType(forIdentifier: .distanceRowing) { set.insert(t) }
         set.insert(HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!)
         set.insert(HKObjectType.quantityType(forIdentifier: .stepCount)!)
@@ -156,6 +157,7 @@ final class HealthKitManager: ObservableObject {
         set.insert(HKSeriesType.workoutRoute())
         set.insert(HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning)!)
         if let t = HKObjectType.quantityType(forIdentifier: .distanceCycling) { set.insert(t) }
+        if let t = HKObjectType.quantityType(forIdentifier: .distanceSwimming) { set.insert(t) }
         if let t = HKObjectType.quantityType(forIdentifier: .distanceRowing) { set.insert(t) }
         set.insert(HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!)
         return set
@@ -309,20 +311,21 @@ final class HealthKitManager: ObservableObject {
         let store = self.healthStore
 
         // Prepare quantities
-        let distanceType: HKQuantityType = {
+        let distanceType: HKQuantityType? = {
             switch activityType {
-            case "cycling": return HKQuantityType.quantityType(forIdentifier: .distanceCycling)!
-            case "rowing": return HKQuantityType.quantityType(forIdentifier: .distanceRowing)!
-            default: return HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning)!
+            case "cycling": return HKQuantityType.quantityType(forIdentifier: .distanceCycling)
+            case "rowing": return HKQuantityType.quantityType(forIdentifier: .distanceRowing)
+            case "swimming": return HKQuantityType.quantityType(forIdentifier: .distanceSwimming)
+            case "running", "walking", "hiking": return HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning)
+            default: return nil
             }
         }()
-        let distanceQuantity = HKQuantity(unit: .meter(), doubleValue: distanceMeters)
-        let distanceSample = HKQuantitySample(type: distanceType,
-                                              quantity: distanceQuantity,
-                                              start: start,
-                                              end: end)
+        var additionalSamples: [HKSample] = []
+        if let distanceType, distanceMeters.isFinite, distanceMeters > 0 {
+            let distanceQuantity = HKQuantity(unit: .meter(), doubleValue: distanceMeters)
+            additionalSamples.append(HKQuantitySample(type: distanceType, quantity: distanceQuantity, start: start, end: end))
+        }
 
-        var additionalSamples: [HKSample] = [distanceSample]
         if let energyBurned {
             let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!
             let energyQuantity = HKQuantity(unit: .kilocalorie(), doubleValue: energyBurned)
@@ -340,13 +343,16 @@ final class HealthKitManager: ObservableObject {
         case "hiking": hkActivityType = .hiking
         case "cycling": hkActivityType = .cycling
         case "rowing": hkActivityType = .rowing
-        default: hkActivityType = .running
+        case "swimming": hkActivityType = .swimming
+        case "elliptical": hkActivityType = .elliptical
+        case "running": hkActivityType = .running
+        default: hkActivityType = .other
         }
 
         // Define the workout configuration
         let configuration = HKWorkoutConfiguration()
         configuration.activityType = hkActivityType
-        configuration.locationType = .outdoor
+        configuration.locationType = ["running", "walking", "hiking", "cycling"].contains(activityType) ? .outdoor : .unknown
 
         // Build the workout using HKWorkoutBuilder (iOS 17+ recommended)
         let builder = HKWorkoutBuilder(healthStore: store, configuration: configuration, device: .local())
@@ -1111,6 +1117,53 @@ final class HealthKitManager: ObservableObject {
             }
             healthStore.execute(q)
         }
+    }
+
+    struct CoachSleepCoverage: Codable, Sendable {
+        var sourceIdentifier: String?
+        var sampleCount: Int
+        var intervalCount: Int
+        var episodeStart: Date
+        var episodeEnd: Date
+        var additionalEpisodeHours: [Double]
+    }
+
+    struct CoachSleepObservation: Identifiable, Sendable {
+        var id: String
+        var sourceName: String
+        var hours: Double
+        var endDate: Date
+        var coverage: CoachSleepCoverage
+    }
+
+    /// Read only the selected wake day. Empty readable results do not reveal authorization status.
+    func coachSleep(on wakeDate: Date, timeZone: TimeZone = .current, requestAccess: Bool = false) async throws -> [CoachSleepObservation] {
+        guard HKHealthStore.isHealthDataAvailable(), let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else { return [] }
+        if requestAccess { try await healthStore.requestAuthorization(toShare: [], read: [type]) }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let dayStart = calendar.startOfDay(for: wakeDate)
+        guard let queryStart = calendar.date(byAdding: .day, value: -2, to: dayStart),
+              let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) else { return [] }
+        let samples = try await fetchSleepSamples(from: queryStart, to: dayEnd)
+        let asleepValues: Set<Int> = [HKCategoryValueSleepAnalysis.asleepCore.rawValue,
+                                     HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
+                                     HKCategoryValueSleepAnalysis.asleepREM.rawValue,
+                                     HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue]
+        let sources = Dictionary(grouping: samples) { $0.sourceRevision.source.bundleIdentifier }
+        return sources.compactMap { sourceID, values in
+            let merged = mergeIntervals(intervals: intervals(from: values, matching: asleepValues))
+            let sessions = detectSleepSessions(fromMergedAsleepIntervals: merged)
+                .filter { $0.end >= dayStart && $0.end < dayEnd }
+            guard let main = sessions.max(by: { $0.asleepSeconds < $1.asleepSeconds }) else { return nil }
+            let selectedSamples = values.filter { asleepValues.contains($0.value) && $0.endDate > main.start && $0.startDate < main.end }
+            let intervalCount = merged.filter { $0.end > main.start && $0.start < main.end }.count
+            return CoachSleepObservation(id: sourceID, sourceName: values.first?.sourceRevision.source.name ?? "Health",
+                                         hours: main.asleepSeconds / 3600, endDate: main.end,
+                                         coverage: CoachSleepCoverage(sourceIdentifier: sourceID, sampleCount: selectedSamples.count, intervalCount: intervalCount,
+                                                                      episodeStart: main.start, episodeEnd: main.end,
+                                                                      additionalEpisodeHours: sessions.filter { $0.start != main.start }.map { $0.asleepSeconds / 3600 }))
+        }.sorted { ($0.sourceName, $0.id) < ($1.sourceName, $1.id) }
     }
 
     func lastNightSleepDuration() async throws -> TimeInterval {

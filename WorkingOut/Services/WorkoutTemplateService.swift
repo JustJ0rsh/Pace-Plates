@@ -315,6 +315,7 @@ final class WorkoutTemplateService {
             sourceTemplateID: template.id
         )
         
+        session.executionStatusRaw = "in_progress"
         context.insert(session)
         
         // Create exercise logs from template exercises

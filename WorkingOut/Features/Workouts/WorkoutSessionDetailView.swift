@@ -13,6 +13,12 @@ struct WorkoutSessionDetailView: View {
     let session: WorkoutSession
     let allowDateEdit: Bool
     let isNewSession: Bool
+    @State private var showingFinishOptions = false
+    @State private var showingFinishExplanation = false
+    @State private var finishExplanation = ""
+    @State private var finishError: String?
+    @State private var coachExecution: CoachSessionExecution?
+    @State private var coachPrescription: CoachStrengthSession?
     @State private var notes: String
     @State private var titleText: String
     @State private var notesBuffer: String
@@ -49,8 +55,32 @@ struct WorkoutSessionDetailView: View {
     // MARK: Body
     
     var body: some View {
+        Group {
+            if let coachExecution, let coachPrescription {
+                CoachStrengthExecutionView(execution: coachExecution, prescription: coachPrescription)
+                    .navigationTitle(session.title)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Close") { dismiss() } } }
+            } else if session.coachExecutionID != nil {
+                ContentUnavailableView("Loading Coach workout", systemImage: "dumbbell", description: Text("Opening the saved prescription and actual results."))
+            } else { legacyBody }
+        }
+        .task {
+            guard CoachPersistence.isLocal(modelContext), let id = session.coachExecutionID else { return }
+            if let record = try? modelContext.fetch(FetchDescriptor<CoachSessionExecution>(predicate: #Predicate { $0.id == id })).first,
+               let data = record.prescriptionData,
+               case let .strength(prescription) = try? JSONDecoder().decode(CoachSessionTemplate.self, from: data) {
+                coachExecution = record; coachPrescription = prescription
+            }
+        }
+    }
+
+    private var legacyBody: some View {
         ScrollView {
             VStack(spacing: 16) {
+                if session.executionStatusRaw != "legacy_recorded" {
+                    Text(session.executionStatusRaw.replacingOccurrences(of: "_", with: " ").capitalized)
+                        .font(.headline).frame(maxWidth: .infinity, alignment: .leading)
+                }
                 // Details Tile
                 WorkoutDetailsTile(
                     session: session,
@@ -135,6 +165,13 @@ struct WorkoutSessionDetailView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 8) {
                     shareMenu
+                    if session.executionStatusRaw == "in_progress" {
+                        Button("Finish") {
+                            let logs = session.exerciseLogs ?? []
+                            if !logs.isEmpty && logs.allSatisfy(\.isCompleted) { finishUnplanned(.completed) }
+                            else { showingFinishOptions = true }
+                        }.accessibilityIdentifier("workout.finish")
+                    }
 
                     Button("Done") {
                         dismissKeyboard()
@@ -145,6 +182,20 @@ struct WorkoutSessionDetailView: View {
                 .padding(.leading, 12)
             }
         }
+        .confirmationDialog("Finish Workout", isPresented: $showingFinishOptions, titleVisibility: .visible) {
+            Button("Save Partial") { finishUnplanned(.partial) }
+            Button("Record completion with explanation") { showingFinishExplanation = true }
+            Button("Continue", role: .cancel) {}
+        } message: { Text("Some sets are unrecorded. Finishing does not mark those sets performed or invent results.") }
+        .alert("Completion explanation", isPresented: $showingFinishExplanation) {
+            TextField("What did you complete?", text: $finishExplanation)
+            Button("Cancel", role: .cancel) {}
+            Button("Record Completion") { finishUnplanned(.completed, explanation: finishExplanation) }
+                .disabled(finishExplanation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+        .alert("Unable to Finish", isPresented: Binding(get: { finishError != nil }, set: { if !$0 { finishError = nil } })) {
+            Button("OK") {}
+        } message: { Text(finishError ?? "") }
         .fullScreenCover(isPresented: $showingAddExercise) {
             AddExerciseView(workoutSession: session, onAdd: { log in
                 editingLog = log
@@ -179,6 +230,27 @@ struct WorkoutSessionDetailView: View {
     
     // MARK: Actions
 
+    private func finishUnplanned(_ status: CoachExecutionStatus, explanation: String? = nil) {
+        let oldStatus = session.executionStatusRaw
+        let oldEnd = session.endedAt
+        let oldProvenance = session.completionProvenance
+        session.executionStatusRaw = status.rawValue
+        session.endedAt = Date()
+        session.completionProvenance = explanation == nil ? "recorded" : "manual_attestation"
+        if let explanation {
+            notesBuffer = [notesBuffer, "Completion explanation: " + explanation].filter { !$0.isEmpty }.joined(separator: "\n")
+            session.notes = notesBuffer
+        }
+        do {
+            try modelContext.save()
+            StreakService.refreshAndReport(using: modelContext)
+            GameCenterService.shared.reportStrengthForSession(exerciseLogs: session.exerciseLogs, preferredWeightUnit: weightUnit)
+        } catch {
+            session.executionStatusRaw = oldStatus; session.endedAt = oldEnd; session.completionProvenance = oldProvenance
+            finishError = error.localizedDescription
+        }
+    }
+
     private func scheduleTitleSave(_ newValue: String) {
         titleSaveWorkItem?.cancel()
         let work = DispatchWorkItem { [session, modelContext] in
@@ -211,7 +283,7 @@ struct WorkoutSessionDetailView: View {
         Task { @MainActor in
             await Task.yield()
 
-            if shouldDeleteEmptyNewSession {
+            if shouldDeleteEmptyNewSession, session.coachExecutionID == nil {
                 modelContext.delete(session)
                 _ = PersistenceSave.commit(modelContext, action: "save changes")
                 return

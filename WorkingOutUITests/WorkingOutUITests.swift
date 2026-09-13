@@ -5,12 +5,366 @@ final class WorkingOutUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
+    override func record(_ issue: XCTIssue) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = "Issue screen \(Date().timeIntervalSince1970)"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        super.record(issue)
+    }
 
     func testOptimizationDataPaths() {
         let app = launchApp(startTab: "home", fixture: "optimization_checks")
         defer { app.terminate() }
         XCTAssertTrue(app.staticTexts["Optimization checks passed"].waitForExistence(timeout: 60),
                       app.staticTexts["optimization.checks"].label)
+    }
+
+    func testCoachPersistenceAndExecutionRegressions() {
+        let app = launchApp(startTab: "ai", fixture: "coach_checks")
+        defer { app.terminate() }
+        let result = app.staticTexts["coach.regression.result"]
+        XCTAssertTrue(result.waitForExistence(timeout: 15))
+        let finished = NSPredicate(format: "label BEGINSWITH %@ OR label BEGINSWITH %@", "Coach checks passed:", "Coach checks failed:")
+        expectation(for: finished, evaluatedWith: result)
+        waitForExpectations(timeout: 90)
+        print(result.label)
+        XCTAssertTrue(result.label.hasPrefix("Coach checks passed:"), result.label)
+    }
+
+    func testCoachCalendarExportRetryAndRemoval() {
+        let app = launchApp(startTab: "ai", fixture: "coach_calendar_checks")
+        defer { app.terminate() }
+        let system = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let allow = system.buttons.matching(NSPredicate(format: "label IN %@", ["Allow Full Access", "Allow"])).firstMatch
+        if allow.waitForExistence(timeout: 5) { allow.tap() }
+        let result = app.staticTexts["coach.calendar.regression.result"]
+        XCTAssertTrue(result.waitForExistence(timeout: 10))
+        let finished = NSPredicate(format: "label BEGINSWITH %@ OR label BEGINSWITH %@", "Calendar checks passed:", "Calendar checks failed:")
+        expectation(for: finished, evaluatedWith: result)
+        waitForExpectations(timeout: 45)
+        print(result.label)
+        XCTAssertTrue(result.label.hasPrefix("Calendar checks passed:"), result.label)
+    }
+
+    func testCoachImportReviewTrackingAndCheckIn() {
+        let app = launchApp(startTab: "ai", fixture: nil)
+        defer { app.terminate() }
+        waitForElement(app.buttons["coach.add_plan"])
+        app.buttons["coach.add_plan"].tap()
+        app.buttons["Paste from ChatGPT or Import File"].tap()
+        let input = app.textViews["coach.import.paste"]
+        waitForElement(input)
+        input.tap()
+        input.typeText(Self.coachProgramFixture)
+        let review = app.buttons["coach.import.review"]
+        revealCoach(review, in: app, attempts: 8)
+        review.tap()
+        XCTAssertTrue(app.navigationBars["Review Program"].waitForExistence(timeout: 15), app.debugDescription)
+        let custom = app.switches["Create the reviewed custom exercises"]
+        revealCoach(custom, in: app, attempts: 10)
+        custom.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        XCTAssertEqual(custom.value as? String, "1", "Reviewed custom-exercise creation must be explicitly selected")
+        let start = app.buttons["coach.plan.activate"]
+        revealCoach(start, in: app, attempts: 5)
+        XCTAssertTrue(start.isEnabled)
+        start.tap()
+        let saved = app.buttons["coach.plan.open_saved"]
+        revealCoach(saved, in: app, attempts: 8)
+        saved.tap()
+        let session = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "coach.today.session.")).firstMatch
+        revealCoach(session, in: app, attempts: 10)
+        session.tap()
+        waitForElement(app.buttons["coach.session.start"])
+        app.buttons["coach.session.start"].tap()
+        let set = app.buttons["coach.set.press.one"]
+        waitForElement(set)
+        set.tap()
+        let reps = app.textFields["Reps, optional"]
+        waitForElement(reps)
+        reps.tap(); reps.typeText("2")
+        let saveSet = app.buttons["coach.set.save"]
+        revealCoach(saveSet, in: app, attempts: 6)
+        saveSet.tap()
+        let finish = app.buttons["coach.workout.finish"]
+        revealCoach(finish, in: app, attempts: 6)
+        finish.tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Saved completed.")).firstMatch.waitForExistence(timeout: 5), app.debugDescription)
+    }
+
+    func testCoachDailyEntriesRetainUnknownFields() {
+        let app = launchApp(startTab: "ai", fixture: nil)
+        defer { app.terminate() }
+        let nutrition = app.buttons["coach.nutrition.open"]
+        revealCoach(nutrition, in: app, attempts: 6)
+        nutrition.tap()
+        let calories = app.textFields["Calories"]
+        waitForElement(calories)
+        calories.tap(); calories.typeText("1800")
+        let saveNutrition = app.buttons["coach.nutrition.save"]
+        revealCoach(saveNutrition, in: app, attempts: 6)
+        saveNutrition.tap()
+        XCTAssertTrue(app.staticTexts["coach.checkin.saved"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        revealCoach(nutrition, in: app, attempts: 6); nutrition.tap()
+        waitForElement(app.textFields["Calories"])
+        XCTAssertEqual(app.textFields["Calories"].value as? String, "1800.0")
+        XCTAssertEqual(app.textFields["Protein"].value as? String, "Not entered")
+        app.buttons["Done"].tap()
+        let recovery = app.buttons["coach.recovery.open"]
+        revealCoach(recovery, in: app, attempts: 6); recovery.tap()
+        let soreness = app.textFields["Soreness"]
+        revealCoach(soreness, in: app, attempts: 6); soreness.tap(); soreness.typeText("0")
+        let saveRecovery = app.buttons["coach.recovery.save"]
+        revealCoach(saveRecovery, in: app, attempts: 6); saveRecovery.tap()
+        XCTAssertTrue(app.staticTexts["coach.checkin.saved"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        revealCoach(recovery, in: app, attempts: 6); recovery.tap()
+        revealCoach(app.textFields["Soreness"], in: app, attempts: 6)
+        XCTAssertEqual(app.textFields["Soreness"].value as? String, "0")
+        XCTAssertEqual(app.textFields["Energy"].value as? String, "Not entered")
+    }
+
+    private static let coachProgramFixture = """
+    {"format":"pace-and-plates.coach-program","schemaVersion":1,"programId":"ui-program","revision":1,"title":"Coach UI Program","goal":"Exercise the reviewed tracking flow","preferredUnits":{"weight":"kg","distance":"km"},"phases":[{"id":"phase","title":"First phase","advanceMode":"scheduled"}],"sessionTemplates":[{"kind":"strength","id":"lift","title":"UI Lift","exercises":[{"id":"press","exercise":{"key":"ui-press","name":"UI Test Press","equipment":[]},"prescriptionBasis":"total","loadBasis":"addedToBodyweight","sets":[{"id":"one","role":"working","target":{"kind":"reps","min":1,"max":2}}]}]}],"weekPatterns":[{"id":"pattern","title":"Week","slots":[{"id":"first","dayOffset":0,"sessionTemplateId":"lift"},{"id":"second","dayOffset":3,"sessionTemplateId":"lift"}]}],"weeks":[{"id":"week","phaseId":"phase","weekPatternId":"pattern"}]}
+    """
+
+    func testCoachInvalidImportPreservesTextAndCanBeCorrected() {
+        let app = launchApp(startTab: "ai", fixture: nil)
+        defer { app.terminate() }
+        app.buttons["coach.add_plan"].tap()
+        app.buttons["Paste from ChatGPT or Import File"].tap()
+        let input = app.textViews["coach.import.paste"]
+        waitForElement(input)
+        XCTAssertFalse(app.buttons["coach.import.review"].isEnabled)
+        input.tap(); input.typeText("{\"broken\":true}")
+        app.buttons["coach.import.review"].tap()
+        let error = app.staticTexts["coach.import.error"]
+        revealCoach(error, in: app)
+        XCTAssertFalse(app.navigationBars["Review Program"].exists)
+        XCTAssertEqual(input.value as? String, "{\"broken\":true}")
+        input.tap()
+        input.typeKey("a", modifierFlags: .command)
+        input.typeText(XCUIKeyboardKey.delete.rawValue)
+        XCTAssertTrue((input.value as? String ?? "").isEmpty, "Correcting JSON first clears the previous text: \(input.value ?? "")")
+        input.typeText(Self.coachRecoveryFixture)
+        app.buttons["coach.import.review"].tap()
+        XCTAssertTrue(app.navigationBars["Review Program"].waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertFalse(app.staticTexts["coach.import.error"].exists)
+        // Leaving review must neither import nor activate the draft.
+        returnToCoachRoot(app)
+        app.segmentedControls["coach.section"].buttons["Program"].tap()
+        XCTAssertFalse(app.buttons["Audit Recovery Program"].exists)
+    }
+
+    func testCoachPromptPreviewCanBeCopied() {
+        let app = launchApp(startTab: "ai", fixture: nil)
+        defer { app.terminate() }
+        app.buttons["coach.add_plan"].tap()
+        app.buttons["Copy ChatGPT Prompt"].tap()
+        app.buttons["Preview Prompt"].tap()
+        let copy = app.buttons["coach.prompt.copy"]
+        revealCoach(copy, in: app, attempts: 12)
+        copy.tap()
+        XCTAssertEqual(copy.label, "Copied")
+    }
+
+    func testCoachDraftDuplicateLifecycleSkipAndAttestation() {
+        let app = launchApp(startTab: "ai", fixture: nil)
+        defer { app.terminate() }
+        openCoachReview(Self.coachRecoveryFixture, in: app)
+        let draft = app.buttons["coach.plan.save_draft"]
+        revealCoach(draft, in: app); draft.tap()
+        let saved = app.buttons["coach.plan.open_saved"]
+        revealCoach(saved, in: app); saved.tap()
+        XCTAssertTrue(app.buttons["Review Start or Resume"].waitForExistence(timeout: 5))
+        let session = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "coach.today.session.")).firstMatch
+        revealCoach(session, in: app, attempts: 10); session.tap()
+        app.buttons["coach.session.start"].tap()
+        let attestation = app.alerts["Record Completion"]
+        XCTAssertTrue(attestation.waitForExistence(timeout: 5))
+        XCTAssertFalse(attestation.buttons["Record"].isEnabled)
+        attestation.textFields.firstMatch.tap(); attestation.textFields.firstMatch.typeText("Gentle mobility")
+        attestation.buttons["Record"].tap()
+        let blocked = app.alerts["Coach"]
+        XCTAssertTrue(blocked.waitForExistence(timeout: 5), "A draft must not record actual training")
+        blocked.buttons["OK"].tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        let activate = app.buttons["Review Start or Resume"]
+        for _ in 0..<8 where !activate.isHittable { app.swipeDown() }
+        activate.tap(); app.buttons["Keep Existing Dates"].tap()
+        revealCoach(session, in: app, attempts: 10); session.tap()
+        let skip = app.buttons["coach.session.skip"]
+        revealCoach(skip, in: app); skip.tap()
+        XCTAssertEqual(skip.label, "Undo Skip")
+        XCTAssertFalse(app.buttons["coach.session.start"].exists)
+        skip.tap()
+        XCTAssertEqual(skip.label, "Skip Session")
+        app.buttons["coach.session.start"].tap()
+        XCTAssertTrue(attestation.waitForExistence(timeout: 5))
+        attestation.textFields.firstMatch.tap(); attestation.textFields.firstMatch.typeText("Completed gentle mobility")
+        XCTAssertTrue(attestation.buttons["Record"].isEnabled)
+        attestation.buttons["Record"].tap()
+        XCTAssertTrue(app.buttons["coach.session.start"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Completed"].exists)
+        returnToCoachRoot(app)
+        app.segmentedControls["coach.section"].buttons["Program"].tap()
+        openCoachReview(Self.coachRecoveryFixture, in: app)
+        let duplicate = app.buttons["Open Audit Recovery Program"]
+        revealCoach(duplicate, in: app)
+        revealCoach(app.buttons["coach.plan.save_draft"], in: app)
+        XCTAssertFalse(app.buttons["coach.plan.save_draft"].isEnabled)
+        XCTAssertFalse(app.buttons["coach.plan.activate"].isEnabled)
+    }
+
+    func testCoachUnrecordedStrengthFinishesPartialAndReopens() {
+        let app = launchApp(startTab: "ai", fixture: nil)
+        defer { app.terminate() }
+        openCoachReview(Self.coachProgramFixture, in: app)
+        let custom = app.switches["Create the reviewed custom exercises"]
+        revealCoach(custom, in: app)
+        custom.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        let activate = app.buttons["coach.plan.activate"]
+        revealCoach(activate, in: app); activate.tap()
+        let saved = app.buttons["coach.plan.open_saved"]
+        revealCoach(saved, in: app); saved.tap()
+        let session = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "coach.today.session.")).firstMatch
+        revealCoach(session, in: app, attempts: 10); session.tap()
+        app.buttons["coach.session.start"].tap()
+        let finish = app.buttons["coach.workout.finish"]
+        revealCoach(finish, in: app); finish.tap()
+        XCTAssertTrue(app.buttons["Save Partial"].waitForExistence(timeout: 5))
+        let continueButton = app.buttons["Continue"]
+        if continueButton.exists {
+            continueButton.tap()
+        } else {
+            // iOS presents the cancel action as dismissal outside the popover.
+            let lastAction = app.buttons["Record completion with explanation"].frame
+            let window = app.windows.firstMatch
+            let y = min(lastAction.maxY + 80, window.frame.maxY - 110)
+            window.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: window.frame.width / 2, dy: y - window.frame.minY)).tap()
+        }
+        let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.buttons["Save Partial"])
+        XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 5), .completed)
+        XCTAssertTrue(finish.exists)
+        finish.tap(); app.buttons["Save Partial"].tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Saved partial.")).firstMatch.waitForExistence(timeout: 5))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        revealCoach(session, in: app); session.tap()
+        XCTAssertFalse(app.buttons["coach.session.start"].exists)
+        XCTAssertFalse(app.buttons["coach.workout.finish"].exists)
+        let set = app.buttons["coach.set.press.one"]
+        XCTAssertTrue(set.waitForExistence(timeout: 5))
+        XCTAssertTrue(set.label.contains("Not recorded"), "Unperformed sets must not acquire invented actuals")
+    }
+
+    func testCoachStrengthRestoresRecordedSetAfterProcessRelaunch() {
+        let app = launchApp(startTab: "ai", fixture: nil, disk: true)
+        defer { app.terminate() }
+        openCoachReview(Self.coachProgramFixture, in: app)
+        let custom = app.switches["Create the reviewed custom exercises"]
+        revealCoach(custom, in: app)
+        custom.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        let activate = app.buttons["coach.plan.activate"]
+        revealCoach(activate, in: app); activate.tap()
+        let saved = app.buttons["coach.plan.open_saved"]
+        revealCoach(saved, in: app); saved.tap()
+        let session = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "coach.today.session.")).firstMatch
+        revealCoach(session, in: app, attempts: 10)
+        let occurrenceID = session.identifier
+        session.tap(); app.buttons["coach.session.start"].tap()
+        let set = app.buttons["coach.set.press.one"]
+        waitForElement(set); set.tap()
+        let reps = app.textFields["Reps, optional"]
+        waitForElement(reps); reps.tap(); reps.typeText("2")
+        let save = app.buttons["coach.set.save"]
+        revealCoach(save, in: app); save.tap()
+        XCTAssertTrue(set.waitForExistence(timeout: 5))
+        app.terminate()
+        app.launchEnvironment["UITEST_RESET_STATE"] = "0"
+        app.launch()
+        let recovered = app.buttons[occurrenceID]
+        revealCoach(recovered, in: app); recovered.tap()
+        XCTAssertTrue(set.waitForExistence(timeout: 10))
+        XCTAssertTrue(set.label.contains("2 reps"), "The recorded actual must survive a new app process")
+        XCTAssertFalse(set.label.contains("Not recorded"))
+        let finish = app.buttons["coach.workout.finish"]
+        revealCoach(finish, in: app); finish.tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Saved completed.")).firstMatch.waitForExistence(timeout: 5))
+        selectBackupTestTab("Workouts", in: app)
+        XCTAssertTrue(app.staticTexts["1 result"].waitForExistence(timeout: 10), "Resume must preserve one actual workout")
+    }
+
+    func testCoachCanonicalRunRestoresPausedAndSavesPartial() {
+        let app = launchApp(startTab: "ai", fixture: nil, recovery: true, disk: true)
+        defer { app.terminate() }
+        openCoachReview(Self.coachRunningFixture, in: app)
+        let activate = app.buttons["coach.plan.activate"]
+        revealCoach(activate, in: app); activate.tap()
+        let saved = app.buttons["coach.plan.open_saved"]
+        revealCoach(saved, in: app); saved.tap()
+        let session = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "coach.today.session.")).firstMatch
+        revealCoach(session, in: app, attempts: 10)
+        let occurrenceID = session.identifier
+        session.tap(); app.buttons["coach.session.start"].tap()
+        waitForElement(app.buttons["Start"]); app.buttons["Start"].tap()
+        waitForElement(app.buttons["Pause"])
+        XCTAssertTrue(app.otherElements["coach.run.interval"].exists || app.descendants(matching: .any)["coach.run.interval"].exists)
+        app.buttons["Pause"].tap()
+        waitForElement(app.buttons["Resume"])
+        let duration = app.descendants(matching: .any).matching(identifier: "run.tracking.duration").firstMatch
+        waitForElement(duration)
+        guard let pausedDuration = duration.value as? String else {
+            XCTFail("Paused run must expose its recorded duration"); return
+        }
+        app.terminate()
+        app.launchEnvironment["UITEST_RESET_STATE"] = "0"
+        app.launchEnvironment["UITEST_START_TAB"] = "home"
+        app.launch()
+        let recovered = app.alerts["Recovered unfinished activity"]
+        XCTAssertTrue(recovered.waitForExistence(timeout: 10)); recovered.buttons["OK"].tap()
+        waitForElement(app.buttons["home.activeActivity.resume"])
+        app.buttons["home.activeActivity.resume"].tap()
+        waitForElement(app.buttons["Resume"])
+        XCTAssertFalse(app.buttons["Pause"].exists, "Relaunch must not add elapsed time while away")
+        let restoredDuration = app.descendants(matching: .any).matching(identifier: "run.tracking.duration").firstMatch
+        waitForElement(restoredDuration)
+        XCTAssertEqual(restoredDuration.value as? String, pausedDuration, "A new app process must preserve the exact paused duration")
+        app.buttons["Stop & Save"].tap()
+        XCTAssertTrue(app.buttons["Save Partial"].waitForExistence(timeout: 5)); app.buttons["Save Partial"].tap()
+        XCTAssertTrue(app.buttons["home.settings.button"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["home.activeActivity.resume"].exists)
+        selectBackupTestTab("Coach", in: app)
+        returnToCoachRoot(app)
+        let completed = app.buttons[occurrenceID]
+        revealCoach(completed, in: app)
+        XCTAssertTrue(completed.label.contains("Partial"), "The exact occurrence must receive the saved run outcome")
+    }
+
+    private static let coachRunningFixture = """
+    {"format":"pace-and-plates.coach-program","schemaVersion":1,"programId":"ui-run","revision":1,"title":"Audit Running Program","goal":"Test run recovery","preferredUnits":{"weight":"kg","distance":"km"},"phases":[{"id":"phase","title":"Phase","advanceMode":"scheduled"}],"sessionTemplates":[{"kind":"running","id":"run","title":"Audit Easy Run","warmup":[],"cooldown":[],"main":[{"kind":"segment","id":"easy","activity":"run","target":{"kind":"duration","seconds":600}}]}],"weekPatterns":[{"id":"pattern","title":"Week","slots":[{"id":"first","dayOffset":0,"sessionTemplateId":"run"}]}],"weeks":[{"id":"week","phaseId":"phase","weekPatternId":"pattern"}]}
+    """
+
+    private static let coachRecoveryFixture = """
+    {"format":"pace-and-plates.coach-program","schemaVersion":1,"programId":"ui-recovery","revision":1,"title":"Audit Recovery Program","goal":"Test recovery tracking","preferredUnits":{"weight":"kg","distance":"km"},"phases":[{"id":"phase","title":"Phase","advanceMode":"scheduled"}],"sessionTemplates":[{"kind":"recovery","id":"recover","title":"Audit Mobility","instructions":"Gentle mobility"}],"weekPatterns":[{"id":"pattern","title":"Week","slots":[{"id":"first","dayOffset":0,"sessionTemplateId":"recover"}]}],"weeks":[{"id":"week","phaseId":"phase","weekPatternId":"pattern"}]}
+    """
+
+    private func openCoachReview(_ json: String, in app: XCUIApplication) {
+        let add = app.buttons["coach.add_plan"]
+        revealCoach(add, in: app); add.tap()
+        app.buttons["Paste from ChatGPT or Import File"].tap()
+        let input = app.textViews["coach.import.paste"]
+        waitForElement(input); input.tap(); input.typeText(json)
+        app.buttons["coach.import.review"].tap()
+        XCTAssertTrue(app.navigationBars["Review Program"].waitForExistence(timeout: 10), app.debugDescription)
+    }
+
+    private func returnToCoachRoot(_ app: XCUIApplication) {
+        for _ in 0..<7 {
+            if app.segmentedControls["coach.section"].exists { return }
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
+        XCTAssertTrue(app.segmentedControls["coach.section"].exists)
     }
 
     func testInterruptedRunRestoresPausedAfterRelaunch() {
@@ -161,7 +515,7 @@ final class WorkingOutUITests: XCTestCase {
 
         let coach = launchApp(startTab: "ai")
         XCTAssertTrue(coach.navigationBars["Coach"].waitForExistence(timeout: 5))
-        waitForElement(coach.buttons["coach.runningPlans"])
+        waitForElement(coach.segmentedControls["coach.section"])
         captureAppStoreScreenshot("03-coach")
         coach.terminate()
 
@@ -178,6 +532,7 @@ final class WorkingOutUITests: XCTestCase {
         weight.terminate()
 
         let runningAssistant = launchApp(startTab: "ai")
+        openLegacyCoach(in: runningAssistant)
         let runningPlans = runningAssistant.buttons["coach.runningPlans"]
         waitForElement(runningPlans)
         runningPlans.tap()
@@ -638,6 +993,7 @@ final class WorkingOutUITests: XCTestCase {
         let app = launchApp(startTab: "ai")
 
         XCTAssertTrue(app.navigationBars["Coach"].waitForExistence(timeout: 5))
+        openLegacyCoach(in: app)
         let historyButton = app.buttons["Coach history"]
         waitForElement(historyButton)
         historyButton.tap()
@@ -723,6 +1079,7 @@ final class WorkingOutUITests: XCTestCase {
 
         let coach = launchApp(startTab: "ai")
         XCTAssertTrue(coach.navigationBars["Coach"].waitForExistence(timeout: 5))
+        openLegacyCoach(in: coach)
         let runningPlans = coach.buttons["coach.runningPlans"]
         waitForElement(runningPlans)
         runningPlans.tap()
@@ -744,11 +1101,13 @@ final class WorkingOutUITests: XCTestCase {
         startTab: String,
         fixture: String? = "core_tabs",
         contentSizeCategory: String? = nil,
-        recovery: Bool = false
+        recovery: Bool = false,
+        disk: Bool = false
     ) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["UITEST_MODE"] = "1"
         if recovery { app.launchEnvironment["UITEST_RUN_RECOVERY"] = "1" }
+        if disk { app.launchEnvironment["UITEST_COACH_DISK"] = "1" }
         if let fixture {
             app.launchEnvironment["UITEST_FIXTURE"] = fixture
         }
@@ -766,7 +1125,14 @@ final class WorkingOutUITests: XCTestCase {
         return app
     }
 
+    private func openLegacyCoach(in app: XCUIApplication) {
+        let ask = app.buttons["coach.ask"]
+        waitForElement(ask)
+        ask.tap()
+    }
+
     private func openAIAsk(in app: XCUIApplication) {
+        openLegacyCoach(in: app)
         XCTAssertTrue(app.navigationBars["Coach"].waitForExistence(timeout: 5))
         let askMode = app.segmentedControls.buttons["Ask"]
         waitForElement(askMode)
@@ -832,6 +1198,30 @@ final class WorkingOutUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private func revealCoach(_ element: XCUIElement, in app: XCUIApplication, attempts: Int = 6) {
+        if !element.exists { _ = element.waitForExistence(timeout: 2) }
+        for attempt in 0...attempts {
+            if element.exists && element.isHittable { return }
+            guard attempt < attempts else { break }
+            if let scroller = (app.collectionViews.allElementsBoundByIndex + app.scrollViews.allElementsBoundByIndex)
+                .last(where: { $0.frame.width > 0 && $0.frame.height > 0 && $0.frame.intersects(app.frame) }) {
+                let frame = scroller.frame
+                let keyboard = app.keyboards.firstMatch
+                let keyboardTop = keyboard.exists && keyboard.frame.height > 0 ? keyboard.frame.minY : app.frame.maxY
+                let tabTop = app.tabBars.allElementsBoundByIndex.filter { $0.frame.minY > app.frame.midY && $0.frame.height > 0 }.map { $0.frame.minY }.min() ?? app.frame.maxY
+                let bottom = min(frame.maxY, keyboardTop, tabTop, app.frame.maxY) - 20
+                let top = max(frame.minY, app.frame.minY) + 40
+                guard bottom > top + 30 else { break }
+                let towardTop = element.exists && element.frame.maxY <= top
+                let origin = scroller.coordinate(withNormalizedOffset: .zero)
+                let start = origin.withOffset(CGVector(dx: 40, dy: (towardTop ? top : bottom) - frame.minY))
+                let end = origin.withOffset(CGVector(dx: 40, dy: (towardTop ? bottom : top) - frame.minY))
+                start.press(forDuration: 0.05, thenDragTo: end)
+            } else { app.swipeUp() }
+        }
+        XCTFail("Expected Coach control to become visible: \(element)\n\(app.debugDescription)")
     }
 
     private func reveal(_ element: XCUIElement, in app: XCUIApplication, attempts: Int = 6) {

@@ -18,6 +18,8 @@ struct ContentView: View {
     @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
     @State private var selectedTab = AppLaunchConfiguration.current.initialTabSelection
     @Binding var importedWorkout: SharedWorkoutSession?
+    @Binding var importedCoachProgram: CoachImportRequest?
+    @State private var restoreError: String?
     
     // Error handling moved to App level
     // @State private var showImportError: Bool = false
@@ -37,7 +39,7 @@ struct ContentView: View {
                 .tabItem { Label("Workouts", systemImage: "figure.strengthtraining.traditional") }
                 .tag(1)
 
-            NavigationStack { AIPlannerView() }
+            NavigationStack { CoachHomeView() }
                 .tabItem { Label("Coach", systemImage: "sparkles.rectangle.stack.fill") }
                 .tag(2)
 
@@ -55,6 +57,12 @@ struct ContentView: View {
             if launchConfiguration.isUITest && launchConfiguration.fixtureName == "optimization_checks" {
                 OptimizationRegressionChecksView()
             }
+            if launchConfiguration.isUITest && launchConfiguration.fixtureName == "coach_checks" {
+                CoachRegressionChecksView()
+            }
+            if launchConfiguration.isUITest && launchConfiguration.fixtureName == "coach_calendar_checks" {
+                CoachCalendarRegressionChecksView()
+            }
         }
         #endif
         .background(AppTheme.backgroundColor.ignoresSafeArea())
@@ -64,10 +72,26 @@ struct ContentView: View {
         .toolbarBackground(.visible, for: .tabBar)
         .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .tabBar)
         .modelContainer(persistenceController.container)
+        .id(persistenceController.storageGeneration)
+        .overlay {
+            if let error = persistenceController.storageError {
+                ContentUnavailableView("Your history needs attention", systemImage: "externaldrive.badge.exclamationmark",
+                                       description: Text(error + " Close and reopen the app to retry. No records have been deleted."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(AppTheme.backgroundColor)
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange).receive(on: RunLoop.main)) { _ in
             persistenceController.reconcileExerciseLibraryIfNeeded()
         }
         .task {
+            if persistenceController.isCoachLocal {
+                do {
+                    try CoachRepository(context: persistenceController.container.mainContext).recoverPhotoImports()
+                    try await DataBackupService.resumePendingRestores(context: persistenceController.container.mainContext)
+                }
+                catch { restoreError = error.localizedDescription }
+            }
             showRecoveredRun = await RunTracker.shared.restoreInterruptedRun(context: persistenceController.container.mainContext)
         }
         .onChange(of: scenePhase) { _, phase in
@@ -185,6 +209,15 @@ struct ContentView: View {
         .sheet(item: $importedWorkout) { session in
             WorkoutImportView(sharedSession: session)
         }
+        .sheet(item: $importedCoachProgram) { request in
+            NavigationStack {
+                CoachPlanImportView(text: request.text)
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { importedCoachProgram = nil } } }
+            }
+        }
+        .alert("History Restore Needs Attention", isPresented: Binding(get: { restoreError != nil }, set: { if !$0 { restoreError = nil } })) {
+            Button("OK", role: .cancel) { restoreError = nil }
+        } message: { Text(restoreError ?? "") }
 
     }
 }
@@ -211,7 +244,7 @@ extension ContentView {
 }
 
 #Preview {
-    ContentView(importedWorkout: .constant(nil))
+    ContentView(importedWorkout: .constant(nil), importedCoachProgram: .constant(nil))
         // Provide a container specifically for the preview
         .modelContainer(PersistenceController.preview.container)
 } 

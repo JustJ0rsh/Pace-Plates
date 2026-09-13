@@ -364,6 +364,8 @@ struct WorkoutLogView: View {
                 Button("Delete", role: .destructive) {
                     if let session = pendingDeleteSession {
                         withAnimation {
+                            do { try CoachDeletionService.detachActual(workoutID: session.id, context: modelContext) }
+                            catch { saveErrorMessage = error.localizedDescription; return }
                             modelContext.delete(session)
                             _ = PersistenceSave.commit(
                                 modelContext,
@@ -430,7 +432,12 @@ struct WorkoutLogView: View {
 
     private func deleteWorkoutSessions(offsets: IndexSet) {
         withAnimation {
-            offsets.map { workoutSessions[$0] }.forEach(modelContext.delete)
+            do {
+                for session in offsets.map({ workoutSessions[$0] }) {
+                    try CoachDeletionService.detachActual(workoutID: session.id, context: modelContext)
+                    modelContext.delete(session)
+                }
+            } catch { saveErrorMessage = error.localizedDescription; return }
             _ = PersistenceSave.commit(
                 modelContext,
                 action: "delete workout sessions",

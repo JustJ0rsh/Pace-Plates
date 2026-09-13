@@ -146,6 +146,9 @@ struct HomeTodayCard: View {
             .accessibilityLabel(activeActivityAccessibilityLabel)
             .accessibilityHint("Opens the active activity.")
             .accessibilityIdentifier("home.activeActivity.resume")
+        } else if CoachPersistence.isLocal(modelContext),
+                  trainingPlans.contains(where: { $0.status == "active" && $0.currentRevisionID != nil }) {
+            CoachTodayView(compact: true)
         } else if let candidate = homePlanSessionCandidate {
             hero(
                 icon: candidate.icon,

@@ -17,13 +17,21 @@ struct RunRecoverySnapshot: Codable, Sendable {
     let activityType: String
     let plannedTarget: ScheduledRunTarget?
     let points: [Point]
+    var intervalState: CoachRunIntervalState? = nil
     var recordedAt: Date? = nil
     var completedPauses: [DateInterval]? = nil
 
     var isValid: Bool {
-        duration.isFinite && duration >= 0 && distanceMeters.isFinite && distanceMeters >= 0 &&
+        (intervalState?.isValid ?? true)
+        && (plannedTarget?.canonicalOccurrenceID == nil || (plannedTarget?.executionID != nil
+            && intervalState != nil && intervalState?.steps == plannedTarget?.structuredSteps
+            && intervalState?.prescriptionRevisionID == plannedTarget?.prescriptionRevisionID))
+        && (plannedTarget?.structuredSteps.map { CoachRunIntervalState(steps: $0, prescriptionRevisionID: plannedTarget?.prescriptionRevisionID).isValid } ?? true)
+        && duration.isFinite && duration >= 0 && distanceMeters.isFinite && distanceMeters >= 0 &&
         startDate.timeIntervalSince1970.isFinite && ["mi", "km"].contains(distanceUnit) &&
-        points.allSatisfy {
+        (recordedAt.map { $0.timeIntervalSince1970.isFinite } ?? true) &&
+        (completedPauses?.allSatisfy { $0.start.timeIntervalSince1970.isFinite && $0.end.timeIntervalSince1970.isFinite && $0.end >= $0.start } ?? true) &&
+        points.count <= 1_400 && points.allSatisfy {
             $0.latitude.isFinite && (-90...90).contains($0.latitude) &&
             $0.longitude.isFinite && (-180...180).contains($0.longitude) &&
             $0.altitude.isFinite && $0.timestamp.timeIntervalSince1970.isFinite
@@ -65,7 +73,8 @@ final class RunRecoveryStore: @unchecked Sendable {
     func load() async -> RunRecoverySnapshot? {
         await withCheckedContinuation { continuation in
             queue.async { [self] in
-                guard let data = try? Data(contentsOf: url),
+                guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 16 * 1_024 * 1_024,
+                      let data = try? Data(contentsOf: url),
                       let snapshot = try? JSONDecoder().decode(RunRecoverySnapshot.self, from: data),
                       snapshot.isValid else {
                     continuation.resume(returning: nil)

@@ -22,6 +22,8 @@ final class TrainingPlanService {
     ) -> TrainingPlan? {
         let allPlans = (try? context.fetch(FetchDescriptor<TrainingPlan>())) ?? []
         let existing = allPlans.first { $0.sourceAIConversationID == conversation.id }
+        // Authored revisions and stored schedules are canonical once adopted by Coach.
+        if let existing, existing.currentRevisionID != nil { return existing }
         let startDate = calendar.startOfDay(for: Date())
 
         #if canImport(FoundationModels)
@@ -155,6 +157,7 @@ final class TrainingPlanService {
     func syncRunningPlan(_ runningPlan: RunningPlan, context: ModelContext) -> TrainingPlan {
         let allPlans = (try? context.fetch(FetchDescriptor<TrainingPlan>())) ?? []
         let existing = allPlans.first { $0.sourceRunningPlanID == runningPlan.id }
+        if let existing, existing.currentRevisionID != nil { return existing }
         let plan = existing ?? TrainingPlan(
             title: runningPlan.name,
             goal: runningPlan.primaryGoal,
@@ -256,7 +259,8 @@ final class TrainingPlanService {
         }
 
         let refreshed = (try? context.fetch(FetchDescriptor<TrainingPlan>())) ?? []
-        if !refreshed.contains(where: { $0.status == "active" }),
+        if !refreshed.contains(where: { $0.currentRevisionID != nil }),
+           !refreshed.contains(where: { $0.status == "active" }),
            let newest = rebuilt.first ?? refreshed
             .filter({ $0.status != "archived" })
             .sorted(by: { $0.updatedAt > $1.updatedAt })
@@ -274,9 +278,11 @@ final class TrainingPlanService {
         var changed = false
 
         for run in runs {
-            guard let plannedID = run.plannedSessionID,
+            guard run.canonicalPlannedSessionID == nil, let plannedID = run.plannedSessionID,
                   let session = byID[plannedID],
-                  session.activityType == "run" else { continue }
+                  session.activityType == "run",
+                  session.revisionID == nil,
+                  !["partial", "skipped"].contains(session.status) else { continue }
             if session.status != "completed" || session.completedRunningSessionID != run.id {
                 session.status = "completed"
                 session.completedAt = run.date
@@ -338,6 +344,12 @@ final class TrainingPlanService {
     }
 
     private func activatePlan(_ plan: TrainingPlan, among plans: [TrainingPlan], context: ModelContext) {
+        // Authored program lifecycle is controlled by reviewed Coach actions,
+        // including the deliberate absence of an active program after a pause.
+        if plans.contains(where: { $0.currentRevisionID != nil }) {
+            plan.status = "draft"
+            return
+        }
         for other in plans where other.id != plan.id && other.status == "active" {
             other.status = "draft"
             other.updatedAt = Date()

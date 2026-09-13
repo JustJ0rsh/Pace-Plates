@@ -258,7 +258,8 @@ enum DebugDataGenerator {
 
         let session = WorkoutSession(
             date: start,
-            title: "Replacement Linked Workout"
+            title: "Replacement Linked Workout",
+            executionStatus: .legacyRecorded
         )
         session.healthWorkoutUUID = originalUUID
         session.healthDuration = duration
@@ -458,7 +459,7 @@ enum DebugDataGenerator {
         for fixture in workoutFixtures {
             guard let date = calendar.date(byAdding: .day, value: -fixture.dayOffset, to: today) else { continue }
             let sessionDate = calendar.date(byAdding: .hour, value: 18, to: date) ?? date
-            let session = WorkoutSession(date: sessionDate, notes: nil, title: fixture.title)
+            let session = WorkoutSession(date: sessionDate, notes: nil, title: fixture.title, executionStatus: .legacyRecorded)
             session.isSampleData = true
             context.insert(session)
 
@@ -701,7 +702,7 @@ enum DebugDataGenerator {
         components.minute = Int.random(in: 0...59)
         let sessionDate = calendar.date(from: components) ?? date
 
-        let session = WorkoutSession(date: sessionDate, notes: nil, title: title)
+        let session = WorkoutSession(date: sessionDate, notes: nil, title: title, executionStatus: .legacyRecorded)
         session.isSampleData = true
         context.insert(session)
 

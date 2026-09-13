@@ -357,7 +357,7 @@ struct RunLogView: View {
                                                 Image(systemName: activityIcon(for: session.activityType))
                                                     .font(.caption)
                                                     .foregroundStyle(AppTheme.accentColor)
-                                                Text("\(String(format: "%.2f", convertedDistance)) \(unitLabel)")
+                                                Text(session.hasMeasuredDistance ? "\(String(format: "%.2f", convertedDistance)) \(unitLabel)" : "Distance unavailable")
                                                     .font(.subheadline)
                                                 Text("•")
                                                     .foregroundStyle(AppTheme.secondaryTextColor)
@@ -923,6 +923,8 @@ struct RunLogView: View {
     
     private func deleteRunningSession(_ session: RunningSession, action: String) {
         withAnimation {
+            do { try CoachDeletionService.detachActual(runID: session.id, context: modelContext) }
+            catch { saveErrorMessage = error.localizedDescription; return }
             if let inboxItems = try? modelContext.fetch(
                 FetchDescriptor<CardioWorkoutInboxItem>()
             ) {
@@ -2266,7 +2268,7 @@ private struct RunQuickViewSheet: View {
                 }
 
                 HStack(spacing: 12) {
-                    quickMetric(title: "Distance", value: String(format: "%.2f %@", displayDistance, preferredDistanceUnit))
+                    quickMetric(title: "Distance", value: session.hasMeasuredDistance ? String(format: "%.2f %@", displayDistance, preferredDistanceUnit) : "Not available")
                     quickMetric(title: "Time", value: formattedDuration)
                 }
 
@@ -2446,6 +2448,9 @@ struct RunSessionDetailView: View {
                 // Overview Tab
                 ScrollView {
                     VStack(spacing: 24) {
+                        if session.intervalResultsData != nil {
+                            NavigationLink("Review structured interval results") { CoachSavedRunResultsView(session: session) }
+                        }
                         // Prominent Time & Distance Display
                         HStack(spacing: 40) {
                             VStack(spacing: 4) {
@@ -2458,7 +2463,7 @@ struct RunSessionDetailView: View {
                             }
                             
                             VStack(spacing: 4) {
-                                Text(String(format: "%.2f", session.distance))
+                                Text(session.hasMeasuredDistance ? String(format: "%.2f", session.distance) : "Not available")
                                     .font(.system(size: 36, weight: .bold, design: .rounded))
                                     .foregroundColor(AppTheme.textColor)
                                 Text(session.distanceUnit.uppercased())
@@ -2984,7 +2989,7 @@ struct RunStatsView: View {
     
     // Average pace
     private var averagePace: String {
-        guard session.distance > 0 else { return "N/A" }
+        guard session.hasMeasuredDistance, session.distance > 0 else { return "N/A" }
         let timePerUnit = session.duration / session.distance
         return formatPaceTime(timePerUnit)
     }
@@ -2999,7 +3004,7 @@ struct RunStatsView: View {
     
     // Calories per mile/km
     private var caloriesPerUnit: String {
-        guard session.distance > 0 else { return "N/A" }
+        guard session.hasMeasuredDistance, session.distance > 0 else { return "N/A" }
         let calories = session.calories ?? estimatedCalories()
         let perUnit = calories / session.distance
         return String(format: "%.0f kcal/%@", perUnit, session.distanceUnit)

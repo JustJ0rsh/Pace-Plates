@@ -22,12 +22,13 @@ struct WorkingOutXApp: App {
     }
     
     @State private var importedWorkout: SharedWorkoutSession?
+    @State private var importedCoachProgram: CoachImportRequest?
     @State private var showImportError: Bool = false
     @State private var importErrorMessage: String = ""
 
     var body: some Scene {
         WindowGroup {
-            ContentView(importedWorkout: $importedWorkout)
+            ContentView(importedWorkout: $importedWorkout, importedCoachProgram: $importedCoachProgram)
                 .onOpenURL { url in
                     handleIncomingWorkout(url)
                 }
@@ -39,11 +40,20 @@ struct WorkingOutXApp: App {
         }
     }
 
-    /// Workouts only arrive as `.paceandplates` / `.paceplate` / `.ppworkout`
-    /// documents (declared in Info.plist). The app registers no custom URL
+    /// Workout documents keep their existing routes; Coach also accepts its
+    /// registered program type and JSON. The app registers no custom URL
     /// scheme, so any non-file URL is ignored rather than parsed.
     private func handleIncomingWorkout(_ url: URL) {
         guard url.isFileURL else { return }
+        if ["coachplan", "json"].contains(url.pathExtension.lowercased()) {
+            Task { @MainActor in
+                do {
+                    let text = try await Task.detached { try CoachProgramResources.readFile(url) }.value
+                    importedCoachProgram = CoachImportRequest(text: text)
+                } catch { presentImportError(error.localizedDescription) }
+            }
+            return
+        }
         do {
             importedWorkout = try WorkoutSharingService.shared.parseWorkoutFile(url: url)
         } catch let limitError as SharedWorkoutImportError {

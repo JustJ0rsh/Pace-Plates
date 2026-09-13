@@ -209,7 +209,8 @@ final class RunAssistantService {
         with run: RunningSession,
         context: ModelContext
     ) -> Bool {
-        guard let session = fetchSession(id: sessionID, context: context) else {
+        guard run.canonicalPlannedSessionID == nil,
+              let session = fetchSession(id: sessionID, context: context) else {
             return false
         }
 
@@ -299,7 +300,7 @@ final class RunAssistantService {
         }
 
         let eligibleRuns = runs
-            .filter { ["running", "walking", "hiking"].contains($0.activityType) && $0.date >= activePlan.startDate }
+            .filter { $0.canonicalPlannedSessionID == nil && ["running", "walking", "hiking"].contains($0.activityType) && $0.date >= activePlan.startDate }
             .sorted { $0.date < $1.date }
 
         var pendingSessions = sessions

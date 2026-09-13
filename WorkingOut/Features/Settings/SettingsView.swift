@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 import HealthKit
 import CoreLocation
 import UIKit
+import UserNotifications
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
@@ -517,6 +518,12 @@ struct SettingsView: View {
                 .disabled(isProcessingBackup)
             }
 
+            Section("Backup contents") {
+                Toggle("Include progress photos", isOn: $includeCoachPhotosInBackup)
+                Text(includeCoachPhotosInBackup ? "History backup includes app-owned photos and their metadata." : "History backup excludes progress photos. Your app copies remain on this device.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             Section("Data") {
                 Button {
                     confirmDedup = true
@@ -585,7 +592,7 @@ struct SettingsView: View {
                     : "This removes Pace & Plates data from this device. It does not delete workouts or measurements from Apple Health. This action cannot be undone."
             )
         }
-        .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
+        .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json, .data]) { result in
             switch result {
             case .success(let url):
                 importFrom(url: url)
@@ -645,6 +652,7 @@ struct SettingsView: View {
     private struct IdentifiableURL: Identifiable { let id = UUID(); let url: URL }
     // Bind the share sheet to its file so the first presentation has content.
     @State private var exportURL: IdentifiableURL? = nil
+    @State private var includeCoachPhotosInBackup = true
     @State private var lastExportedBackupURL: URL? = nil
     @State private var showAlert: Bool = false
     @State private var alertMessage: String = ""
@@ -970,6 +978,10 @@ struct SettingsView: View {
     private func importWeightsFromHealth(
         expectedPurgeGeneration: Int
     ) async throws -> Int {
+        if CoachPersistence.isLocal(modelContext) {
+            try ensureHealthImportIsCurrent(expectedPurgeGeneration)
+            return try await CoachWeightRepository.importHealth(context: modelContext, preferredUnit: weightUnit)
+        }
         let history = try await HealthKitManager.shared.getWeightHistory()
         try ensureHealthImportIsCurrent(expectedPurgeGeneration)
         let existing = try modelContext.fetch(FetchDescriptor<WeightEntry>())
@@ -1047,7 +1059,7 @@ struct SettingsView: View {
         Task { @MainActor in
             defer { isProcessingBackup = false }
             do {
-                let url = try await DataBackupService.exportAll(context: modelContext)
+                let url = try await DataBackupService.exportAll(context: modelContext, includePhotos: includeCoachPhotosInBackup)
                 lastExportedBackupURL = url
                 exportURL = IdentifiableURL(url: url)
             } catch {
@@ -1064,6 +1076,7 @@ struct SettingsView: View {
             defer { isProcessingBackup = false }
             do {
                 try await DataBackupService.import(from: url, context: modelContext)
+                await RunTracker.shared.restoreBackedUpRun(context: modelContext)
                 PersistenceController.shared.reconcileExerciseLibraryIfNeeded(force: true)
                 alertMessage = "Import complete"
                 Haptics.playImpact(.light)
@@ -1174,6 +1187,12 @@ struct SettingsView: View {
         // Prevent a Health query that is currently suspended on metric reads
         // from repopulating SwiftData after this app-local purge completes.
         WearableWorkoutInboxService.prepareForLocalDataPurge()
+        if CoachPersistence.isLocal(modelContext) {
+            try CoachDeletionService.markAllForDeletion(context: modelContext)
+        } else {
+            for session in try modelContext.fetch(FetchDescriptor<PlannedSession>()) { modelContext.delete(session) }
+            for plan in try modelContext.fetch(FetchDescriptor<TrainingPlan>()) { modelContext.delete(plan) }
+        }
 
         // Delete children first, then parents
         let logItems = try modelContext.fetch(FetchDescriptor<ExerciseLog>())
@@ -1205,6 +1224,13 @@ struct SettingsView: View {
         weights.forEach { modelContext.delete($0) }
         try modelContext.save()
         WearableWorkoutInboxService.completeLocalDataPurge()
+        if CoachPersistence.isLocal(modelContext) {
+            try CoachDeletionService.removeAssetsAfterPurge()
+            CoachRestNotifications.cancelAll()
+            UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
+                UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: requests.filter { $0.identifier.hasPrefix("coach.session.") }.map(\.identifier))
+            }
+        }
         RunTracker.shared.pauseRun()
         RunTracker.shared.clearCurrentRun(resetActivityType: true)
         LiveActivityManager.shared.end()
