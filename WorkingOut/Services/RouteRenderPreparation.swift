@@ -5,6 +5,7 @@ import MapKit
 /// Pace bucket used to color route polylines. Kept as a plain enum so the
 /// preparation work can run off the main actor and the view decides the colors.
 enum RoutePaceClass: Sendable {
+    case unknown
     case walk
     case jog
     case run
@@ -44,19 +45,20 @@ struct RouteRenderPreparation: Sendable {
               !decoded.isEmpty else {
             return .empty
         }
-        let simplified = simplifyForMap(decoded.map(\.cl), parameters: parameters)
-        let segments = buildSegments(from: simplified, duration: duration, parameters: parameters)
+        let retained = simplifyForMap(decoded, parameters: parameters)
+        let simplified = retained.map(\.cl)
+        let segments = buildSegments(from: retained, parameters: parameters)
         return RouteRenderPreparation(decoded: decoded, simplified: simplified, segments: segments)
     }
 
     // MARK: - Simplification
 
     private static func simplifyForMap(
-        _ points: [CLLocationCoordinate2D],
+        _ points: [RunCoordinate],
         parameters: RouteRenderParameters
-    ) -> [CLLocationCoordinate2D] {
+    ) -> [RunCoordinate] {
         guard points.count > 2 else { return points }
-        var reduced: [CLLocationCoordinate2D] = [points[0]]
+        var reduced: [RunCoordinate] = [points[0]]
         reduced.reserveCapacity(min(points.count, parameters.mapSimplifyMaxPoints))
         var last = CLLocation(latitude: points[0].latitude, longitude: points[0].longitude)
 
@@ -71,7 +73,7 @@ struct RouteRenderPreparation: Sendable {
         return trimToMaxPoints(reduced, maxPoints: parameters.mapSimplifyMaxPoints)
     }
 
-    private static func trimToMaxPoints(_ points: [CLLocationCoordinate2D], maxPoints: Int) -> [CLLocationCoordinate2D] {
+    private static func trimToMaxPoints(_ points: [RunCoordinate], maxPoints: Int) -> [RunCoordinate] {
         guard points.count > maxPoints, maxPoints > 2 else { return points }
         let first = points[0]
         let last = points[points.count - 1]
@@ -79,7 +81,7 @@ struct RouteRenderPreparation: Sendable {
         let interiorCount = points.count - 2
         if interiorCount <= interiorLimit { return points }
 
-        var trimmed: [CLLocationCoordinate2D] = [first]
+        var trimmed: [RunCoordinate] = [first]
         trimmed.reserveCapacity(maxPoints)
         let step = Double(interiorCount) / Double(interiorLimit)
         var lastIndex = 0
@@ -97,16 +99,10 @@ struct RouteRenderPreparation: Sendable {
     // MARK: - Pace segments
 
     private static func buildSegments(
-        from points: [CLLocationCoordinate2D],
-        duration: TimeInterval,
+        from points: [RunCoordinate],
         parameters: RouteRenderParameters
     ) -> [RouteRenderSegment] {
         guard points.count > 1 else { return [] }
-        // Stored routes carry no per-point timestamps for pace, so approximate a
-        // uniform time step from the session duration.
-        let total = Double(points.count - 1)
-        let avgDt = max(duration / max(total, 1), 1)
-
         func paceClass(forSpeed v: Double) -> RoutePaceClass {
             if v <= parameters.walkMaxSpeed { return .walk }
             if v <= parameters.jogMaxSpeed { return .jog }
@@ -118,10 +114,17 @@ struct RouteRenderPreparation: Sendable {
         var currentPoints: [CLLocationCoordinate2D] = []
 
         for i in 0..<(points.count - 1) {
-            let a = points[i]
-            let b = points[i + 1]
+            let a = points[i].cl
+            let b = points[i + 1].cl
             let distance = MKMapPoint(a).distance(to: MKMapPoint(b))
-            let pace = paceClass(forSpeed: distance / max(avgDt, 1))
+            let pace: RoutePaceClass
+            if let start = points[i].timestamp, let end = points[i + 1].timestamp,
+               end > start, end.timeIntervalSince(start).isFinite {
+                pace = paceClass(forSpeed: distance / end.timeIntervalSince(start))
+            } else {
+                // Legacy or invalid timing cannot establish a segment's speed.
+                pace = .unknown
+            }
             if currentPace == nil {
                 currentPace = pace
                 currentPoints = [a, b]

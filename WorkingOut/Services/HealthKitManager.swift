@@ -303,7 +303,8 @@ final class HealthKitManager: ObservableObject {
         distanceMeters: Double,
         energyBurned: Double? = nil,
         activityType: String = "running",
-        localSessionID: UUID? = nil
+        localSessionID: UUID? = nil,
+        pauseIntervals: [DateInterval] = []
     ) async throws -> HKWorkout {
         let store = self.healthStore
 
@@ -361,6 +362,16 @@ final class HealthKitManager: ObservableObject {
             ])
         }
         try await builder.addSamples(additionalSamples)
+        let events = pauseIntervals.flatMap { interval -> [HKWorkoutEvent] in
+            let pause = max(start, interval.start)
+            let resume = min(end, interval.end)
+            guard resume > pause else { return [] }
+            return [
+                HKWorkoutEvent(type: .pause, dateInterval: DateInterval(start: pause, duration: 0), metadata: nil),
+                HKWorkoutEvent(type: .resume, dateInterval: DateInterval(start: resume, duration: 0), metadata: nil)
+            ]
+        }
+        if !events.isEmpty { try await builder.addWorkoutEvents(events) }
         try await builder.endCollection(at: end)
 
         // Finish and save the workout
@@ -429,6 +440,44 @@ final class HealthKitManager: ObservableObject {
             }
             self.healthStore.execute(query)
         }
+    }
+
+    /// Returns the distance recorded on a workout using the activity-specific
+    /// statistics introduced for modern HealthKit workouts. Some workouts only
+    /// expose a partial value through the legacy `totalDistance` property.
+    nonisolated static func recordedDistanceMeters(for workout: HKWorkout) -> Double {
+        let statisticsDistance = distanceQuantityType(
+            for: workout.workoutActivityType
+        ).flatMap { type in
+            workout.statistics(for: type)?
+                .sumQuantity()?
+                .doubleValue(for: .meter())
+        }
+        let legacyDistance = workout.totalDistance?.doubleValue(for: .meter())
+
+        return [statisticsDistance, legacyDistance]
+            .compactMap { value in
+                guard let value, value.isFinite, value > 0 else { return nil }
+                return value
+            }
+            .max() ?? 0
+    }
+
+    nonisolated private static func distanceQuantityType(
+        for activityType: HKWorkoutActivityType
+    ) -> HKQuantityType? {
+        let identifier: HKQuantityTypeIdentifier
+        switch activityType {
+        case .cycling:
+            identifier = .distanceCycling
+        case .rowing:
+            identifier = .distanceRowing
+        case .running, .walking, .hiking:
+            identifier = .distanceWalkingRunning
+        default:
+            return nil
+        }
+        return HKQuantityType.quantityType(forIdentifier: identifier)
     }
 
     func fetchCardioWorkoutChanges(
@@ -804,7 +853,7 @@ final class HealthKitManager: ObservableObject {
         return stats.maximum
     }
 
-    private func cadenceStats(for workout: HKWorkout) async throws -> (average: Double?, maximum: Double?) {
+    func cadenceStats(for workout: HKWorkout) async throws -> (average: Double?, maximum: Double?) {
         switch workout.workoutActivityType {
         case .running, .walking, .hiking:
             break
@@ -1455,6 +1504,25 @@ final class HealthKitManager: ObservableObject {
         }
     }
     
+    /// Fetch exact saved identities without a date cutoff or recent-history limit.
+    func workoutsForUUIDs(_ uuids: Set<UUID>) async throws -> [HKWorkout] {
+        guard !uuids.isEmpty else { return [] }
+        let predicate = HKQuery.predicateForObjects(with: uuids)
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: .workoutType(), predicate: predicate,
+                limit: HKObjectQueryNoLimit, sortDescriptors: nil
+            ) { _, samples, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                continuation.resume(returning: (samples as? [HKWorkout]) ?? [])
+            }
+            healthStore.execute(query)
+        }
+    }
+
     /// Get a workout by UUID string
     func workoutForUUID(_ uuidString: String) async throws -> HKWorkout? {
         guard let uuid = UUID(uuidString: uuidString) else { return nil }

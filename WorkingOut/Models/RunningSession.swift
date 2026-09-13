@@ -17,6 +17,7 @@ final class RunningSession {
     
     // If imported from Health, store the HKWorkout UUID to prevent duplicates and allow deletions
     var healthWorkoutUUID: String? = nil
+    var healthDistanceLastAttemptAt: Date? = nil
 
     // A second wearable can record the same activity with richer metrics. Keep
     // the app/imported workout UUID as the canonical record used for deletion,

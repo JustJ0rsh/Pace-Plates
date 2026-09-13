@@ -5,6 +5,7 @@ import MapKit
 import CoreLocation
 import Charts
 import Combine
+import CoreData
 
 struct RunLogView: View {
     private static let pendingForcedEnrichmentDefaultsKey =
@@ -34,7 +35,22 @@ struct RunLogView: View {
     }
 
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: [SortDescriptor<RunningSession>(\.date, order: .reverse)]) private var runningSessions: [RunningSession] // Added sort
+    @Query private var chartSessions: [RunningSession]
+    @State private var historyPage: [RunningSession] = []
+    @State private var historyResultCount = 0
+    @State private var totalRunCount = 0
+
+    init() {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -365, to: Date()) ?? .distantPast
+        _chartSessions = Query(filter: #Predicate<RunningSession> { $0.date >= cutoff },
+                               sort: [SortDescriptor(\.date, order: .reverse)])
+    }
+
+    // Full history is fetched only by reconciliation/import operations, never
+    // by the view's render path. Visible rows use RunHistoryStore's fetch limit.
+    private var runningSessions: [RunningSession] {
+        (try? modelContext.fetch(FetchDescriptor<RunningSession>(sortBy: [SortDescriptor(\.date, order: .reverse)]))) ?? []
+    }
     @Query(filter: #Predicate<CardioWorkoutInboxItem> {
         $0.statusRaw == "pending" && $0.healthDeletionObservedAt == nil
     })
@@ -113,70 +129,22 @@ struct RunLogView: View {
         }
     }
 
-    private var filteredHistoryRuns: [RunningSession] {
-        let query = historySearchText.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        return runningSessions.filter { session in
-            guard historyRange.contains(session.date) else { return false }
-            if let historyActivityType,
-               !matchesHistoryActivity(session.activityType, selectedType: historyActivityType)
-            {
-                return false
-            }
-            guard !query.isEmpty else { return true }
-
-            let searchableValues = [
-                session.activityType,
-                activityName(for: session.activityType),
-                session.notes ?? ""
-            ]
-            return searchableValues.contains { $0.localizedCaseInsensitiveContains(query) }
-        }
-    }
-
     var body: some View {
-        let historyRuns = filteredHistoryRuns
-        let visibleHistoryRuns = Array(historyRuns.prefix(max(0, visibleRunCount)))
-        let canLoadMoreHistoryRuns = historyRuns.count > visibleHistoryRuns.count
+        let visibleHistoryRuns = historyPage
+        let canLoadMoreHistoryRuns = historyResultCount > visibleHistoryRuns.count
 
         ScrollView {
             VStack(spacing: 16) {
                 
-                // Active Run banner
-                if RunTracker.shared.isRunning || (RunTracker.shared.duration > 0 && RunTracker.shared.startDate != nil) {
-                    Button {
-                        presentRunTracking(for: RunTracker.shared.activityType)
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: activityIcon(for: RunTracker.shared.activityType))
-                                .foregroundStyle(AppTheme.accentColor)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Active \(activityName(for: RunTracker.shared.activityType)) In Progress")
-                                    .font(.headline)
-                                let dur = RunTracker.shared.duration
-                                let distMeters = RunTracker.shared.distance
-                                let unit = RunTracker.shared.distanceUnit
-                                let dist = distMeters / (unit == "km" ? 1000 : 1609.34)
-                                Text(String(format: "%@  •  %.2f %@", formatDuration(dur), dist, unit))
-                                    .font(.subheadline)
-                                    .foregroundStyle(AppTheme.secondaryTextColor)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .foregroundStyle(AppTheme.secondaryTextColor)
-                        }
-                        .padding(12)
-                        .background(AppTheme.secondaryBackgroundColor)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
+                ActiveRunBanner(activityName: activityName, activityIcon: activityIcon) { type in
+                    presentRunTracking(for: type)
                 }
-                                    
+
                 // Unified Runs tile (header + chart or placeholder)
                 let calendar = Calendar.current
                 let domain = last7DaysDomain
                 // Apply activity and date range filters before grouping
-                let filteredSessions: [RunningSession] = runningSessions.filter { s in
+                let filteredSessions: [RunningSession] = chartSessions.filter { s in
                     if runActivityFilter != "All", s.activityType != keyForActivity(runActivityFilter) {
                         return false
                     }
@@ -415,7 +383,7 @@ struct RunLogView: View {
                     }
                     .floatingTile()
 
-                    if !runningSessions.isEmpty {
+                    if totalRunCount > 0 {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack(spacing: 8) {
                                 Image(systemName: "figure.run")
@@ -428,13 +396,13 @@ struct RunLogView: View {
                                 searchText: $historySearchText,
                                 selectedRange: $historyRange,
                                 selectedCategory: $historyActivityType,
-                                resultCount: historyRuns.count,
+                                resultCount: historyResultCount,
                                 searchPrompt: "Search activities or notes",
                                 accessibilityIdentifier: "runs.history.filters",
                                 categories: historyActivityOptions
                             )
 
-                            if historyRuns.isEmpty {
+                            if historyPage.isEmpty {
                                 HistoryNoResultsView(
                                     title: "No Matching Activities",
                                     message: "Try another activity, note, or date range.",
@@ -514,7 +482,7 @@ struct RunLogView: View {
                                     Divider().padding(.top, 6).opacity(0.25)
 
                                     HStack(spacing: 10) {
-                                        Text("Showing \(visibleHistoryRuns.count) of \(historyRuns.count) activities")
+                                        Text("Showing \(visibleHistoryRuns.count) of \(historyResultCount) activities")
                                             .font(.footnote)
                                             .foregroundStyle(AppTheme.secondaryTextColor)
 
@@ -523,7 +491,7 @@ struct RunLogView: View {
                                         Button("Load 30 More") {
                                             visibleRunCount = min(
                                                 visibleRunCount + runPageSize,
-                                                historyRuns.count
+                                                historyResultCount
                                             )
                                         }
                                         .buttonStyle(.borderedProminent)
@@ -537,7 +505,7 @@ struct RunLogView: View {
                         .onAppear {
                             prefetchLocationNames()
                         }
-                        .onChange(of: runningSessions.count) {
+                        .onChange(of: totalRunCount) {
                             hasPrefetchedLocations = false
                             prefetchLocationNames()
                         }
@@ -621,7 +589,7 @@ struct RunLogView: View {
             }
             .accessibilityIdentifier("runs.ready")
             .navigationDestination(item: $navigationSessionId) { sessionId in
-                if let session = runningSessions.first(where: { $0.id == sessionId }) {
+                if let session = sessionForNavigation(id: sessionId) {
                     RunSessionDetailView(session: session)
                         .onAppear {
                             loadingSessionId = nil
@@ -688,9 +656,10 @@ struct RunLogView: View {
                 
             }
             .onAppear {
+                reloadHistory()
                 if !hasInitializedRunPagination {
                     hasInitializedRunPagination = true
-                    visibleRunCount = min(runPageSize, runningSessions.count)
+                    visibleRunCount = min(runPageSize, totalRunCount)
                 }
                 if !launchConfiguration.shouldSkipAutomationSideEffects {
                     HealthKitManager.shared.startWorkoutChangeObservationIfNeeded()
@@ -706,7 +675,7 @@ struct RunLogView: View {
                     reconcileAssistantPlanCompletions()
                 }
             }
-            .onChange(of: runningSessions.count) { oldCount, newCount in
+            .onChange(of: totalRunCount) { oldCount, newCount in
                 if oldCount == 0 && visibleRunCount == 0 && newCount > 0 {
                     visibleRunCount = min(runPageSize, newCount)
                 } else {
@@ -714,6 +683,9 @@ struct RunLogView: View {
                 }
                 reconcileAssistantPlanCompletions()
             }
+            .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave).receive(on: RunLoop.main)) { _ in reloadHistory() }
+            .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange).receive(on: RunLoop.main)) { _ in reloadHistory() }
+            .onChange(of: visibleRunCount) { reloadHistory() }
             .onChange(of: historySearchText) {
                 resetRunHistoryPagination()
             }
@@ -812,6 +784,31 @@ struct RunLogView: View {
 
     private func resetRunHistoryPagination() {
         visibleRunCount = runPageSize
+        reloadHistory()
+    }
+
+    private func reloadHistory() {
+        do {
+            let page = try RunHistoryStore.fetch(context: modelContext, search: historySearchText,
+                range: historyRange, activity: historyActivityType, limit: visibleRunCount)
+            historyPage = page.sessions
+            historyResultCount = page.matchingCount
+            totalRunCount = page.totalCount
+        } catch {
+            saveErrorMessage = "Activity history couldn't be loaded. Please try again."
+        }
+    }
+
+    private func sessionForNavigation(id: UUID) -> RunningSession? {
+        var descriptor = FetchDescriptor<RunningSession>(predicate: #Predicate { $0.id == id })
+        descriptor.fetchLimit = 1
+        return try? modelContext.fetch(descriptor).first
+    }
+
+    private func sessionForHealthUUID(_ uuid: String) -> RunningSession? {
+        var descriptor = FetchDescriptor<RunningSession>(predicate: #Predicate { $0.healthWorkoutUUID == uuid })
+        descriptor.fetchLimit = 1
+        return try? modelContext.fetch(descriptor).first
     }
 
     private func matchesHistoryActivity(_ sessionType: String, selectedType: String) -> Bool {
@@ -1150,7 +1147,7 @@ struct RunLogView: View {
                     }
                     let end = w.endDate
                     let duration = w.duration
-                    let meters = w.totalDistance?.doubleValue(for: .meter()) ?? 0
+                    let meters = HealthKitManager.recordedDistanceMeters(for: w)
                     let unit = preferredDistanceUnit // from @AppStorage
                     let value: Double = (unit == "mi") ? (meters / 1609.34) : (meters / 1000.0)
                     let uuidStr = w.uuid.uuidString
@@ -1338,7 +1335,7 @@ struct RunLogView: View {
                 }
 
             case let .unlink(healthWorkoutUUID):
-                guard let session = runningSessions.first(where: { $0.healthWorkoutUUID == healthWorkoutUUID }) else { continue }
+                guard let session = sessionsById.values.first(where: { $0.healthWorkoutUUID == healthWorkoutUUID }) else { continue }
                 // Health records and app logs are separate. Preserve the local
                 // run (including notes/routes) when Health reports a deletion;
                 // a later replacement can relink it by similarity.
@@ -1655,9 +1652,7 @@ struct RunLogView: View {
         }
 
         let didCommit: Bool? = await MainActor.run {
-            guard let session = runningSessions.first(where: {
-                $0.healthWorkoutUUID == uuid
-            }) else {
+            guard let session = sessionForHealthUUID(uuid) else {
                 return nil
             }
 
@@ -1743,7 +1738,7 @@ struct RunLogView: View {
         forWorkoutUUID uuid: String,
         forceHealthMetrics: Bool
     ) -> RunEnrichmentNeeds? {
-        guard let session = runningSessions.first(where: { $0.healthWorkoutUUID == uuid }) else { return nil }
+        guard let session = sessionForHealthUUID(uuid) else { return nil }
         return RunEnrichmentNeeds(
             needsCalories: forceHealthMetrics || (session.calories ?? 0) <= 0,
             needsRoute: session.locations.isEmpty,
@@ -1759,10 +1754,10 @@ struct RunLogView: View {
     
     private func prefetchLocationNames() {
         // Prevent duplicate prefetching on the same set of sessions
-        guard !hasPrefetchedLocations || runningSessions.count != locationCache.count else { return }
+        guard !hasPrefetchedLocations || historyPage.count != locationCache.count else { return }
 
         // Only prefetch for sessions that don't already have cached names and aren't currently being fetched
-        let sessionsToFetch = runningSessions.filter { session in
+        let sessionsToFetch = historyPage.filter { session in
             locationCache[session.id] == nil && !pendingLocationTasks.contains(session.id)
         }
 
@@ -1902,8 +1897,9 @@ enum SameBatchCardioReplacementReconciler {
             return false
         }
 
-        let candidateMeters = workout.totalDistance?
-            .doubleValue(for: .meter()) ?? 0
+        let candidateMeters = HealthKitManager.recordedDistanceMeters(
+            for: workout
+        )
         let sessionMeters = session.distanceUnit == "mi"
             ? session.distance * 1609.34
             : session.distance * 1000
@@ -2344,22 +2340,6 @@ private struct RunQuickViewSheet: View {
     }
 }
 
-struct RunCoordinate: Codable, Identifiable {
-    var id = UUID()
-    var latitude: Double
-    var longitude: Double
-    var altitude: Double? = nil // meters above sea level
-    var timestamp: Date? = nil // When this coordinate was recorded
-    var cl: CLLocationCoordinate2D { .init(latitude: latitude, longitude: longitude) }
-
-    private enum CodingKeys: String, CodingKey {
-        case latitude
-        case longitude
-        case altitude
-        case timestamp
-    }
-}
-
 // MARK: - Elevation Calculator
 struct ElevationCalculator {
     static func calculateElevationMetrics(from coordinates: [RunCoordinate]) -> (ascent: Double, descent: Double, min: Double, max: Double)? {
@@ -2437,6 +2417,7 @@ struct RunSessionDetailView: View {
 
     private static func color(for pace: RoutePaceClass) -> Color {
         switch pace {
+        case .unknown: return .gray
         case .walk: return .blue
         case .jog: return .orange
         case .run: return .red

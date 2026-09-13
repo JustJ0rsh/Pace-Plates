@@ -57,6 +57,7 @@ struct SettingsView: View {
     @AppStorage("reminderMinute") private var reminderMinute: Int = 0
     @State private var reminderTime: Date = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date()) ?? Date()
     @State private var confirmExport: Bool = false
+    @State private var isProcessingBackup = false
     @State private var confirmImport: Bool = false
     @State private var confirmDedup: Bool = false
     @State private var isRefreshingHealthData: Bool = false
@@ -559,17 +560,20 @@ struct SettingsView: View {
     private var backupDataSettingsPage: some View {
         settingsSubpage(title: "Backup & Data") {
             Section("Backup") {
+                if isProcessingBackup { ProgressView("Processing backup…") }
                 Button {
                     confirmExport = true
                 } label: {
                     Label("Export Data", systemImage: "square.and.arrow.up")
                 }
+                .disabled(isProcessingBackup)
 
                 Button {
                     confirmImport = true
                 } label: {
                     Label("Import Data", systemImage: "square.and.arrow.down")
                 }
+                .disabled(isProcessingBackup)
                 .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
                     switch result {
                     case .success(let url):
@@ -843,7 +847,7 @@ struct SettingsView: View {
                 continue
             }
 
-            let meters = workout.totalDistance?.doubleValue(for: .meter()) ?? 0
+            let meters = HealthKitManager.recordedDistanceMeters(for: workout)
             let distanceValue: Double = (unit == "mi") ? (meters / 1609.34) : (meters / 1000.0)
             let endDate = workout.endDate
             let duration = workout.duration
@@ -1047,42 +1051,39 @@ struct SettingsView: View {
     }
     
     private func exportTapped() {
-        do {
-            let url = try DataBackupService.exportAll(context: modelContext)
-            lastExportedBackupURL = url
-            exportURL = IdentifiableURL(url: url)
-            pendingExportConfirmation = true
-        } catch {
-            alertMessage = "Export failed: \(error.localizedDescription)"
-            showAlert = true
+        guard !isProcessingBackup else { return }
+        isProcessingBackup = true
+        Task { @MainActor in
+            defer { isProcessingBackup = false }
+            do {
+                let url = try await DataBackupService.exportAll(context: modelContext)
+                lastExportedBackupURL = url
+                exportURL = IdentifiableURL(url: url)
+                pendingExportConfirmation = true
+            } catch {
+                alertMessage = "Export failed: \(error.localizedDescription)"
+                showAlert = true
+            }
         }
     }
-    
+
     private func importFrom(url: URL) {
-        let didStart = url.startAccessingSecurityScopedResource()
-        defer { if didStart { url.stopAccessingSecurityScopedResource() } }
-        // Copy into our sandbox first to avoid security-scope hiccups. The copy
-        // contains the user's full history in plaintext, so remove it on every
-        // exit path rather than leaving it for the system to purge eventually.
-        let fm = FileManager.default
-        let tmp = fm.temporaryDirectory.appendingPathComponent(url.lastPathComponent)
-        defer { try? fm.removeItem(at: tmp) }
-        do {
-            if fm.fileExists(atPath: tmp.path) { try? fm.removeItem(at: tmp) }
-            try fm.copyItem(at: url, to: tmp)
-            try DataBackupService.import(from: tmp, context: modelContext)
-            // Clean up duplicates and ensure built-ins remain after import
-            PersistenceController.shared.deduplicateExerciseDefinitions()
-            PersistenceController.shared.ensureDefaultExercisesPresent()
-            alertMessage = "Import complete"
-            Haptics.playImpact(.light)
-            showAlert = true
-        } catch {
-            alertMessage = "Import failed: \(error.localizedDescription)"
+        guard !isProcessingBackup else { return }
+        isProcessingBackup = true
+        Task { @MainActor in
+            defer { isProcessingBackup = false }
+            do {
+                try await DataBackupService.import(from: url, context: modelContext)
+                PersistenceController.shared.reconcileExerciseLibraryIfNeeded(force: true)
+                alertMessage = "Import complete"
+                Haptics.playImpact(.light)
+            } catch {
+                alertMessage = "Import failed: \(error.localizedDescription)"
+            }
             showAlert = true
         }
     }
-    
+
     private func deduplicateAllData() {
         do {
             var totalRemoved = 0
@@ -1214,6 +1215,9 @@ struct SettingsView: View {
         weights.forEach { modelContext.delete($0) }
         try modelContext.save()
         WearableWorkoutInboxService.completeLocalDataPurge()
+        RunTracker.shared.pauseRun()
+        RunTracker.shared.clearCurrentRun(resetActivityType: true)
+        LiveActivityManager.shared.end()
         // The reverse-geocode cache is derived from run start points; drop it too.
         Task { await MapSearchService.shared.clearAll() }
     }

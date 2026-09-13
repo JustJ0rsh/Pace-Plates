@@ -1,6 +1,7 @@
 import SwiftUI
 import GameKit
 import SwiftData
+import CoreData
 
 struct ContentView: View {
     let persistenceController = PersistenceController.shared // Need access to this
@@ -9,6 +10,7 @@ struct ContentView: View {
     @AppStorage("didShowTutorial") private var didShowTutorial: Bool = false
     @AppStorage("didCompleteProfileSetup") private var didCompleteProfileSetup: Bool = false
     @State private var showTutorial: Bool = false
+    @State private var showRecoveredRun = false
     @AppStorage("measurementSystem") private var measurementSystem: String = "imperial"
     @AppStorage("weightUnit") private var weightUnit: String = "lbs"
     @AppStorage("distanceUnit") private var distanceUnit: String = "mi"
@@ -48,6 +50,13 @@ struct ContentView: View {
                 .tabItem { Label("Weight", systemImage: "scalemass.fill") }
                 .tag(4)
         }
+        #if DEBUG
+        .overlay(alignment: .top) {
+            if launchConfiguration.isUITest && launchConfiguration.fixtureName == "optimization_checks" {
+                OptimizationRegressionChecksView()
+            }
+        }
+        #endif
         .background(AppTheme.backgroundColor.ignoresSafeArea())
         .tint(AppTheme.accentColor)
         .preferredColorScheme(appTheme.preferredColorScheme)
@@ -55,6 +64,20 @@ struct ContentView: View {
         .toolbarBackground(.visible, for: .tabBar)
         .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .tabBar)
         .modelContainer(persistenceController.container)
+        .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange).receive(on: RunLoop.main)) { _ in
+            persistenceController.reconcileExerciseLibraryIfNeeded()
+        }
+        .task {
+            showRecoveredRun = await RunTracker.shared.restoreInterruptedRun(context: persistenceController.container.mainContext)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { RunTracker.shared.checkpointRun(force: true) }
+        }
+        .alert("Recovered unfinished activity", isPresented: $showRecoveredRun) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Your activity was recovered and is paused. Resume or save it from Home or Runs. Time while the app was unavailable hasn't been counted.")
+        }
         .onAppear {
             AppTheme.applyGlobalTheme()
             reconcileLiveActivities()
@@ -66,12 +89,7 @@ struct ContentView: View {
                 AIProviderManager.cleanUpLegacyOpenRouterArtifacts()
                 DataBackupService.removeStaleExportFiles()
             }
-            // Seed + cleanup the exercise library safely (idempotent)
-            ExerciseLibrary.populateInitialExercises(context: persistenceController.container.mainContext)
-            persistenceController.deduplicateExerciseDefinitions()
-            persistenceController.ensureDefaultExercisesPresent()
-            // Unify synonymous exercise names without losing user history
-            persistenceController.unifySynonymousExerciseDefinitions()
+            persistenceController.reconcileExerciseLibraryIfNeeded()
             TrainingPlanService.shared.syncRunningPlans(
                 context: persistenceController.container.mainContext
             )

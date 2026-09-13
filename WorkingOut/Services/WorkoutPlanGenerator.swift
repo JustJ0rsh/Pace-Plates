@@ -742,7 +742,10 @@ final class WorkoutPlanGenerator {
                     var hkTotalDuration: TimeInterval = 0
                     var hkTotalDistanceUnits: Double = 0
                     for workout in recent {
-                        guard let distanceM = workout.totalDistance?.doubleValue(for: .meter()), distanceM > 0 else { continue }
+                        let distanceM = HealthKitManager.recordedDistanceMeters(
+                            for: workout
+                        )
+                        guard distanceM > 0 else { continue }
                         let duration = workout.duration
                         let distanceInUnit = distanceUnit.lowercased().contains("km") ? distanceM / 1000.0 : distanceM / 1609.34
                         hkTotalDuration += duration

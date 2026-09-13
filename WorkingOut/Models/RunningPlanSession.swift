@@ -63,33 +63,7 @@ final class RunningPlanSession {
 
 /// A value snapshot of a scheduled run that can safely travel through SwiftUI
 /// presentation state without keeping a SwiftData model alive across sheets.
-struct ScheduledRunTarget: Hashable {
-    let sessionID: UUID
-    let sessionType: String
-    let targetDistanceMeters: Double?
-    let targetDurationSeconds: Double?
-    let targetPaceMinPerMile: Double?
-    let intensityLevel: String
-    let notes: String?
-
-    init(
-        sessionID: UUID,
-        sessionType: String,
-        targetDistanceMeters: Double?,
-        targetDurationSeconds: Double?,
-        targetPaceMinPerMile: Double?,
-        intensityLevel: String,
-        notes: String?
-    ) {
-        self.sessionID = sessionID
-        self.sessionType = sessionType
-        self.targetDistanceMeters = targetDistanceMeters
-        self.targetDurationSeconds = targetDurationSeconds
-        self.targetPaceMinPerMile = targetPaceMinPerMile
-        self.intensityLevel = intensityLevel
-        self.notes = notes
-    }
-
+extension ScheduledRunTarget {
     init(session: RunningPlanSession) {
         self.init(
             sessionID: session.id,
