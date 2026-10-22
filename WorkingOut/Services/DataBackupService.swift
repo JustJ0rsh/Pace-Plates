@@ -587,15 +587,15 @@ enum DataBackupService {
     }
 
     static func `import`(from url: URL, context: ModelContext) async throws {
-        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(WearableWorkoutInboxService.localDataPurgeGeneration, context: context) else { throw CancellationError() }
+        let generation = WearableWorkoutInboxService.localDataPurgeGeneration
+        try requireLocalRestoreDestination(context, generation: generation)
         guard !restoreInProgress else { throw CoachRepositoryError.invalidValue("one restore at a time") }
         restoreInProgress = true
         defer { restoreInProgress = false }
-        let generation = WearableWorkoutInboxService.localDataPurgeGeneration
         let prepared = try await Task.detached(priority: .userInitiated) {
             try CoachHistoryArchive.prepareImport(from: url)
         }.value
-        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation, context: context) else {
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation, context: context), CoachPersistence.isLocal(context) else {
             prepared.discard(); throw CancellationError()
         }
         do { try Task.checkCancellation() } catch { prepared.discard(); throw error }
@@ -603,11 +603,11 @@ enum DataBackupService {
     }
 
     static func resumePendingRestores(context: ModelContext) async throws {
-        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(WearableWorkoutInboxService.localDataPurgeGeneration, context: context) else { throw CancellationError() }
+        let generation = WearableWorkoutInboxService.localDataPurgeGeneration
+        try requireLocalRestoreDestination(context, generation: generation)
         guard !restoreInProgress else { throw CoachRepositoryError.invalidValue("one restore at a time") }
         restoreInProgress = true
         defer { restoreInProgress = false }
-        let generation = WearableWorkoutInboxService.localDataPurgeGeneration
         let pending = try await Task.detached(priority: .utility) { try CoachHistoryArchive.pendingRestores() }.value
         guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation, context: context), !Task.isCancelled else {
             for var prepared in pending {
@@ -632,9 +632,9 @@ enum DataBackupService {
         if prepared.rollbackOnly { try await rollbackAssets(); return }
         do {
             try prepared.file.validateForRestore()
-            if prepared.file.coach?.hasPersonalRecords == true && !CoachPersistence.isLocal(context) { throw CoachRepositoryError.localOwnershipRequired }
+            try requireLocalRestoreDestination(context, generation: generation)
             try await Task.detached(priority: .userInitiated) { try prepared.installAssets() }.value
-            guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation, context: context), !Task.isCancelled else { throw CancellationError() }
+            try requireLocalRestoreDestination(context, generation: generation)
             try restore(prepared.file, context: isolated)
             prepared.discard()
         } catch {
@@ -650,9 +650,10 @@ enum DataBackupService {
     /// Restores stable snapshots without rebuilding schedules from today's date.
     /// The caller owns its isolated context and decides how to handle save failure.
     static func restore(_ file: BackupFile, context: ModelContext) throws {
+        let generation = WearableWorkoutInboxService.localDataPurgeGeneration
         guard (1...5).contains(file.formatVersion ?? 1) else { throw CoachHistoryArchive.ArchiveError.invalid("Unsupported backup version") }
         try file.validateForRestore()
-        if file.coach?.hasPersonalRecords == true && !CoachPersistence.isLocal(context) { throw CoachRepositoryError.localOwnershipRequired }
+        try requireLocalRestoreDestination(context, generation: generation)
         try file.coach?.validateMerge(context: context)
         let existingDefs = try context.fetch(FetchDescriptor<ExerciseDefinition>())
         let existingDefIDs = Set(existingDefs.map(\.id))
@@ -2134,7 +2135,19 @@ enum DataBackupService {
         }
 
         try file.coach?.restore(context: context)
+        try requireLocalRestoreDestination(context, generation: generation)
         try context.save()
+    }
+
+    /// Every backup may contain personal history, including pre-Coach formats,
+    /// custom definitions and unknown-provenance records. Never classify a
+    /// restore as cloud-safe from its version or the contents of its Coach graph.
+    /// Explicit local fixture contexts are valid; retired contexts are not.
+    static func requireLocalRestoreDestination(_ context: ModelContext, generation: Int) throws {
+        guard CoachPersistence.isLocal(context) else { throw CoachRepositoryError.localOwnershipRequired }
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation, context: context), !Task.isCancelled else {
+            throw CancellationError()
+        }
     }
 
     /// Returns true only when two sessions have the same persisted content.

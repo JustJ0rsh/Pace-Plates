@@ -41,7 +41,8 @@ source_files = [ROOT / "Docs/Coach/cloudkit-field-inventory-2026-10-22.json",
                 ROOT / "scripts/synthetic_local_remediation/test_prototype.py",
                 ROOT / "scripts/coach_migration_test_main.swift",
                 ROOT / "WorkingOut/Data/CoachLocalOwnership.swift",
-                ROOT / "WorkingOut/Data/CoachLocalOwnership+Assets.swift"]
+                ROOT / "WorkingOut/Data/CoachLocalOwnership+Assets.swift",
+                ROOT / "WorkingOut/Data/CoachLocalOwnership+Migration.swift"]
 inventory = json.loads(source_files[0].read_text())
 source_files.extend(ROOT / item["source"] for item in inventory["models"])
 report = {"scope": "synthetic only; protocol model plus optional actual SwiftData copier probe",
@@ -58,6 +59,7 @@ if not args.python_only:
     module_cache = tempfile.mkdtemp(prefix="swift-module-cache-", dir=output)
     run(["xcrun", "swiftc", "-swift-version", "5", "-module-cache-path", module_cache,
          "WorkingOut/Data/CoachLocalOwnership.swift", "WorkingOut/Data/CoachLocalOwnership+Assets.swift",
+         "WorkingOut/Data/CoachLocalOwnership+Migration.swift",
          "scripts/coach_migration_test_main.swift", "-o", str(executable)], "swift-build", env)
     result = run([str(executable)], "swift-copy", env)
     if "Coach migration file copy: 9 checks passed" not in result:

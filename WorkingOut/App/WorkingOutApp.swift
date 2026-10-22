@@ -45,10 +45,19 @@ struct WorkingOutXApp: App {
     /// scheme, so any non-file URL is ignored rather than parsed.
     private func handleIncomingWorkout(_ url: URL) {
         guard url.isFileURL else { return }
+        guard persistenceController.storageError == nil, persistenceController.isCoachLocal else {
+            presentImportError("Open your verified local history before importing a file. Your existing records have not been changed.")
+            return
+        }
         if ["coachplan", "json"].contains(url.pathExtension.lowercased()) {
             Task { @MainActor in
                 do {
                     let text = try await Task.detached { try CoachProgramResources.readFile(url) }.value
+                    guard persistenceController.storageError == nil,
+                          persistenceController.isCoachLocal else {
+                        presentImportError("Storage changed while opening the file. Try again after your local history is ready.")
+                        return
+                    }
                     importedCoachProgram = CoachImportRequest(text: text)
                 } catch { presentImportError(error.localizedDescription) }
             }

@@ -62,6 +62,10 @@ class PersistenceController {
     private(set) var isCoachLocal: Bool = false
     private(set) var storageError: String?
     private(set) var storageGeneration = UUID()
+    private(set) var needsLegacyMigration = false
+    private(set) var isMigratingHistory = false
+    private var storageRoot = CoachLocalOwnership.root
+    private var retainedLegacyStore: URL?
 
     static var legacyModelTypes: [any PersistentModel.Type] {
         [ExerciseDefinition.self, WorkoutSession.self, ExerciseLog.self,
@@ -114,97 +118,183 @@ class PersistenceController {
         }
         return try ModelContainer(for: schema, configurations: [configuration])
     }
+
+    private static func openSelectedLocalContainer(_ url: URL) throws -> ModelContainer {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw CoachLocalOwnership.migrationError("The selected local history is missing. No stale source has been substituted.")
+        }
+        let attributes = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+        guard attributes.isRegularFile == true, attributes.isSymbolicLink != true else {
+            throw CoachLocalOwnership.migrationError("The selected local history is not a regular storage file.")
+        }
+        return try makeLocalContainer(url: url)
+    }
     
-    // Modify init to accept inMemory flag
-    init(inMemory: Bool = false, cloudKitMode: CloudKitMode = .automatic) {
-        if inMemory {
-            do {
+    /// Every live model container is explicitly local. A legacy database is
+    /// detected without opening it; only the reviewed copy path may read it.
+    convenience init(inMemory: Bool = false, cloudKitMode: CloudKitMode = .none) {
+        let legacy = ModelConfiguration(schema: Schema(Self.legacyModelTypes), cloudKitDatabase: .none).url
+        self.init(inMemory: inMemory, storageRoot: CoachLocalOwnership.root, legacyStore: legacy)
+    }
+
+    private init(inMemory: Bool, storageRoot: URL, legacyStore: URL) {
+        self.storageRoot = storageRoot
+        retainedLegacyStore = legacyStore
+        do {
+            if inMemory {
                 container = try Self.makeLocalContainer(inMemory: true)
                 isCoachLocal = true
                 return
-            } catch { fatalError("Could not initialize isolated preview storage: \(error)") }
-        }
-        do {
-            if let selectedURL = try CoachLocalOwnership.selectedStoreURL() {
-                guard FileManager.default.fileExists(atPath: selectedURL.path) else {
-                    throw CoachLocalOwnership.OwnershipError.unavailable("The selected local store is missing. Your retained legacy store has not been substituted for your newer history.")
-                }
-                container = try Self.makeLocalContainer(url: selectedURL)
+            }
+            if let selectedURL = try CoachLocalOwnership.selectedStoreURL(root: storageRoot) {
+                container = try Self.openSelectedLocalContainer(selectedURL)
                 isCoachLocal = true
                 return
             }
+            let manager = FileManager.default
+            let sourceExists = manager.fileExists(atPath: legacyStore.path)
+            let support = legacyStore.deletingLastPathComponent().appendingPathComponent(".\(legacyStore.deletingPathExtension().lastPathComponent)_SUPPORT")
+            let hasFragments = manager.fileExists(atPath: legacyStore.path + "-wal") || manager.fileExists(atPath: legacyStore.path + "-shm") || manager.fileExists(atPath: support.path)
+            var hasUnselectedStorage = false
+            if manager.fileExists(atPath: storageRoot.path) {
+                hasUnselectedStorage = !(try manager.contentsOfDirectory(at: storageRoot, includingPropertiesForKeys: nil)).isEmpty
+            }
+            if sourceExists || hasFragments || hasUnselectedStorage {
+                container = try Self.makeLocalContainer(inMemory: true)
+                needsLegacyMigration = sourceExists
+                storageError = sourceExists
+                    ? "Your existing history needs a verified local copy before you can continue. New entries will stay on this device. Other devices and retained iCloud records will not be changed."
+                    : "An incomplete history or migration was found. Its files are retained; recovery is needed before creating new history."
+                return
+            }
+            let destination = try CoachLocalOwnership.newStagingStore(root: storageRoot)
+            container = try Self.makeLocalContainer(url: destination)
+            try container.mainContext.save()
+            try CoachLocalOwnership.select(destination, legacy: legacyStore, root: storageRoot)
+            isCoachLocal = true
         } catch {
-            // Fail closed; opening the old store would expose stale history as
-            // current and could send new personal records back to CloudKit.
             do { container = try Self.makeLocalContainer(inMemory: true) }
             catch { fatalError("Could not initialize storage recovery screen: \(error)") }
             storageError = error.localizedDescription
-            return
-        }
-        let schema = Schema([
-            ExerciseDefinition.self,
-            WorkoutSession.self,
-            ExerciseLog.self,
-            RunningSession.self,
-            RunningPlan.self,
-            RunningPlanSession.self,
-            TrainingPlan.self,
-            PlannedSession.self,
-            WeightEntry.self,
-            AIConversation.self,
-            WorkoutTemplate.self,
-            TemplateExercise.self,
-            HealthWorkoutInboxItem.self,
-            CardioWorkoutInboxItem.self
-        ])
-
-        // Build a configuration; enable CloudKit (will fall back to local if not available)
-        var config: ModelConfiguration
-        if #available(iOS 17.0, *) {
-            let cloudKitDatabase: ModelConfiguration.CloudKitDatabase = (cloudKitMode == .automatic) ? .automatic : .none
-            config = ModelConfiguration(
-                schema: schema,
-                isStoredInMemoryOnly: inMemory,
-                cloudKitDatabase: cloudKitDatabase
-            )
-        } else {
-            config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
-        }
-
-        // Try to create the container; if CloudKit is not fully available at runtime, this will throw and we will retry locally.
-        do {
-            container = try ModelContainer(for: schema, configurations: [config])
-            #if canImport(CloudKit)
-            if #available(iOS 17.0, *), !inMemory, cloudKitMode == .automatic {
-                isCloudBacked = true
-            } else {
-                isCloudBacked = false
-            }
-            #else
-            isCloudBacked = false
-            #endif
-        } catch {
-            print("Primary ModelContainer failed (CloudKit may not be available): \(error). Falling back to local store…")
-            let local: ModelConfiguration
-            if #available(iOS 17.0, *) {
-                local = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory, cloudKitDatabase: .none)
-            } else {
-                local = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
-            }
-            do {
-                container = try ModelContainer(for: schema, configurations: [local])
-                isCloudBacked = false
-            } catch {
-                fatalError("Could not initialize local ModelContainer: \(error)")
-            }
         }
     }
 
-    /// Called only from the explicit first-use storage review. The selected-store
-    /// marker is the final commit, so an interruption cannot select a partial copy.
-    func adoptLocalOwnership() async throws {
-        try await adoptLocalOwnership(prepareDestination: CoachLocalOwnership.newStagingStore,
-                                      select: CoachLocalOwnership.select)
+    #if DEBUG
+    /// Uses the production startup decision with paths owned by a test fixture.
+    convenience init(storageRootForRegression root: URL, legacyStoreForRegression legacy: URL) {
+        let temporary = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().path + "/"
+        precondition(root.resolvingSymlinksInPath().path.hasPrefix(temporary))
+        precondition(legacy.resolvingSymlinksInPath().path.hasPrefix(root.deletingLastPathComponent().resolvingSymlinksInPath().path + "/"))
+        self.init(inMemory: false, storageRoot: root, legacyStore: legacy)
+    }
+
+    func migrateForStorageRegression(interruptAfter: String?) async throws {
+        try await migrateLegacyHistory(interruptAfter: interruptAfter)
+    }
+    #endif
+
+    func adoptLocalOwnership() async throws { try await migrateLegacyHistory() }
+
+    func migrateLegacyHistory() async throws {
+        try await migrateLegacyHistory(interruptAfter: nil)
+    }
+
+    /// The hook is internal and the production call always passes nil. It is
+    /// used by isolated Debug regression fixtures, never launch arguments.
+    private func migrateLegacyHistory(interruptAfter: String?) async throws {
+        guard !isCoachLocal, needsLegacyMigration, let source = retainedLegacyStore else { return }
+        guard !isMigratingHistory else { throw CoachLocalOwnership.migrationError("A history copy is already in progress.") }
+        guard !RunTracker.shared.hasRecoverableActivity else {
+            throw CoachLocalOwnership.migrationError("Resolve the recoverable run before changing storage.")
+        }
+        isMigratingHistory = true
+        defer { isMigratingHistory = false }
+        do {
+            let lock = try CoachLocalOwnership.MigrationLock(root: storageRoot)
+            defer { withExtendedLifetime(lock) {} }
+            // An earlier call may have committed selection immediately before
+            // being interrupted. Reopen it, never recopy over later local work.
+            if let selected = try CoachLocalOwnership.selectedStoreURL(root: storageRoot) {
+                let old = container
+                container = try Self.openSelectedLocalContainer(selected)
+                WearableWorkoutInboxService.retireLocalStore(old)
+                isCoachLocal = true; needsLegacyMigration = false; storageError = nil
+                storageGeneration = UUID()
+                return
+            }
+            var journal = try CoachLocalOwnership.beginMigration(source: source, root: storageRoot)
+            if let checkpoint = journal.checkpoint {
+                let current = try await Task.detached(priority: .userInitiated) { try CoachLocalOwnership.rawCheckpoint(source) }.value
+                if current.identity != checkpoint {
+                    // This is a new explicit retry, not automatic fallback. A
+                    // changed source requires a fresh stage; retain the older
+                    // stage and journal so neither history is lost.
+                    journal = try CoachLocalOwnership.restartUnselectedMigration(journal, source: source, root: storageRoot)
+                }
+            }
+            let destination = CoachLocalOwnership.destination(for: journal, root: storageRoot)
+            if interruptAfter == "allocated" { throw CoachLocalOwnership.migrationError("Synthetic interruption after allocation.") }
+            if journal.phase == "allocated" {
+                let owned = destination.deletingLastPathComponent()
+                // Only this journal-owned, unselected stage can be discarded.
+                if FileManager.default.fileExists(atPath: owned.path) { try FileManager.default.removeItem(at: owned) }
+                try CoachLocalOwnership.prepareDirectory(owned)
+                let checkpoint = try await Task.detached(priority: .userInitiated) {
+                    let before = try CoachLocalOwnership.rawCheckpoint(source)
+                    try CoachLocalOwnership.copyStore(from: source, to: destination)
+                    try CoachLocalOwnership.copyAuxiliaryFiles(from: source, to: destination)
+                    let copy = try CoachLocalOwnership.rawCheckpoint(destination)
+                    let after = try CoachLocalOwnership.rawCheckpoint(source)
+                    guard before.identity == copy.identity, before.identity == after.identity else {
+                        throw CoachLocalOwnership.migrationError("The original history changed while being copied. Nothing was selected.")
+                    }
+                    return before
+                }.value
+                journal.checkpoint = checkpoint.identity
+                journal.phase = "copied"
+                try CoachLocalOwnership.writeJournal(journal, root: storageRoot)
+            }
+            if interruptAfter == "copied" { throw CoachLocalOwnership.migrationError("Synthetic interruption after copy.") }
+            try Task.checkCancellation()
+            let checkpoint = try await Task.detached(priority: .userInitiated) { try CoachLocalOwnership.rawCheckpoint(source) }.value
+            guard checkpoint.identity == journal.checkpoint else {
+                throw CoachLocalOwnership.migrationError("The retained source changed after the copy. Recovery is needed before retrying.")
+            }
+            // A previous interrupted attempt may already have opened this
+            // unselected copy with the full schema. Check every original field.
+            try CoachLocalOwnership.verifyRetainedColumns(checkpoint, at: destination)
+            let local = try Self.makeLocalContainer(url: destination)
+            try CoachLocalOwnership.verifyRetainedColumns(checkpoint, at: destination)
+            // Exercise typed model decoding as well as raw column fidelity.
+            _ = try CoachLocalOwnership.identityInventory(local.mainContext)
+            _ = try CoachLocalOwnership.snapshotDigest(local.mainContext)
+            guard !RunTracker.shared.hasRecoverableActivity else {
+                throw CoachLocalOwnership.migrationError("A recoverable run appeared during the copy. Nothing was selected.")
+            }
+            let currentSource = try await Task.detached(priority: .userInitiated) { try CoachLocalOwnership.rawCheckpoint(source) }.value
+            guard currentSource.identity == checkpoint.identity else {
+                throw CoachLocalOwnership.migrationError("The retained source changed during verification. Nothing was selected.")
+            }
+            guard !RunTracker.shared.hasRecoverableActivity else {
+                throw CoachLocalOwnership.migrationError("A recoverable run appeared before selection. Nothing was switched.")
+            }
+            try Task.checkCancellation()
+            journal.phase = "verified"
+            try CoachLocalOwnership.writeJournal(journal, root: storageRoot)
+            if interruptAfter == "verified" { throw CoachLocalOwnership.migrationError("Synthetic interruption after verification.") }
+            try CoachLocalOwnership.select(destination, legacy: source, root: storageRoot, journal: journal)
+            if interruptAfter == "selected" { throw CoachLocalOwnership.migrationError("Synthetic interruption after selection.") }
+            journal.phase = "active"
+            try CoachLocalOwnership.writeJournal(journal, root: storageRoot)
+            let old = container
+            container = local
+            WearableWorkoutInboxService.retireLocalStore(old)
+            isCoachLocal = true; needsLegacyMigration = false; storageError = nil
+            storageGeneration = UUID()
+        } catch {
+            storageError = error.localizedDescription
+            throw error
+        }
     }
 
     private func adoptLocalOwnership(prepareDestination: () throws -> URL,

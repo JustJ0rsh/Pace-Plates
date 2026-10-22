@@ -10,6 +10,8 @@ enum CoachLocalOwnership {
         let directory: String
         let selectedAt: Date
         let legacyStorePath: String
+        var migrationID: UUID? = nil
+        var checkpoint: String? = nil
     }
 
     enum OwnershipError: LocalizedError {
@@ -33,28 +35,48 @@ enum CoachLocalOwnership {
         try protectedURL.setResourceValues(values)
     }
 
-    static func selectedStoreURL() throws -> URL? {
+    static func selectedStoreURL(root: URL = CoachLocalOwnership.root) throws -> URL? {
         let marker = root.appendingPathComponent("selection.json")
         guard FileManager.default.fileExists(atPath: marker.path) else { return nil }
         let selection = try JSONDecoder().decode(Selection.self, from: Data(contentsOf: marker))
-        guard selection.version == 1, UUID(uuidString: selection.directory) != nil else {
+        guard [1, 2].contains(selection.version), UUID(uuidString: selection.directory) != nil else {
             throw OwnershipError.unavailable("The local storage selection could not be read. Your original records have been retained.")
         }
-        return root.appendingPathComponent(selection.directory, isDirectory: true).appendingPathComponent("default.store")
+        if selection.version == 2 {
+            guard let journal = try readJournal(root: root), journal.id == selection.migrationID,
+                  journal.directory == selection.directory, journal.source == selection.legacyStorePath,
+                  journal.checkpoint == selection.checkpoint, selection.checkpoint != nil,
+                  ["verified", "active"].contains(journal.phase) else {
+                throw migrationError("The selected history does not match its verified migration journal.")
+            }
+        }
+        let directory = root.appendingPathComponent(selection.directory, isDirectory: true)
+        if FileManager.default.fileExists(atPath: directory.path),
+           try directory.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink == true {
+            throw migrationError("The selected storage directory is an unsupported link.")
+        }
+        let store = directory.appendingPathComponent("default.store")
+        if FileManager.default.fileExists(atPath: store.path),
+           try store.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink == true {
+            throw migrationError("The selected storage file is an unsupported link.")
+        }
+        return store
     }
 
-    static func newStagingStore() throws -> URL {
+    static func newStagingStore(root: URL = CoachLocalOwnership.root) throws -> URL {
         try prepareDirectory(root)
         let directory = root.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try prepareDirectory(directory)
         return directory.appendingPathComponent("default.store")
     }
 
-    static func select(_ destination: URL, legacy: URL) throws {
-        let selection = Selection(version: 1, directory: destination.deletingLastPathComponent().lastPathComponent,
-                                  selectedAt: Date(), legacyStorePath: legacy.path)
+    static func select(_ destination: URL, legacy: URL, root: URL = CoachLocalOwnership.root, journal: MigrationJournal? = nil) throws {
+        let selection = Selection(version: journal == nil ? 1 : 2, directory: destination.deletingLastPathComponent().lastPathComponent,
+                                  selectedAt: Date(), legacyStorePath: legacy.standardizedFileURL.path, migrationID: journal?.id, checkpoint: journal?.checkpoint)
         let data = try JSONEncoder().encode(selection)
         try data.write(to: root.appendingPathComponent("selection.json"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        let handle = try FileHandle(forWritingTo: root.appendingPathComponent("selection.json")); defer { try? handle.close() }
+        try handle.synchronize()
     }
 
     /// SQLite's backup API reads a consistent snapshot including WAL content;
