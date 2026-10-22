@@ -177,7 +177,7 @@ extension CoachPersistenceRegressionChecks {
                     "cold fixture retains its WAL-format header")
         try require(!FileManager.default.fileExists(atPath: coldURL.path + "-wal")
                     && !FileManager.default.fileExists(atPath: coldURL.path + "-shm"),
-                    "the sole cold fixture writer naturally closes without sidecars")
+                    "the sole cold fixture writer naturally closes without sidecars; " + syntheticSidecarState(coldURL))
         let coldBytesBefore = try syntheticStoreBytes(coldURL)
         let coldController = PersistenceController(storageRootForRegression: coldRoot, legacyStoreForRegression: coldURL)
         var coldReadable = false
@@ -247,10 +247,29 @@ extension CoachPersistenceRegressionChecks {
             throw CoachRepositoryError.invalidValue("cold fixture WAL mode was not confirmed")
         }
         sqlite3_finalize(query)
+        // Configure only this new synthetic copy's sole writer. Let SQLite
+        // checkpoint and clean up its own files; never unlink WAL/SHM ourselves.
+        var persistentWAL: Int32 = 0
+        guard sqlite3_file_control(db, "main", SQLITE_FCNTL_PERSIST_WAL, &persistentWAL) == SQLITE_OK else {
+            throw CoachRepositoryError.invalidValue("cold fixture could not disable persistent WAL")
+        }
+        var logFrames: Int32 = -1, checkpointedFrames: Int32 = -1
+        let checkpoint = sqlite3_wal_checkpoint_v2(db, "main", SQLITE_CHECKPOINT_TRUNCATE, &logFrames, &checkpointedFrames)
+        guard checkpoint == SQLITE_OK, logFrames == 0, checkpointedFrames == 0 else {
+            throw CoachRepositoryError.invalidValue("cold fixture checkpoint did not complete: SQLite \(checkpoint), frames \(logFrames)/\(checkpointedFrames)")
+        }
         guard sqlite3_close(db) == SQLITE_OK else {
             throw CoachRepositoryError.invalidValue("cold fixture's sole SQLite connection did not close")
         }
         database = nil
+    }
+
+    private static func syntheticSidecarState(_ store: URL) -> String {
+        ["WAL": store.path + "-wal", "SHM": store.path + "-shm"].sorted { $0.key < $1.key }.map { label, path in
+            guard FileManager.default.fileExists(atPath: path) else { return label + " absent" }
+            let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? NSNumber)?.int64Value
+            return label + " present size=" + (size.map { String($0) } ?? "unavailable")
+        }.joined(separator: "; ")
     }
 
     private static func syntheticStoreBytes(_ store: URL) throws -> [String: Data] {
