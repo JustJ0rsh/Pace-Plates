@@ -63,6 +63,14 @@ struct ContentView: View {
             if launchConfiguration.isUITest && launchConfiguration.fixtureName == "coach_calendar_checks" {
                 CoachCalendarRegressionChecksView()
             }
+            #if targetEnvironment(simulator)
+            if launchConfiguration.usesNaturalProfileForTesting {
+                Text(UserProfileStore.shared.naturalProfileTestStatus)
+                    .font(.caption2)
+                    .accessibilityIdentifier("readiness.syntheticProfile")
+                    .allowsHitTesting(false)
+            }
+            #endif
         }
         #endif
         .background(AppTheme.backgroundColor.ignoresSafeArea())
@@ -150,7 +158,8 @@ struct ContentView: View {
                 didCompleteProfileSetup = false
                 didShowTutorial = false
                 showTutorial = true
-            } else if launchConfiguration.shouldSkipAutomationSideEffects {
+            } else if launchConfiguration.shouldSkipAutomationSideEffects
+                && !launchConfiguration.usesNaturalProfileForTesting {
                 didCompleteProfileSetup = true
                 didShowTutorial = true
                 showTutorial = false
