@@ -162,15 +162,10 @@ struct WorkoutSessionDetailView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 8) {
                     shareMenu
-                    if session.executionStatusRaw == "in_progress" {
-                        Button("Finish") {
-                            saveAndClose(.finish)
-                        }.accessibilityIdentifier("workout.finish")
+                    Button("Finish") {
+                        saveAndClose(.finish)
                     }
-
-                    Button("Done") {
-                        saveAndClose(.done)
-                    }
+                    .accessibilityIdentifier("workout.finish")
                     .fontWeight(.semibold)
                 }
                 .padding(.leading, 12)

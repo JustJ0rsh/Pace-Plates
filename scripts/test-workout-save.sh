@@ -5,3 +5,5 @@ output="$(mktemp -d "${TMPDIR:-/tmp}/workout-save.XXXXXX")"
 trap 'rm -rf "$output"' EXIT
 swiftc -module-cache-path "$output/module-cache" "$root/WorkingOut/Services/WorkoutSaveBoundary.swift" "$root/scripts/workout_save_tests.swift" -o "$output/tests"
 "$output/tests"
+
+python3 "$root/scripts/workout_save_source_checks.py"

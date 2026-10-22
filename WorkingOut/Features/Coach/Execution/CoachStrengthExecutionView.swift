@@ -87,11 +87,6 @@ struct CoachStrengthExecutionView: View {
             }
             if !isFinished {
                 Section {
-                    Button("Finish Workout", systemImage: "checkmark.circle") {
-                        if saveBeforeClosing(.finish) { dismiss() }
-                    }
-                    .accessibilityIdentifier("coach.workout.finish")
-                    .disabled(!didLoad)
                     Text("Closing saves your recorded sets and leaves this workout available to resume.").font(.caption).foregroundStyle(.secondary)
                 }
             } else {
@@ -103,9 +98,10 @@ struct CoachStrengthExecutionView: View {
         }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button("Done") {
-                    if saveBeforeClosing(.done) { dismiss() }
+                Button("Finish") {
+                    if saveBeforeClosing(.finish) { dismiss() }
                 }
+                .accessibilityIdentifier("coach.workout.finish")
                 .disabled(!didLoad)
             }
         }
