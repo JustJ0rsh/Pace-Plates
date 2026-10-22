@@ -43,6 +43,23 @@ enum CoachPersistenceRegressionChecks {
         try require(FileManager.default.fileExists(atPath: sourceURL.path + "-wal"), "source fixture includes WAL state")
         try CoachLocalOwnership.copyStore(from: sourceURL, to: destination)
         try CoachLocalOwnership.copyAuxiliaryFiles(from: sourceURL, to: destination)
+        let snapshotHandle = try FileHandle(forReadingFrom: destination)
+        let snapshotHeader = try snapshotHandle.read(upToCount: 20) ?? Data()
+        try snapshotHandle.close()
+        try require(snapshotHeader.count == 20 && snapshotHeader[18] == 1 && snapshotHeader[19] == 1,
+                    "new snapshot is independently readable without WAL/SHM sidecars")
+        try require(try CoachLocalOwnership.rawCheckpoint(destination, phase: "Synthetic copied snapshot").identity
+                    == CoachLocalOwnership.rawCheckpoint(sourceURL, phase: "Synthetic retained source").identity,
+                    "snapshot normalization preserves every raw record and source WAL contents")
+        var rejectedSamePath = false
+        do { try CoachLocalOwnership.copyStore(from: sourceURL, to: sourceURL) }
+        catch { rejectedSamePath = true }
+        try require(rejectedSamePath, "copier rejects a destination that is the retained source")
+        let sourceHandle = try FileHandle(forReadingFrom: sourceURL)
+        let sourceHeader = try sourceHandle.read(upToCount: 20) ?? Data()
+        try sourceHandle.close()
+        try require(sourceHeader.count == 20 && sourceHeader[18] == 2 && sourceHeader[19] == 2,
+                    "normalizing a new snapshot leaves the source in WAL mode")
         let schema = PersistenceController.coachSchema
         let migrated = try ModelContainer(for: schema, configurations: [ModelConfiguration(CoachPersistence.configurationName, schema: schema, url: destination, cloudKitDatabase: .none)])
         try require(try CoachLocalOwnership.identityInventory(migrated.mainContext) == before, "migration preserves every existing model ID")

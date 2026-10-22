@@ -16,17 +16,27 @@ struct StorageIntegrationAcceptanceView: View {
         .task {
             guard !started, AppLaunchConfiguration.current.usesIsolatedStore else { return }
             started = true
+            let runID = UUID().uuidString
+            let startedAt = ISO8601DateFormatter().string(from: Date())
             let result: [String: Any]
             do {
                 let count = try await CoachPersistenceRegressionChecks.run()
+                let coldUnavailable = CoachPersistenceRegressionChecks.coldSourceMigrationStatus.hasPrefix("unsupported")
                 status = "PASS: \(count) synthetic storage checks"
-                result = ["result": "passed", "checks": count,
+                    + (coldUnavailable ? "\nCold-source migration is unavailable; recovery safely retains its history." : "")
+                result = ["result": coldUnavailable ? "passed_with_limitations" : "passed", "checks": count,
                           "scope": "Disposable synthetic SwiftData stores; no real integrations",
+                          "runID": runID, "startedAt": startedAt,
+                          "coldSourceMigration": CoachPersistenceRegressionChecks.coldSourceMigrationStatus,
                           "version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
                           "build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""]
             } catch {
                 status = "FAIL: \(error.localizedDescription)"
                 result = ["result": "failed", "error": error.localizedDescription,
+                          "runID": runID, "startedAt": startedAt,
+                          "coldSourceMigration": CoachPersistenceRegressionChecks.coldSourceMigrationStatus,
+                          "version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
+                          "build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "",
                           "scope": "Disposable synthetic SwiftData stores; no real integrations"]
             }
             do {

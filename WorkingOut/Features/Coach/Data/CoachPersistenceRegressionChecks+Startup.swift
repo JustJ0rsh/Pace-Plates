@@ -1,12 +1,21 @@
 #if DEBUG
 import Foundation
 import SwiftData
+import SQLite3
+
+@MainActor
+private enum StartupStorageEvidence {
+    static var coldSourceMigrationStatus = "not reached"
+}
 
 extension CoachPersistenceRegressionChecks {
+    static var coldSourceMigrationStatus: String { StartupStorageEvidence.coldSourceMigrationStatus }
+
     /// Executes the real startup/migration implementation using only disposable
     /// legacy fixtures. Never resolves an application or CloudKit store URL.
     @MainActor static func runStartupCases(root: URL) async throws -> Int {
         var checks = 0
+        StartupStorageEvidence.coldSourceMigrationStatus = "not reached"
         func require(_ value: Bool, _ reason: String) throws {
             checks += 1
             guard value else { throw CoachRepositoryError.invalidValue("startup regression: " + reason) }
@@ -136,7 +145,132 @@ extension CoachPersistenceRegressionChecks {
         try FileManager.default.removeItem(at: freshRoot.appendingPathComponent("selection.json"))
         let lostMarker = PersistenceController(storageRootForRegression: freshRoot, legacyStoreForRegression: freshLegacy)
         try require(!lostMarker.isCoachLocal && lostMarker.storageError != nil, "unselected local directories prevent empty replacement after marker loss")
+        checks += try runSemanticMigrationCases(root: root)
+        // Run the independent active-source suite before probing the platform
+        // cold-WAL limitation so a fixture problem cannot hide its evidence.
+        let (coldRoot, coldURL) = try paths("closed-legacy")
+        let seedURL = coldURL.deletingLastPathComponent().appendingPathComponent("seed.store")
+        StartupStorageEvidence.coldSourceMigrationStatus = "preparing deterministic cold fixture"
+        let coldValues: (workout: UUID, run: UUID, route: Data) = try autoreleasepool {
+            let seed = try ModelContainer(for: schema, configurations: [ModelConfiguration("LegacyFixture", schema: schema, url: seedURL, cloudKitDatabase: .none)])
+            let workout = WorkoutSession(date: Date(timeIntervalSince1970: 25), notes: "Closed synthetic source", title: "Cold history")
+            let bytes = Data((0..<128_000).map { UInt8(truncatingIfNeeded: $0 &* 17) })
+            let run = RunningSession(date: workout.date, distance: 2, distanceUnit: "km", duration: 900, locations: bytes)
+            seed.mainContext.insert(workout); seed.mainContext.insert(run)
+            try seed.mainContext.save()
+            // Use the actual consistent backup API while the full-model seed
+            // may be live. Never copy an active SQLite main file by itself.
+            try CoachLocalOwnership.copyStore(from: seedURL, to: coldURL)
+            try CoachLocalOwnership.copyAuxiliaryFiles(from: seedURL, to: coldURL)
+            try require(try CoachLocalOwnership.rawCheckpoint(seedURL).identity == CoachLocalOwnership.rawCheckpoint(coldURL).identity,
+                        "deterministic cold fixture starts as an exact full-model backup")
+            return (workout.id, run.id, bytes)
+        }
+        // This new test-owned snapshot has never been opened by SwiftData.
+        // Its only SQLite writer sets WAL mode, then closes naturally. No
+        // WAL/SHM files are removed to manufacture a successful cold test.
+        try prepareSyntheticColdWAL(coldURL)
+        let headerHandle = try FileHandle(forReadingFrom: coldURL)
+        let coldHeader = try headerHandle.read(upToCount: 20) ?? Data()
+        try headerHandle.close()
+        try require(coldHeader.count == 20 && coldHeader[18] == 2 && coldHeader[19] == 2,
+                    "cold fixture retains its WAL-format header")
+        try require(!FileManager.default.fileExists(atPath: coldURL.path + "-wal")
+                    && !FileManager.default.fileExists(atPath: coldURL.path + "-shm"),
+                    "the sole cold fixture writer naturally closes without sidecars")
+        let coldBytesBefore = try syntheticStoreBytes(coldURL)
+        let coldController = PersistenceController(storageRootForRegression: coldRoot, legacyStoreForRegression: coldURL)
+        var coldReadable = false
+        var coldIdentity: String?
+        do {
+            coldIdentity = try CoachLocalOwnership.rawCheckpoint(coldURL, phase: "Closed synthetic legacy source").identity
+            coldReadable = true
+        } catch {
+            guard case CoachLocalOwnership.OwnershipError.unavailable(let message) = error,
+                  message.contains("(SQLite 14, OS ") else { throw error }
+        }
+        if coldReadable {
+            try await coldController.migrateForStorageRegression(interruptAfter: nil)
+            let coldWorkouts = try coldController.container.mainContext.fetch(FetchDescriptor<WorkoutSession>())
+            let coldRuns = try coldController.container.mainContext.fetch(FetchDescriptor<RunningSession>())
+            try require(coldController.isCoachLocal && coldWorkouts.count == 1 && coldWorkouts[0].id == coldValues.workout
+                        && coldRuns.count == 1 && coldRuns[0].id == coldValues.run && coldRuns[0].locations == coldValues.route,
+                        "supported cold legacy migration preserves records and external asset identities")
+            try require(try CoachLocalOwnership.rawCheckpoint(coldURL, phase: "Closed retained source after migration").identity == coldIdentity,
+                        "supported cold migration leaves source records and assets unchanged")
+            try require(try syntheticStoreBytes(coldURL) == coldBytesBefore,
+                        "supported cold migration preserves original file and asset bytes")
+            StartupStorageEvidence.coldSourceMigrationStatus = "supported: deterministic cold WAL fixture migrated with records and assets preserved"
+        } else {
+            // This is an explicit unsupported capability, not a successful
+            // migration. Prove the production boundary refuses it safely;
+            // successful live-WAL migrations below still run independently.
+            var refused = false
+            do { try await coldController.migrateForStorageRegression(interruptAfter: nil) }
+            catch {
+                guard case CoachLocalOwnership.OwnershipError.unavailable(let message) = error,
+                      message.contains("(SQLite 14, OS ") else { throw error }
+                refused = true
+            }
+            try require(refused && !coldController.isCoachLocal && coldController.needsLegacyMigration && coldController.storageError != nil,
+                        "unsupported cold WAL remains in recovery rather than reporting migration success")
+            try require(try CoachLocalOwnership.selectedStoreURL(root: coldRoot) == nil,
+                        "unsupported cold WAL never selects a destination")
+            try require(try syntheticStoreBytes(coldURL) == coldBytesBefore,
+                        "unsupported cold WAL leaves original main file and all assets byte-identical")
+            try require(!FileManager.default.fileExists(atPath: coldURL.path + "-wal")
+                        && !FileManager.default.fileExists(atPath: coldURL.path + "-shm"),
+                        "unsupported cold WAL does not create or remove source sidecars")
+            StartupStorageEvidence.coldSourceMigrationStatus = "unsupported: read-only cold WAL returned SQLITE_CANTOPEN(14); recovery and source preservation verified, migration not completed"
+        }
+
         return checks
     }
+
+    private static func prepareSyntheticColdWAL(_ url: URL) throws {
+        var database: OpaquePointer?
+        guard sqlite3_open_v2(CoachLocalOwnership.canonicalSQLiteURL(url).path, &database, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK,
+              let db = database else {
+            if let database { sqlite3_close(database) }
+            throw CoachRepositoryError.invalidValue("cold fixture could not open its new snapshot")
+        }
+        defer { if database != nil { sqlite3_close(database) } }
+        var query: OpaquePointer?
+        let prepared = sqlite3_prepare_v2(db, "PRAGMA journal_mode=WAL", -1, &query, nil)
+        guard prepared == SQLITE_OK, let query else {
+            if let query { sqlite3_finalize(query) }
+            throw CoachRepositoryError.invalidValue("cold fixture could not set WAL mode")
+        }
+        guard sqlite3_step(query) == SQLITE_ROW, let mode = sqlite3_column_text(query, 0),
+              String(cString: mode).lowercased() == "wal", sqlite3_step(query) == SQLITE_DONE else {
+            sqlite3_finalize(query)
+            throw CoachRepositoryError.invalidValue("cold fixture WAL mode was not confirmed")
+        }
+        sqlite3_finalize(query)
+        guard sqlite3_close(db) == SQLITE_OK else {
+            throw CoachRepositoryError.invalidValue("cold fixture's sole SQLite connection did not close")
+        }
+        database = nil
+    }
+
+    private static func syntheticStoreBytes(_ store: URL) throws -> [String: Data] {
+        var result = ["main": try Data(contentsOf: store)]
+        let support = store.deletingLastPathComponent().appendingPathComponent(".\(store.deletingPathExtension().lastPathComponent)_SUPPORT", isDirectory: true)
+        if FileManager.default.fileExists(atPath: support.path) {
+            var enumerationError: Error?
+            guard let enumerator = FileManager.default.enumerator(at: support, includingPropertiesForKeys: [.isRegularFileKey],
+                errorHandler: { _, error in enumerationError = error; return false }) else {
+                throw CoachRepositoryError.invalidValue("cold fixture assets could not be enumerated")
+            }
+            for case let file as URL in enumerator {
+                if try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true {
+                    result[String(file.path.dropFirst(support.path.count))] = try Data(contentsOf: file)
+                }
+            }
+            if let enumerationError { throw enumerationError }
+        }
+        return result
+    }
+
 }
 #endif

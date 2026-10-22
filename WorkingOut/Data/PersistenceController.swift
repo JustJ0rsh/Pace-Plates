@@ -77,6 +77,10 @@ class PersistenceController {
 
     static var coachSchema: Schema { Schema(legacyModelTypes + CoachPersistence.modelTypes) }
 
+    static var addedLocalSchemaTables: Set<String> {
+        Set(CoachPersistence.modelTypes.map { "Z" + String(describing: $0).uppercased() })
+    }
+
     #if DEBUG
     init(sourceStoreForRegression: ModelContainer) {
         precondition(AppLaunchConfiguration.current.isUITest)
@@ -263,11 +267,11 @@ class PersistenceController {
                 if FileManager.default.fileExists(atPath: owned.path) { try FileManager.default.removeItem(at: owned) }
                 try CoachLocalOwnership.prepareDirectory(owned)
                 let checkpoint = try await Task.detached(priority: .userInitiated) {
-                    let before = try CoachLocalOwnership.rawCheckpoint(source)
+                    let before = try CoachLocalOwnership.rawCheckpoint(source, phase: "Retained source before copy")
                     try CoachLocalOwnership.copyStore(from: source, to: destination)
                     try CoachLocalOwnership.copyAuxiliaryFiles(from: source, to: destination)
-                    let copy = try CoachLocalOwnership.rawCheckpoint(destination)
-                    let after = try CoachLocalOwnership.rawCheckpoint(source)
+                    let copy = try CoachLocalOwnership.rawCheckpoint(destination, phase: "Unselected snapshot after backup")
+                    let after = try CoachLocalOwnership.rawCheckpoint(source, phase: "Retained source after copy")
                     guard before.identity == copy.identity, before.identity == after.identity else {
                         throw CoachLocalOwnership.migrationError("The original history changed while being copied. Nothing was selected.")
                     }
@@ -285,9 +289,9 @@ class PersistenceController {
             }
             // A previous interrupted attempt may already have opened this
             // unselected copy with the full schema. Check every original field.
-            try CoachLocalOwnership.verifyRetainedColumns(checkpoint, at: destination)
+            try CoachLocalOwnership.verifyRetainedColumns(checkpoint, at: destination, allowedNewTables: Self.addedLocalSchemaTables)
             let local = try Self.makeLocalContainer(url: destination)
-            try CoachLocalOwnership.verifyRetainedColumns(checkpoint, at: destination)
+            try CoachLocalOwnership.verifyRetainedColumns(checkpoint, at: destination, allowedNewTables: Self.addedLocalSchemaTables)
             // Exercise typed model decoding as well as raw column fidelity.
             _ = try CoachLocalOwnership.identityInventory(local.mainContext)
             _ = try CoachLocalOwnership.snapshotDigest(local.mainContext)

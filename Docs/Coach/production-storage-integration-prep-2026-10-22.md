@@ -16,6 +16,10 @@
 
 The new `CoachPersistenceRegressionChecks+Startup.swift` and additions to `CoachPersistenceRegressionChecks.swift` define actual production startup/migration and backup-restore fixtures. `StorageIntegrationAcceptanceView` provides a Debug-only way to run disposable fixtures and record a result. Their existence is not a passing result. The standalone Python protocol and candidate restore adapter remain supplemental evidence, distinct from executing actual SwiftData paths.
 
+Physical synthetic runs identified SQLite snapshots retaining a WAL header after the backup connection closes, and Core Data changing transaction bookkeeping/entity numbers when the copied schema opens. New snapshots are normalized to rollback-journal mode on their sole writable destination connection. Source access stays read-only. Literal pre/copy/post checks still include every table. Post-schema verification ignores only the enumerated Core Data bookkeeping tables and resolves `Z_ENT` through a validated stable entity-name map; primary keys, revision counters, relationship keys, app fields and external asset bytes remain checked. Unknown new tables or column changes fail closed. The semantic regression fixture explicitly tampers with fields, relationships, entity meaning, tables and columns to require rejection.
+
+Cold WAL files without sidecars have a separate capability result. An exact read-only `SQLITE_CANTOPEN(14)` is reported as unsupported only after the real controller is verified to retain the original file/assets and stay in recovery without selecting a destination. It is not a successful migration. Older schemas with structural column changes, locked-device and power-loss durability, and real integration transitions remain release acceptance gates.
+
 ## Remaining integration/acceptance limits
 
 - The actual model graph, all optional fields and relationship/asset variants need complete synthetic coverage. Existing raw-column comparison avoids relying only on the portable backup DTO, but does not by itself certify every supported old schema or OS migration behavior.

@@ -20,22 +20,30 @@ extension CoachLocalOwnership {
         let digest: String
         let assetDigest: String
         let columns: [String: [String]]
+        let schemaTables: Set<String>
         let recordDigest: String
+        #if DEBUG
+        let source: URL
+        let tableDigests: [String: String]
+        #endif
         var identity: String { digest + ":" + assetDigest }
     }
 
     final class MigrationLock {
-        private let descriptor: Int32
+        private var descriptor: Int32 = -1
         init(root: URL) throws {
             try prepareDirectory(root)
             descriptor = Darwin.open(root.appendingPathComponent("migration.lock").path, O_CREAT | O_RDWR, 0o600)
             guard descriptor >= 0 else { throw migrationError("The storage lock could not be opened.") }
             guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
                 Darwin.close(descriptor)
+                descriptor = -1
                 throw migrationError("Another storage operation is already in progress.")
             }
         }
-        deinit { _ = flock(descriptor, LOCK_UN); Darwin.close(descriptor) }
+        deinit {
+            if descriptor >= 0 { _ = flock(descriptor, LOCK_UN); Darwin.close(descriptor) }
+        }
     }
 
     static func migrationError(_ message: String) -> OwnershipError {
@@ -103,79 +111,264 @@ extension CoachLocalOwnership {
     /// original column avoids treating the portable backup DTO as a complete
     /// inventory of persisted fields. Core Data bookkeeping is checked in the
     /// raw-copy digest, but may legitimately change when a copy is opened.
-    static func rawCheckpoint(_ url: URL) throws -> RawCheckpoint {
+    static func rawCheckpoint(_ url: URL, phase: String = "History") throws -> RawCheckpoint {
         let attributes = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
         guard attributes.isRegularFile == true, attributes.isSymbolicLink != true else {
             throw migrationError("The retained storage file is an unsupported link or file type.")
         }
         var database: OpaquePointer?
-        guard sqlite3_open_v2(url.path, &database, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = database else {
+        guard sqlite3_open_v2(canonicalSQLiteURL(url).path, &database, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = database else {
             if let database { sqlite3_close(database) }
             throw migrationError("The retained SQLite history could not be read.")
         }
         defer { sqlite3_close(db) }
-        guard sqlite3_exec(db, "BEGIN", nil, nil, nil) == SQLITE_OK else { throw migrationError("A consistent history snapshot was unavailable.") }
+        sqlite3_busy_timeout(db, 5_000)
+        guard sqlite3_exec(db, "BEGIN", nil, nil, nil) == SQLITE_OK else { throw sqliteFailure("A consistent history snapshot was unavailable", database: db) }
         defer { sqlite3_exec(db, "ROLLBACK", nil, nil, nil) }
         var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(db, "SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name", -1, &statement, nil) == SQLITE_OK,
-              let tablesStatement = statement else { throw migrationError("The source schema could not be inspected.") }
+        let prepared = sqlite3_prepare_v2(db, "SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name", -1, &statement, nil)
+        guard prepared == SQLITE_OK, let tablesStatement = statement else {
+            let failure = sqliteFailure("\(phase) schema could not be inspected", database: db)
+            if let statement { sqlite3_finalize(statement) }
+            throw failure
+        }
         defer { sqlite3_finalize(tablesStatement) }
+        let entityNames = try entityNameMap(db)
         var all = "", records = "", columns: [String: [String]] = [:]
+        var schemaTables: Set<String> = []
+        #if DEBUG
+        var tableDigests: [String: String] = [:]
+        #endif
         while true {
             let step = sqlite3_step(tablesStatement)
             if step == SQLITE_DONE { break }
-            guard step == SQLITE_ROW, let nameBytes = sqlite3_column_text(tablesStatement, 0) else { throw migrationError("The source schema could not be read completely.") }
+            guard step == SQLITE_ROW, let nameBytes = sqlite3_column_text(tablesStatement, 0) else { throw sqliteFailure("The source schema could not be read completely", database: db) }
             let name = String(cString: nameBytes)
+            schemaTables.insert(name)
             let schema = sqlite3_column_text(tablesStatement, 1).map { String(cString: $0) } ?? ""
             let row = try tableDigest(db, table: name, columns: nil)
             all += "\(name.utf8.count):\(name)\(schema.utf8.count):\(schema)\(row.digest)"
             // These are Core Data metadata, not app-owned model columns.
-            if !["Z_METADATA", "Z_PRIMARYKEY", "Z_MODELCACHE"].contains(name) && !name.hasPrefix("ANSCK") {
+            if !knownBookkeepingTables.contains(name) && !name.hasPrefix("ANSCK") {
+                let semantic = try tableDigest(db, table: name, columns: nil, entityNames: entityNames)
                 columns[name] = row.columns
-                records += "\(name.utf8.count):\(name)\(row.digest)"
+                records += "\(name.utf8.count):\(name)\(semantic.digest)"
+                #if DEBUG
+                tableDigests[name] = semantic.digest
+                #endif
             }
         }
         guard !columns.isEmpty else { throw migrationError("The source contains no recognized persisted tables.") }
-        return RawCheckpoint(digest: hash(Data(all.utf8)), assetDigest: try assetDigest(url), columns: columns,
+        #if DEBUG
+        return RawCheckpoint(digest: hash(Data(all.utf8)), assetDigest: try assetDigest(url), columns: columns, schemaTables: schemaTables,
+                             recordDigest: hash(Data(records.utf8)), source: url, tableDigests: tableDigests)
+        #else
+        return RawCheckpoint(digest: hash(Data(all.utf8)), assetDigest: try assetDigest(url), columns: columns, schemaTables: schemaTables,
                              recordDigest: hash(Data(records.utf8)))
+        #endif
     }
 
-    static func verifyRetainedColumns(_ checkpoint: RawCheckpoint, at url: URL) throws {
+    static func verifyRetainedColumns(_ checkpoint: RawCheckpoint, at url: URL, allowedNewTables: Set<String> = []) throws {
         var database: OpaquePointer?
-        guard sqlite3_open_v2(url.path, &database, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = database else {
+        guard sqlite3_open_v2(canonicalSQLiteURL(url).path, &database, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = database else {
             if let database { sqlite3_close(database) }
             throw migrationError("The local copy could not be verified.")
         }
         defer { sqlite3_close(db) }
-        guard sqlite3_exec(db, "BEGIN", nil, nil, nil) == SQLITE_OK else { throw migrationError("The local copy snapshot could not be opened.") }
+        sqlite3_busy_timeout(db, 5_000)
+        guard sqlite3_exec(db, "BEGIN", nil, nil, nil) == SQLITE_OK else { throw sqliteFailure("The local copy snapshot could not be opened", database: db) }
         defer { sqlite3_exec(db, "ROLLBACK", nil, nil, nil) }
+        let entityNames = try entityNameMap(db)
+        let destinationTables = try tableNames(db)
+        for table in destinationTables.subtracting(checkpoint.schemaTables) {
+            guard knownBookkeepingTables.contains(table) || allowedNewTables.contains(table) else {
+                throw migrationError("The local schema added an unrecognized table. The copy was not selected.")
+            }
+            if allowedNewTables.contains(table), try diagnosticRowCount(db, table: table) != 0 {
+                throw migrationError("The local schema unexpectedly populated a new table. The copy was not selected.")
+            }
+        }
         var records = ""
+        #if DEBUG
+        var actualTableDigests: [String: String] = [:]
+        #endif
         for table in checkpoint.columns.keys.sorted() {
-            let row = try tableDigest(db, table: table, columns: checkpoint.columns[table])
+            let full = try tableDigest(db, table: table, columns: nil, entityNames: entityNames)
+            guard full.columns == checkpoint.columns[table] else {
+                throw migrationError("A persisted table gained or lost unrecognized columns. The copy was not selected.")
+            }
+            let row = try tableDigest(db, table: table, columns: checkpoint.columns[table], entityNames: entityNames)
             records += "\(table.utf8.count):\(table)\(row.digest)"
+            #if DEBUG
+            actualTableDigests[table] = row.digest
+            #endif
         }
-        guard hash(Data(records.utf8)) == checkpoint.recordDigest, try assetDigest(url) == checkpoint.assetDigest else {
-            throw migrationError("Opening the local schema changed an original record or asset. The copy was not selected.")
+        let recordsMatch = hash(Data(records.utf8)) == checkpoint.recordDigest
+        let assetsMatch = try assetDigest(url) == checkpoint.assetDigest
+        guard recordsMatch, assetsMatch else {
+            var message = "Opening the local schema changed an original record or asset. The copy was not selected."
+            #if DEBUG
+            message += " " + ((try? verificationDiagnostic(checkpoint, copy: db, actual: actualTableDigests, assetsMatch: assetsMatch)) ?? "Mismatch diagnostic unavailable.")
+            #endif
+            throw migrationError(message)
         }
+    }
+
+    /// Exact framework tables observed changing during the full-schema open.
+    /// They remain in the literal pre-copy/source checksum above. None of the
+    /// application's columns, row IDs or foreign keys are excluded here.
+    private static let knownBookkeepingTables: Set<String> = [
+        "Z_METADATA", "Z_PRIMARYKEY", "Z_MODELCACHE",
+        "ACHANGE", "ATRANSACTION", "ATRANSACTIONSTRING"
+    ]
+
+    private static func tableNames(_ db: OpaquePointer) throws -> Set<String> {
+        var query: OpaquePointer?
+        let prepared = sqlite3_prepare_v2(db, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'", -1, &query, nil)
+        guard prepared == SQLITE_OK, let query else {
+            let failure = sqliteFailure("The destination schema could not be inspected", database: db)
+            if let query { sqlite3_finalize(query) }
+            throw failure
+        }
+        defer { sqlite3_finalize(query) }
+        var result: Set<String> = []
+        while true {
+            let step = sqlite3_step(query)
+            if step == SQLITE_DONE { break }
+            guard step == SQLITE_ROW, let name = sqlite3_column_text(query, 0) else {
+                throw sqliteFailure("The destination schema could not be read", database: db)
+            }
+            result.insert(String(cString: name))
+        }
+        return result
+    }
+
+    private static func entityNameMap(_ db: OpaquePointer) throws -> [Int64: String] {
+        var query: OpaquePointer?
+        let prepared = sqlite3_prepare_v2(db, "SELECT Z_ENT, Z_NAME FROM Z_PRIMARYKEY", -1, &query, nil)
+        guard prepared == SQLITE_OK, let query else {
+            let failure = sqliteFailure("The entity identity map could not be inspected", database: db)
+            if let query { sqlite3_finalize(query) }
+            throw failure
+        }
+        defer { sqlite3_finalize(query) }
+        var result: [Int64: String] = [:]
+        var names: Set<String> = []
+        while true {
+            let step = sqlite3_step(query)
+            if step == SQLITE_DONE { break }
+            guard step == SQLITE_ROW, sqlite3_column_type(query, 0) == SQLITE_INTEGER,
+                  sqlite3_column_type(query, 1) == SQLITE_TEXT, let value = sqlite3_column_text(query, 1) else {
+                throw migrationError("The entity identity map contains an unsupported entry.")
+            }
+            let id = sqlite3_column_int64(query, 0), name = String(cString: value)
+            guard !name.isEmpty, result[id] == nil, names.insert(name).inserted else {
+                throw migrationError("The entity identity map is ambiguous.")
+            }
+            result[id] = name
+        }
+        return result
+    }
+
+    #if DEBUG
+    /// Diagnostic only: compare field fingerprints after the full-row guard
+    /// has already failed. No values, IDs, paths or hashes leave this method.
+    private static func verificationDiagnostic(_ checkpoint: RawCheckpoint, copy: OpaquePointer,
+                                               actual: [String: String], assetsMatch: Bool) throws -> String {
+        let changed = checkpoint.tableDigests.keys.sorted().filter { checkpoint.tableDigests[$0] != actual[$0] }
+        var source: OpaquePointer?
+        guard sqlite3_open_v2(canonicalSQLiteURL(checkpoint.source).path, &source, SQLITE_OPEN_READONLY, nil) == SQLITE_OK,
+              let sourceDB = source else {
+            if let source { sqlite3_close(source) }
+            return "Records changed: \(!changed.isEmpty); assets changed: \(!assetsMatch); source diagnostic unavailable."
+        }
+        defer { sqlite3_close(sourceDB) }
+        sqlite3_busy_timeout(sourceDB, 5_000)
+        guard sqlite3_exec(sourceDB, "BEGIN", nil, nil, nil) == SQLITE_OK else { return "Source diagnostic snapshot unavailable." }
+        defer { sqlite3_exec(sourceDB, "ROLLBACK", nil, nil, nil) }
+        let sourceNames = try entityNameMap(sourceDB), copyNames = try entityNameMap(copy)
+        var descriptions: [String] = []
+        for table in changed.prefix(4) {
+            let original = try tableDigest(sourceDB, table: table, columns: checkpoint.columns[table], entityNames: sourceNames)
+            guard original.digest == checkpoint.tableDigests[table] else {
+                descriptions.append(table + ": source changed before diagnostic")
+                continue
+            }
+            var fields: [String] = []
+            for column in checkpoint.columns[table] ?? [] {
+                if try tableDigest(sourceDB, table: table, columns: [column], entityNames: sourceNames).digest != tableDigest(copy, table: table, columns: [column], entityNames: copyNames).digest {
+                    fields.append(column)
+                }
+            }
+            let sourceCount = try diagnosticRowCount(sourceDB, table: table)
+            let copyCount = try diagnosticRowCount(copy, table: table)
+            descriptions.append("\(table) rows \(sourceCount)->\(copyCount): "
+                + (fields.isEmpty ? "row associations changed" : fields.prefix(12).joined(separator: ",")))
+        }
+        return "Records changed: \(!changed.isEmpty); assets changed: \(!assetsMatch). " + descriptions.joined(separator: "; ")
+    }
+
+    #endif
+
+    private static func diagnosticRowCount(_ db: OpaquePointer, table: String) throws -> Int64 {
+        var statement: OpaquePointer?
+        let prepared = sqlite3_prepare_v2(db, "SELECT count(*) FROM \(quote(table))", -1, &statement, nil)
+        guard prepared == SQLITE_OK, let statement else {
+            if let statement { sqlite3_finalize(statement) }
+            throw migrationError("Diagnostic row count unavailable.")
+        }
+        defer { sqlite3_finalize(statement) }
+        guard sqlite3_step(statement) == SQLITE_ROW else { throw migrationError("Diagnostic row count unavailable.") }
+        return sqlite3_column_int64(statement, 0)
     }
 
     private static func quote(_ identifier: String) -> String { "\"" + identifier.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }
 
-    private static func tableDigest(_ db: OpaquePointer, table: String, columns: [String]?) throws -> (columns: [String], digest: String) {
+    private static func sqliteFailure(_ operation: String, database: OpaquePointer) -> OwnershipError {
+        // SQLite's diagnostic contains schema/locking information, never any
+        // queried row content. It distinguishes retryable contention from an
+        // unsupported/corrupt schema without logging personal record values.
+        var detail = "SQLite \(sqlite3_extended_errcode(database)), OS \(sqlite3_system_errno(database)): \(String(cString: sqlite3_errmsg(database)))"
+        #if DEBUG
+        if let filename = sqlite3_db_filename(database, "main") {
+            let path = String(cString: filename)
+            let manager = FileManager.default
+            let metadata = ["main": path, "WAL": path + "-wal", "SHM": path + "-shm"].map { label, file in
+                "\(label)=\(manager.fileExists(atPath: file) ? "present" : "absent")/\(manager.isReadableFile(atPath: file) ? "readable" : "unreadable")"
+            }.sorted().joined(separator: ", ")
+            detail += "; " + metadata
+        }
+        #endif
+        return migrationError("\(operation) (\(detail)).")
+    }
+
+    private static func tableDigest(_ db: OpaquePointer, table: String, columns: [String]?, entityNames: [Int64: String]? = nil) throws -> (columns: [String], digest: String) {
         let fields = columns.map { $0.map(quote).joined(separator: ",") } ?? "*"
         var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(db, "SELECT \(fields) FROM \(quote(table))", -1, &statement, nil) == SQLITE_OK,
-              let query = statement else { throw migrationError("A persisted table or field could not be verified.") }
+        let prepared = sqlite3_prepare_v2(db, "SELECT \(fields) FROM \(quote(table))", -1, &statement, nil)
+        guard prepared == SQLITE_OK, let query = statement else {
+            let failure = sqliteFailure("A persisted table or field could not be verified", database: db)
+            if let statement { sqlite3_finalize(statement) }
+            throw failure
+        }
         defer { sqlite3_finalize(query) }
         let names = (0..<sqlite3_column_count(query)).map { String(cString: sqlite3_column_name(query, $0)) }
         var rows: [String] = []
         while true {
             let step = sqlite3_step(query)
             if step == SQLITE_DONE { break }
-            guard step == SQLITE_ROW else { throw migrationError("A persisted row could not be verified.") }
+            guard step == SQLITE_ROW else { throw sqliteFailure("A persisted row could not be verified", database: db) }
             var bytes = Data()
             for index in 0..<sqlite3_column_count(query) {
                 let type = sqlite3_column_type(query, index)
+                if names[Int(index)] == "Z_ENT", let entityNames {
+                    guard type == SQLITE_INTEGER, let meaning = entityNames[sqlite3_column_int64(query, index)] else {
+                        throw migrationError("A persisted row has an unknown entity identity.")
+                    }
+                    let value = Data(meaning.utf8)
+                    bytes.append(Data("entity:\(value.count):".utf8)); bytes.append(value)
+                    continue
+                }
                 bytes.append(Data("\(type):".utf8))
                 let value: Data
                 switch type {

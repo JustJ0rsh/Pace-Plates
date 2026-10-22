@@ -82,14 +82,20 @@ enum CoachLocalOwnership {
     /// SQLite's backup API reads a consistent snapshot including WAL content;
     /// copying the main SQLite file alone can lose recently saved records.
     static func copyStore(from source: URL, to destination: URL) throws {
+        let sourceURL = canonicalSQLiteURL(source)
+        let destinationURL = canonicalSQLiteURL(destination)
+        guard sourceURL != destinationURL,
+              ![destinationURL.path, destinationURL.path + "-wal", destinationURL.path + "-shm"].contains(where: FileManager.default.fileExists(atPath:)) else {
+            throw OwnershipError.unavailable("The copy destination is not a new, unselected store. The original history is unchanged.")
+        }
         var sourceDB: OpaquePointer?
         var destinationDB: OpaquePointer?
-        guard sqlite3_open_v2(source.path, &sourceDB, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
+        guard sqlite3_open_v2(sourceURL.path, &sourceDB, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
             if let sourceDB { sqlite3_close(sourceDB) }
             throw OwnershipError.unavailable("The original store could not be opened for a read-only copy.")
         }
         defer { sqlite3_close(sourceDB) }
-        guard sqlite3_open_v2(destination.path, &destinationDB, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK else {
+        guard sqlite3_open_v2(destinationURL.path, &destinationDB, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK else {
             if let destinationDB { sqlite3_close(destinationDB) }
             throw OwnershipError.unavailable("There is not enough writable storage to prepare the local copy.")
         }
@@ -104,8 +110,33 @@ enum CoachLocalOwnership {
         guard result == SQLITE_DONE, finished == SQLITE_OK else {
             throw OwnershipError.unavailable("The store was busy or the copy was interrupted. Retry after other activity has finished.")
         }
+        // Backup preserves the source WAL header even though this new snapshot
+        // has no shared-memory/WAL sidecars. Normalize only the unselected copy
+        // while its sole writable connection is open. A subsequent read-only
+        // verifier can then open it without creating sidecars. The source
+        // remains read-only and its journaling mode is never changed.
+        var modeStatement: OpaquePointer?
+        let prepared = sqlite3_prepare_v2(destinationDB, "PRAGMA journal_mode=DELETE", -1, &modeStatement, nil)
+        guard prepared == SQLITE_OK, let modeStatement else {
+            if let modeStatement { sqlite3_finalize(modeStatement) }
+            throw OwnershipError.unavailable("The new snapshot could not be made independently readable. The original history is unchanged.")
+        }
+        defer { sqlite3_finalize(modeStatement) }
+        guard sqlite3_step(modeStatement) == SQLITE_ROW,
+              let mode = sqlite3_column_text(modeStatement, 0),
+              String(cString: mode).lowercased() == "delete",
+              sqlite3_step(modeStatement) == SQLITE_DONE else {
+            throw OwnershipError.unavailable("The new snapshot retained an unsupported journaling mode. The original history is unchanged.")
+        }
         try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
                                              ofItemAtPath: destination.path)
+    }
+
+    /// Resolve the existing parent without asking Foundation to resolve a
+    /// not-yet-created database tail. All connections use the same WAL name.
+    static func canonicalSQLiteURL(_ url: URL) -> URL {
+        url.deletingLastPathComponent().resolvingSymlinksInPath()
+            .appendingPathComponent(url.lastPathComponent).standardizedFileURL
     }
 
     @MainActor
