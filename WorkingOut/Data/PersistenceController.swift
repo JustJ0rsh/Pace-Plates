@@ -181,8 +181,25 @@ class PersistenceController {
 
     #if DEBUG
     static func isSyntheticDescendant(_ child: URL, of parent: URL) -> Bool {
-        let childParts = child.resolvingSymlinksInPath().standardizedFileURL.pathComponents
-        let parentParts = parent.resolvingSymlinksInPath().standardizedFileURL.pathComponents
+        // On iOS, resolving an entirely nonexistent tail may leave /var versus
+        // /private/var aliases unresolved. Resolve its existing ancestor first.
+        func canonicalParts(_ url: URL) -> [String]? {
+            var ancestor = url.standardizedFileURL
+            var tail: [String] = []
+            while !FileManager.default.fileExists(atPath: ancestor.path) {
+                if (try? FileManager.default.destinationOfSymbolicLink(atPath: ancestor.path)) != nil { return nil }
+                guard ancestor.path != "/" else { return nil }
+                tail.append(ancestor.lastPathComponent)
+                ancestor.deleteLastPathComponent()
+            }
+            if !tail.isEmpty {
+                var isDirectory: ObjCBool = false
+                guard FileManager.default.fileExists(atPath: ancestor.path, isDirectory: &isDirectory),
+                      isDirectory.boolValue else { return nil }
+            }
+            return ancestor.resolvingSymlinksInPath().standardizedFileURL.pathComponents + tail.reversed()
+        }
+        guard let childParts = canonicalParts(child), let parentParts = canonicalParts(parent) else { return false }
         return childParts.count > parentParts.count
             && Array(childParts.prefix(parentParts.count)) == parentParts
     }

@@ -24,6 +24,16 @@ extension CoachPersistenceRegressionChecks {
                     "temporary root itself is not an owned fixture")
         try require(!PersistenceController.isSyntheticDescendant(URL(fileURLWithPath: temporary.path + "-outside/example"), of: temporary),
                     "prefix sibling is not a contained fixture")
+        try require(PersistenceController.isSyntheticDescendant(root.appendingPathComponent("not-created/ownership", isDirectory: true), of: temporary),
+                    "nonexistent fixture tail resolves through its existing temporary ancestor")
+        let outsideLink = root.appendingPathComponent("outside-link")
+        try FileManager.default.createSymbolicLink(at: outsideLink, withDestinationURL: root.deletingLastPathComponent())
+        try require(!PersistenceController.isSyntheticDescendant(outsideLink.appendingPathComponent("outside-child"), of: root),
+                    "symbolic link outside the owned fixture is rejected")
+        let ordinaryFile = root.appendingPathComponent("ordinary-file")
+        try Data().write(to: ordinaryFile)
+        try require(!PersistenceController.isSyntheticDescendant(ordinaryFile.appendingPathComponent("child"), of: root),
+                    "a file cannot be the parent of a new fixture directory")
         let (freshRoot, freshLegacy) = try paths("fresh")
         let fresh = PersistenceController(storageRootForRegression: freshRoot, legacyStoreForRegression: freshLegacy)
         try require(fresh.isCoachLocal && !fresh.isCloudBacked && fresh.storageError == nil, "fresh startup selects explicit local storage")
