@@ -5,6 +5,10 @@ import UIKit
 final class GameCenterService: NSObject {
     static let shared = GameCenterService()
     private static let communityAccessKey = "gameCenterCommunityAccessEnabled"
+    private let communityConsent = CommunityConsent(
+        readEnabled: { UserDefaults.standard.bool(forKey: GameCenterService.communityAccessKey) },
+        writeEnabled: { UserDefaults.standard.set($0, forKey: GameCenterService.communityAccessKey) }
+    )
 
     private(set) var isAuthenticated: Bool = GKLocalPlayer.local.isAuthenticated
     private var apObserver: NSKeyValueObservation? = nil
@@ -12,13 +16,13 @@ final class GameCenterService: NSObject {
     private override init() { }
 
     var isCommunityAccessEnabled: Bool {
-        UserDefaults.standard.bool(forKey: Self.communityAccessKey)
+        communityConsent.isEnabled
     }
 
     /// Clears the opt-in flag and deactivates the Game Center Access Point so no
     /// further scores/achievements are uploaded and the on-screen dot is hidden.
     func disableCommunityAccess() {
-        UserDefaults.standard.set(false, forKey: Self.communityAccessKey)
+        communityConsent.setEnabled(false)
         apObserver?.invalidate()
         apObserver = nil
         GKAccessPoint.shared.isActive = false
@@ -43,7 +47,7 @@ final class GameCenterService: NSObject {
         presenting viewController: UIViewController? = nil,
         completion: ((Error?) -> Void)? = nil
     ) {
-        UserDefaults.standard.set(true, forKey: Self.communityAccessKey)
+        communityConsent.setEnabled(true)
 
         if isAuthenticated || GKLocalPlayer.local.isAuthenticated {
             completion?(nil)
@@ -82,22 +86,27 @@ final class GameCenterService: NSObject {
 
     // MARK: - Score Reporting
     func reportScore(_ value: Int64, to leaderboardID: String, completion: ((Error?) -> Void)? = nil) {
-        guard isCommunityAccessEnabled else { return }
-
-        let submit = {
+        performWithCommunityConsent(prepare: { ready in
+            if self.isAuthenticated || GKLocalPlayer.local.isAuthenticated {
+                ready(())
+            } else {
+                self.authenticate { _ in ready(()) }
+            }
+        }, submit: { _ in
             GKLeaderboard.submitScore(Int(value),
                                       context: 0,
                                       player: GKLocalPlayer.local,
                                       leaderboardIDs: [leaderboardID]) { error in
                 completion?(error)
             }
-        }
+        })
+    }
 
-        if isAuthenticated || GKLocalPlayer.local.isAuthenticated {
-            submit()
-        } else {
-            authenticate { _ in submit() }
-        }
+    func performWithCommunityConsent<Value>(
+        prepare: (@escaping (Value) -> Void) -> Void,
+        submit: @escaping (Value) -> Void
+    ) {
+        communityConsent.performWhenPrepared(prepare: prepare, submit: submit)
     }
 
     // MARK: - Helpers for specific boards
@@ -113,31 +122,35 @@ final class GameCenterService: NSObject {
 
     // MARK: - Achievements (streaks)
     func updateStreakAchievements(dailyStreak: Int, weeklyStreak: Int) {
-        var achievements: [GKAchievement] = []
+        performWithCommunityConsent(prepare: { ready in
+            var achievements: [GKAchievement] = []
 
-        // Daily streaks
-        for t in StreakService.dailyThresholds {
-            let id = String(format: "streak_days_%03d", t)
-            let a = GKAchievement(identifier: id)
-            let pct = min(100.0, (Double(dailyStreak) / Double(t)) * 100.0)
-            a.percentComplete = pct
-            a.showsCompletionBanner = true
-            achievements.append(a)
-        }
+            // Daily streaks
+            for t in StreakService.dailyThresholds {
+                let id = String(format: "streak_days_%03d", t)
+                let a = GKAchievement(identifier: id)
+                let pct = min(100.0, (Double(dailyStreak) / Double(t)) * 100.0)
+                a.percentComplete = pct
+                a.showsCompletionBanner = true
+                achievements.append(a)
+            }
 
-        // Weekly streaks
-        for t in StreakService.weeklyThresholds {
-            let id = String(format: "streak_weeks_%03d", t)
-            let a = GKAchievement(identifier: id)
-            let pct = min(100.0, (Double(weeklyStreak) / Double(t)) * 100.0)
-            a.percentComplete = pct
-            a.showsCompletionBanner = true
-            achievements.append(a)
-        }
+            // Weekly streaks
+            for t in StreakService.weeklyThresholds {
+                let id = String(format: "streak_weeks_%03d", t)
+                let a = GKAchievement(identifier: id)
+                let pct = min(100.0, (Double(weeklyStreak) / Double(t)) * 100.0)
+                a.percentComplete = pct
+                a.showsCompletionBanner = true
+                achievements.append(a)
+            }
 
-        GKAchievement.report(achievements) { error in
-            if let error { print("GameCenter: Failed to report achievements: \(error)") }
-        }
+            ready(achievements)
+        }, submit: { achievements in
+            GKAchievement.report(achievements) { error in
+                if let error { print("GameCenter: Failed to report achievements: \(error)") }
+            }
+        })
     }
 
     // Convert kg to lbs
