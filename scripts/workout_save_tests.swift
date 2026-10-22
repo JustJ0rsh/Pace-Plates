@@ -54,6 +54,49 @@ struct WorkoutSaveTests {
             check(!reentrant.save(.dismissal, persist: { writes += 1 }, onFailure: { _ in fatalError() }), "in-flight callback blocked")
         }, onFailure: { _ in fatalError() }), "outer save completes")
         check(writes == 1, "reentrant callback cannot duplicate records")
+        // The store owns complete drafts independently of any presented alert.
+        final class HeldDraft {
+            let value: Draft
+            init(_ value: Draft) { self.value = value }
+        }
+        let store = WorkoutSaveRecoveryStore()
+        let firstID = UUID(), secondID = UUID()
+        var held: HeldDraft? = HeldDraft(draft)
+        weak var weakDraft = held
+        var maySave = false
+        var recovered: Draft?
+        var first: WorkoutSaveRecovery? = WorkoutSaveRecovery(id: firstID, title: "First", message: "Disk full") { [retained = held!] in
+            guard maySave else { return false }
+            recovered = retained.value
+            return true
+        }
+        store.enqueue(first!)
+        first = nil
+        held = nil
+        var alertID: UUID? = firstID
+        alertID = nil // Later, swipe-dismissed alert, or a different alert.
+        check(alertID == nil && store.pending.count == 1, "postponing does not remove pending recovery")
+        check(weakDraft != nil, "store keeps full draft alive after editor and alert go away")
+        store.enqueue(WorkoutSaveRecovery(id: secondID, title: "Second", message: "Validation failed") { false })
+        check(store.pending.count == 2, "multiple failed drafts coexist")
+        check(!store.retry(id: firstID), "retry failure reported")
+        check(store.pending.count == 2, "retry failure removes nothing")
+        check(weakDraft?.value == draft, "all fields retained after retry failure")
+        // Retrying may synchronously publish another failure for the same draft.
+        store.enqueue(WorkoutSaveRecovery(id: secondID, title: "Second", message: "Still invalid") {
+            store.enqueue(WorkoutSaveRecovery(id: secondID, title: "Second", message: "Still invalid") { false })
+            return false
+        })
+        check(store.pending.count == 2, "repeated notification replaces only matching draft")
+        check(!store.retry(id: secondID), "nested notification retry remains failed")
+        check(store.pending.count == 2, "nested notification cannot duplicate queue entries")
+        maySave = true
+        check(store.retry(id: firstID), "successful retry reported")
+        check(recovered == draft, "successful retry persists full original draft")
+        check(weakDraft == nil, "successful recovery releases retained editor draft")
+        check(store.pending.count == 1 && store.pending.first?.id == secondID, "success removes only saved draft")
+        check(store.recovery(id: firstID) == nil, "saved recovery no longer pending")
+        check(store.recovery(id: secondID)?.message == "Still invalid", "other draft remains available later")
         print("PASS: \(checks) workout save regression checks")
     }
 }

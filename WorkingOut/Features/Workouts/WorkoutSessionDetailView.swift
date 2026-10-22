@@ -244,21 +244,23 @@ struct WorkoutSessionDetailView: View {
         if didEditTitle, session.title != titleText {
             session.title = titleText
         }
-        return closeSave.save(trigger, persist: {
+        let saved = closeSave.save(trigger, persist: {
             try modelContext.save()
         }, onFailure: { error in
             finishError = error.localizedDescription
             if case .dismissal = trigger {
-                let recovery = WorkoutSaveRecovery(message: error.localizedDescription) {
+                let recovery = WorkoutSaveRecovery(id: session.id, title: titleText, message: error.localizedDescription) {
                     if persistDetailChangesBeforeDismiss(.dismissal) {
                         schedulePostDismissMaintenance()
                         return true
                     }
                     return false
                 }
-                NotificationCenter.default.post(name: WorkoutSaveRecovery.notification, object: recovery)
+                recovery.publish()
             }
         })
+        if saved { WorkoutSaveRecoveryStore.shared.didSave(id: session.id) }
+        return saved
     }
 
     private func schedulePostDismissMaintenance() {

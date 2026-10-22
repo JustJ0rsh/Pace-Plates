@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 /// A successful close saves once, even when SwiftUI subsequently calls onDisappear.
 /// A failed attempt stays retryable and never discards the caller's pending model edits.
@@ -37,15 +38,57 @@ final class WorkoutSaveBoundary {
     }
 }
 
-/// Keeps a dismissed editor's pending save reachable from the app's error alert.
+/// Owns the retry closure (and its full editor draft) until persistence succeeds.
 @MainActor
-final class WorkoutSaveRecovery {
+final class WorkoutSaveRecovery: Identifiable {
     static let notification = Notification.Name("WorkoutSaveRecovery")
+    let id: UUID
+    let title: String
     let message: String
     let retry: () -> Bool
 
-    init(message: String, retry: @escaping () -> Bool) {
+    init(id: UUID, title: String, message: String, retry: @escaping () -> Bool) {
+        self.id = id
+        self.title = title
         self.message = message
         self.retry = retry
+    }
+
+    func publish() {
+        WorkoutSaveRecoveryStore.shared.enqueue(self)
+        NotificationCenter.default.post(name: Self.notification, object: self)
+    }
+}
+
+/// Alert visibility never owns recovery lifetime. Repeated failures replace only
+/// the same session's entry; another failed workout cannot evict its draft.
+@MainActor
+final class WorkoutSaveRecoveryStore: ObservableObject {
+    static let shared = WorkoutSaveRecoveryStore()
+    @Published private(set) var pending: [WorkoutSaveRecovery] = []
+
+    func enqueue(_ recovery: WorkoutSaveRecovery) {
+        if let index = pending.firstIndex(where: { $0.id == recovery.id }) {
+            pending[index] = recovery
+        } else {
+            pending.append(recovery)
+        }
+    }
+
+    func recovery(id: UUID?) -> WorkoutSaveRecovery? {
+        pending.first { $0.id == id }
+    }
+
+    @discardableResult
+    func retry(id: UUID) -> Bool {
+        guard let recovery = recovery(id: id) else { return true }
+        guard recovery.retry() else { return false }
+        didSave(id: id)
+        return true
+    }
+
+    /// Call only after the draft's persistence operation has succeeded.
+    func didSave(id: UUID) {
+        pending.removeAll { $0.id == id }
     }
 }

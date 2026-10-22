@@ -164,17 +164,19 @@ struct CoachStrengthExecutionView: View {
         if let value { CoachRestNotifications.schedule(value) }
     }
     private func saveBeforeClosing(_ trigger: WorkoutSaveBoundary.Trigger) -> Bool {
-        closeSave.save(trigger, persist: {
+        let saved = closeSave.save(trigger, persist: {
             try CoachExecutionCoordinator.save(snapshot, execution: execution, context: context)
         }, onFailure: { failure in
             error = failure.localizedDescription
             if case .dismissal = trigger {
-                let recovery = WorkoutSaveRecovery(message: failure.localizedDescription) {
+                let recovery = WorkoutSaveRecovery(id: execution.id, title: prescription.title, message: failure.localizedDescription) {
                     saveBeforeClosing(.dismissal)
                 }
-                NotificationCenter.default.post(name: WorkoutSaveRecovery.notification, object: recovery)
+                recovery.publish()
             }
         })
+        if saved { WorkoutSaveRecoveryStore.shared.didSave(id: execution.id) }
+        return saved
     }
 
 }

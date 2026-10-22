@@ -19,7 +19,9 @@ struct ContentView: View {
     @State private var selectedTab = AppLaunchConfiguration.current.initialTabSelection
     @Binding var importedWorkout: SharedWorkoutSession?
     @Binding var importedCoachProgram: CoachImportRequest?
-    @State private var workoutSaveRecovery: WorkoutSaveRecovery?
+    @StateObject private var workoutSaveRecoveries = WorkoutSaveRecoveryStore.shared
+    @State private var presentedWorkoutRecoveryID: UUID?
+    @State private var showWorkoutRecoveries = false
     @State private var restoreError: String?
     
     // Error handling moved to App level
@@ -91,24 +93,50 @@ struct ContentView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: WorkoutSaveRecovery.notification)) { notification in
-            workoutSaveRecovery = notification.object as? WorkoutSaveRecovery
+            if let recovery = notification.object as? WorkoutSaveRecovery {
+                if !showWorkoutRecoveries { presentedWorkoutRecoveryID = recovery.id }
+            }
         }
-        .alert("Workout Save Failed", isPresented: Binding(
-            get: { workoutSaveRecovery != nil },
-            set: { if !$0 { workoutSaveRecovery = nil } }
-        )) {
-            Button("Retry") {
-                if let recovery = workoutSaveRecovery, !recovery.retry() {
-                    // Re-present after SwiftUI dismisses the current alert.
-                    Task { @MainActor in
-                        await Task.yield()
-                        workoutSaveRecovery = recovery
+        .safeAreaInset(edge: .bottom) {
+            if !workoutSaveRecoveries.pending.isEmpty {
+                Button {
+                    showWorkoutRecoveries = true
+                } label: {
+                    Label("Retry unsaved workouts (\(workoutSaveRecoveries.pending.count))", systemImage: "arrow.clockwise.circle")
+                        .frame(maxWidth: .infinity)
+                        .padding(10)
+                }
+                .background(.regularMaterial)
+                .accessibilityIdentifier("workout.saveRecovery")
+            }
+        }
+        .sheet(isPresented: $showWorkoutRecoveries) {
+            NavigationStack {
+                List(workoutSaveRecoveries.pending) { recovery in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(recovery.title.isEmpty ? "Workout" : recovery.title).font(.headline)
+                        Text(recovery.message).font(.caption)
+                        Button("Retry Save") { workoutSaveRecoveries.retry(id: recovery.id) }
+                    }
+                }
+                .navigationTitle("Unsaved Workouts")
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { showWorkoutRecoveries = false }
                     }
                 }
             }
-            Button("Later", role: .cancel) { workoutSaveRecovery = nil }
+        }
+        .alert("Workout Save Failed", isPresented: Binding(
+            get: { presentedWorkoutRecoveryID != nil },
+            set: { if !$0 { presentedWorkoutRecoveryID = nil } }
+        )) {
+            Button("Retry") {
+                if let id = presentedWorkoutRecoveryID { workoutSaveRecoveries.retry(id: id) }
+            }
+            Button("Later", role: .cancel) { presentedWorkoutRecoveryID = nil }
         } message: {
-            Text((workoutSaveRecovery?.message ?? "") + " Your pending workout remains in memory. Retry before closing the app.")
+            Text((workoutSaveRecoveries.recovery(id: presentedWorkoutRecoveryID)?.message ?? "") + " Your draft remains available under Retry unsaved workouts. Retry before closing the app.")
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange).receive(on: RunLoop.main)) { _ in
             persistenceController.reconcileExerciseLibraryIfNeeded()
