@@ -348,13 +348,22 @@ struct WeightLogView: View {
         guard shouldImportHealthWeights(force: force) else { return }
         let expectedPurgeGeneration =
             WearableWorkoutInboxService.localDataPurgeGeneration
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(
+            expectedPurgeGeneration, context: modelContext
+        ) else { return }
         let purgeCutoff =
             WearableWorkoutInboxService.localDataPurgeCutoffDate
 
         Task(priority: .utility) {
             do {
+                guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(
+                    expectedPurgeGeneration, context: modelContext
+                ) else { return }
                 if CoachPersistence.isLocal(modelContext) {
                     _ = try await CoachWeightRepository.importHealth(context: modelContext, preferredUnit: preferredWeightUnit)
+                    guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(
+                        expectedPurgeGeneration, context: modelContext
+                    ) else { return }
                     weightLastHealthImportAt = Date().timeIntervalSince1970
                     return
                 }
@@ -369,7 +378,7 @@ struct WeightLogView: View {
                     () -> Set<Date>? in
                     guard WearableWorkoutInboxService
                         .isCurrentLocalDataPurgeGeneration(
-                            expectedPurgeGeneration
+                            expectedPurgeGeneration, context: modelContext
                         ) else {
                         return nil
                     }
@@ -396,7 +405,7 @@ struct WeightLogView: View {
                     await MainActor.run {
                         guard WearableWorkoutInboxService
                             .isCurrentLocalDataPurgeGeneration(
-                                expectedPurgeGeneration
+                                expectedPurgeGeneration, context: modelContext
                             ) else {
                             return
                         }
@@ -409,7 +418,7 @@ struct WeightLogView: View {
                 await MainActor.run {
                     guard WearableWorkoutInboxService
                         .isCurrentLocalDataPurgeGeneration(
-                            expectedPurgeGeneration
+                            expectedPurgeGeneration, context: modelContext
                         ) else {
                         return
                     }

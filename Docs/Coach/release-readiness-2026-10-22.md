@@ -2,7 +2,9 @@
 
 ## Decision and scope
 
-Hold a paid pilot until the storage-switch writer gate and stale draft replacement gate below are resolved and the physical acceptance checklist is completed. The repeatable value to protect is the existing loop: import a reviewed program, find its scheduled session, record actuals, reopen the same result after relaunch, and recover it from a deliberate backup. No paywall or additional feature is proposed.
+**Follow-up status:** R1 and R2 were subsequently reproduced and fixed with production-model synthetic regressions. See the [data integrity follow-up](data-integrity-followup-2026-10-22.md) for the final patch and fresh QA. The findings and initial results below retain the original review boundary; the physical acceptance and recovery gates remain open.
+
+Hold a paid pilot until the remaining acceptance checklist is completed. The repeatable value to protect is the existing loop: import a reviewed program, find its scheduled session, record actuals, reopen the same result after relaunch, and recover it from a deliberate backup. No paywall or additional feature is proposed.
 
 The initial review examined the dirty `codex/simplify-coach-plans` checkout at base `a3a869f6232bbd970b45951a49f17d7245141120`, including the uncommitted usability follow-up. Existing edits and unrelated `LettersHome/` work were preserved. Only this review's isolated fixes were copied to `codex/coach-release-safety-20261022` in `/tmp/pace-coach-release-safety` for independent review and exact-branch QA.
 

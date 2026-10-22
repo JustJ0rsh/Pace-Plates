@@ -74,6 +74,19 @@ class PersistenceController {
     static var coachSchema: Schema { Schema(legacyModelTypes + CoachPersistence.modelTypes) }
 
     #if DEBUG
+    init(sourceStoreForRegression: ModelContainer) {
+        precondition(AppLaunchConfiguration.current.isUITest)
+        container = sourceStoreForRegression
+    }
+
+    func adoptForStorageRegression(destination: URL, select: (URL, URL) throws -> Void) async throws {
+        precondition(AppLaunchConfiguration.current.isUITest)
+        try await adoptLocalOwnership(prepareDestination: {
+            try CoachLocalOwnership.prepareDirectory(destination.deletingLastPathComponent())
+            return destination
+        }, select: select)
+    }
+
     private init(isolatedUITestReset: Bool) {
         // A fixed, app-owned test directory lets lifecycle tests reopen synthetic
         // history without ever selecting or clearing the normal application store.
@@ -190,6 +203,12 @@ class PersistenceController {
     /// Called only from the explicit first-use storage review. The selected-store
     /// marker is the final commit, so an interruption cannot select a partial copy.
     func adoptLocalOwnership() async throws {
+        try await adoptLocalOwnership(prepareDestination: CoachLocalOwnership.newStagingStore,
+                                      select: CoachLocalOwnership.select)
+    }
+
+    private func adoptLocalOwnership(prepareDestination: () throws -> URL,
+                                    select: (URL, URL) throws -> Void) async throws {
         guard !isCoachLocal, storageError == nil else { return }
         guard !RunTracker.shared.hasRecoverableActivity else {
             throw CoachLocalOwnership.OwnershipError.unavailable("Save or discard the active run before changing storage.")
@@ -201,7 +220,7 @@ class PersistenceController {
         }
         let before = try CoachLocalOwnership.identityInventory(sourceContainer.mainContext)
         let contentBefore = try CoachLocalOwnership.snapshotDigest(sourceContainer.mainContext)
-        let destination = try CoachLocalOwnership.newStagingStore()
+        let destination = try prepareDestination()
         try await Task.detached(priority: .userInitiated) {
             try CoachLocalOwnership.copyStore(from: source, to: destination)
             try CoachLocalOwnership.copyAuxiliaryFiles(from: source, to: destination)
@@ -216,7 +235,8 @@ class PersistenceController {
               contentBefore == contentLatest, !sourceContainer.mainContext.hasChanges else {
             throw CoachLocalOwnership.OwnershipError.unavailable("Records changed while preparing the local copy. Nothing was switched. Please retry.")
         }
-        try CoachLocalOwnership.select(destination, legacy: source)
+        try select(destination, source)
+        WearableWorkoutInboxService.retireLocalStore(sourceContainer)
         container = localContainer
         isCloudBacked = false
         isCoachLocal = true

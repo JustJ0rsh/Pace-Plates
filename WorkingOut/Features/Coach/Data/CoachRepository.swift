@@ -135,7 +135,8 @@ final class CoachRepository {
     @discardableResult
     func importPlan(document: CoachPlanDocument, startDate: Date, activate: Bool,
                     exerciseMappings: [String: UUID] = [:], allowCreatingExercises: Bool = false,
-                    replacingDraftID: UUID? = nil, expectedRevisionID: UUID? = nil, saveAsNewPlan: Bool = false, firstPhaseReady: Bool = false,
+                    replacingDraftID: UUID? = nil, expectedRevisionID: UUID? = nil, expectedDraftUpdatedAt: Date? = nil,
+                    saveAsNewPlan: Bool = false, firstPhaseReady: Bool = false,
                     timeZone: TimeZone = .current) async throws -> UUID {
         try requireLocal()
         let generation = WearableWorkoutInboxService.localDataPurgeGeneration
@@ -146,7 +147,7 @@ final class CoachRepository {
             return (validated, rows)
         }.value
         try Task.checkCancellation()
-        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation) else { throw CancellationError() }
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation, context: context) else { throw CancellationError() }
         let savedPlans = try plans()
         if !saveAsNewPlan, let existing = savedPlans.first(where: { $0.sourceProgramID == document.programId && $0.fingerprint == prepared.0.fingerprint }) { return existing.id }
         if !saveAsNewPlan && replacingDraftID == nil && savedPlans.contains(where: { $0.sourceProgramID == document.programId }) { throw CoachRepositoryError.revisionConflict }
@@ -167,7 +168,9 @@ final class CoachRepository {
             let plan: TrainingPlan
             if let replacement = replacingDraftID {
                 guard let draft = existingPlans.first(where: { $0.id == replacement }), draft.status == "draft" else { throw CoachRepositoryError.revisionConflict }
-                guard expectedRevisionID == draft.currentRevisionID, document.revision > draft.sourceRevision else { throw CoachRepositoryError.revisionConflict }
+                guard expectedRevisionID == draft.currentRevisionID,
+                      let expectedDraftUpdatedAt, expectedDraftUpdatedAt == draft.updatedAt,
+                      document.revision > draft.sourceRevision else { throw CoachRepositoryError.revisionConflict }
                 guard (draft.sessions ?? []).allSatisfy({ $0.executionID == nil && $0.status == "pending" }) else { throw CoachRepositoryError.futureOnly }
                 for row in draft.sessions ?? [] { isolated.delete(row) }
                 plan = draft

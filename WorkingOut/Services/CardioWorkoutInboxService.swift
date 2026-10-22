@@ -57,60 +57,100 @@ enum CardioWorkoutInboxService {
     private static let firstScanDateKey = "healthKit.cardioInboxFirstScanCutoff"
     private static var syncInProgress = false
 
+    private struct SyncDependencies {
+        var authorize: (@MainActor () async throws -> Void)?
+        var fetchChanges: @MainActor (Int) async throws -> HealthKitManager.CardioWorkoutChanges
+        var calories: @MainActor (HKWorkout) async -> Double?
+        var heartRate: @MainActor (HKWorkout) async -> HealthKitManager.WorkoutHeartRateSummary
+        var details: @MainActor (CardioWorkoutInboxItem) async -> WorkoutDetails?
+        var workouts: @MainActor (Set<UUID>) async -> [HKWorkout]?
+        var purgeCutoff: @MainActor () -> Date?
+        var persistAnchor: @MainActor (HKQueryAnchor?) -> Void
+
+        static var live: Self {
+            .init(
+                authorize: { try await HealthKitManager.shared.requestAuthorization() },
+                fetchChanges: { limit in
+                    try await HealthKitManager.shared.fetchCardioWorkoutChanges(resetAnchor: false, limit: limit, since: scanCutoffDate())
+                },
+                calories: { try? await HealthKitManager.shared.activeEnergyKilocalories(for: $0) },
+                heartRate: { (try? await HealthKitManager.shared.heartRateSummary(for: $0)) ?? emptyHeartRateSummary },
+                details: { await loadDetails(for: $0) },
+                workouts: { try? await HealthKitManager.shared.workoutsForUUIDs($0) },
+                purgeCutoff: { WearableWorkoutInboxService.localDataPurgeCutoffDate },
+                persistAnchor: { HealthKitManager.shared.persistCardioWorkoutAnchor($0) }
+            )
+        }
+    }
+
     @discardableResult
     static func sync(
         context: ModelContext,
         pageLimit: Int = 50,
         requestAuthorization: Bool = false
     ) async -> SyncResult {
-        guard !syncInProgress else { return .noChanges }
-        guard HKHealthStore.isHealthDataAvailable() else { return .noChanges }
-        guard !AppLaunchConfiguration.current.shouldSkipAutomationSideEffects else {
-            return .noChanges
-        }
+        guard HKHealthStore.isHealthDataAvailable(),
+              !AppLaunchConfiguration.current.shouldSkipAutomationSideEffects else { return .noChanges }
+        return await sync(context: context, pageLimit: pageLimit, requestAuthorization: requestAuthorization, dependencies: .live)
+    }
 
+    #if DEBUG
+    static func syncForStorageRegression(
+        context: ModelContext,
+        authorize: (@MainActor () async throws -> Void)? = nil,
+        fetchChanges: @escaping @MainActor () async throws -> HealthKitManager.CardioWorkoutChanges,
+        beforeDetails: (@MainActor () async -> Void)? = nil,
+        persistAnchor: @escaping @MainActor (HKQueryAnchor?) -> Void
+    ) async -> SyncResult {
+        precondition(AppLaunchConfiguration.current.isUITest)
+        return await sync(context: context, pageLimit: 50, requestAuthorization: authorize != nil, dependencies: .init(
+            authorize: authorize, fetchChanges: { _ in try await fetchChanges() },
+            calories: { _ in nil }, heartRate: { _ in emptyHeartRateSummary },
+            details: { _ in await beforeDetails?(); return nil },
+            workouts: { _ in [] }, purgeCutoff: { nil }, persistAnchor: persistAnchor
+        ))
+    }
+    #endif
+
+    private static func sync(
+        context: ModelContext,
+        pageLimit: Int,
+        requestAuthorization: Bool,
+        dependencies: SyncDependencies
+    ) async -> SyncResult {
+        let expectedPurgeGeneration = WearableWorkoutInboxService.localDataPurgeGeneration
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration, context: context),
+              !syncInProgress else { return .noChanges }
         syncInProgress = true
         defer { syncInProgress = false }
 
-        if requestAuthorization {
+        if requestAuthorization, let authorize = dependencies.authorize {
             do {
-                try await HealthKitManager.shared.requestAuthorization()
+                try await authorize()
             } catch {
-                return SyncResult(
-                    inserted: 0,
-                    errorMessage: error.localizedDescription
-                )
+                return SyncResult(inserted: 0, errorMessage: error.localizedDescription)
             }
+            guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration, context: context) else { return .noChanges }
         }
 
-        let expectedPurgeGeneration =
-            WearableWorkoutInboxService.localDataPurgeGeneration
         var totalInserted = 0
-
         // Drain a short backlog in one refresh instead of requiring repeated
         // tab visits when several wearable activities arrived together.
         for pageIndex in 0..<5 {
-            guard WearableWorkoutInboxService
-                .isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration) else {
-                return .noChanges
-            }
-
+            guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration, context: context) else { return .noChanges }
             let page = await performSingleSync(
                 context: context,
                 limit: max(pageLimit, 1),
                 forceRefresh: requestAuthorization && pageIndex == 0,
-                expectedPurgeGeneration: expectedPurgeGeneration
+                expectedPurgeGeneration: expectedPurgeGeneration,
+                dependencies: dependencies
             )
             totalInserted += page.inserted
             if let errorMessage = page.errorMessage {
-                return SyncResult(
-                    inserted: totalInserted,
-                    errorMessage: errorMessage
-                )
+                return SyncResult(inserted: totalInserted, errorMessage: errorMessage)
             }
             if page.observedChanges < max(pageLimit, 1) { break }
         }
-
         return SyncResult(inserted: totalInserted, errorMessage: nil)
     }
 
@@ -118,16 +158,17 @@ enum CardioWorkoutInboxService {
         context: ModelContext,
         limit: Int,
         forceRefresh: Bool,
-        expectedPurgeGeneration: Int
+        expectedPurgeGeneration: Int,
+        dependencies: SyncDependencies
     ) async -> PageResult {
+        // A suspended page must not leave partial edits in an autosaving view context.
+        let pageContext = ModelContext(context.container)
+        pageContext.autosaveEnabled = false
+        var committed = false
+        defer { if !committed { pageContext.rollback() } }
         let changes: HealthKitManager.CardioWorkoutChanges
         do {
-            changes = try await HealthKitManager.shared
-                .fetchCardioWorkoutChanges(
-                    resetAnchor: false,
-                    limit: limit,
-                    since: scanCutoffDate()
-                )
+            changes = try await dependencies.fetchChanges(limit)
         } catch {
             return PageResult(
                 inserted: 0,
@@ -137,15 +178,15 @@ enum CardioWorkoutInboxService {
         }
 
         guard WearableWorkoutInboxService
-            .isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration) else {
+            .isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration, context: context) else {
             return PageResult(inserted: 0, observedChanges: 0, errorMessage: nil)
         }
 
         let sessions: [RunningSession]
         var items: [CardioWorkoutInboxItem]
         do {
-            sessions = try context.fetch(FetchDescriptor<RunningSession>())
-            items = try context.fetch(FetchDescriptor<CardioWorkoutInboxItem>())
+            sessions = try pageContext.fetch(FetchDescriptor<RunningSession>())
+            items = try pageContext.fetch(FetchDescriptor<CardioWorkoutInboxItem>())
         } catch {
             return PageResult(
                 inserted: 0,
@@ -156,7 +197,7 @@ enum CardioWorkoutInboxService {
 
         var inserted = 0
         let addedUUIDs = Set(changes.added.map { $0.uuid.uuidString })
-        let purgeCutoff = WearableWorkoutInboxService.localDataPurgeCutoffDate
+        let purgeCutoff = dependencies.purgeCutoff()
 
         for workout in changes.added {
             if let purgeCutoff, workout.endDate <= purgeCutoff { continue }
@@ -197,14 +238,15 @@ enum CardioWorkoutInboxService {
                 continue
             }
 
-            let caloriesValue = try? await HealthKitManager.shared
-                .activeEnergyKilocalories(for: workout)
+            let caloriesValue = await dependencies.calories(workout)
             guard WearableWorkoutInboxService
-                .isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration) else {
+                .isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration, context: context) else {
                 return PageResult(inserted: 0, observedChanges: 0, errorMessage: nil)
             }
-            let heartRate = (try? await HealthKitManager.shared
-                .heartRateSummary(for: workout)) ?? emptyHeartRateSummary
+            let heartRate = await dependencies.heartRate(workout)
+            guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration, context: context) else {
+                return PageResult(inserted: 0, observedChanges: 0, errorMessage: nil)
+            }
 
             let candidate = CardioWorkoutInboxItem(
                 healthWorkoutUUID: uuid,
@@ -243,7 +285,10 @@ enum CardioWorkoutInboxService {
                     sameLogicalWorkout($0, candidate)
             }) {
                 merge(candidate, into: existing)
-                let details = await loadDetails(for: existing)
+                let details = await dependencies.details(existing)
+                guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration, context: context) else {
+                    return PageResult(inserted: 0, observedChanges: 0, errorMessage: nil)
+                }
                 if let details {
                     apply(details, to: existing)
                 }
@@ -265,7 +310,7 @@ enum CardioWorkoutInboxService {
                     for: candidate,
                     in: sessions
                 )?.id
-                context.insert(candidate)
+                pageContext.insert(candidate)
                 items.append(candidate)
                 inserted += 1
             }
@@ -275,32 +320,42 @@ enum CardioWorkoutInboxService {
             changes.deletedUUIDs.filter { !addedUUIDs.contains($0) },
             items: items,
             sessions: sessions,
-            context: context
+            context: pageContext
         )
         await refreshMissingMetrics(
             items: items,
             sessions: sessions,
             forceRefresh: forceRefresh,
-            expectedPurgeGeneration: expectedPurgeGeneration
+            expectedPurgeGeneration: expectedPurgeGeneration,
+            context: context,
+            dependencies: dependencies
         )
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration, context: context) else {
+            return PageResult(inserted: 0, observedChanges: 0, errorMessage: nil)
+        }
         await refreshImportedDistances(
             items: items,
             sessions: sessions,
             forceRefresh: forceRefresh,
-            expectedPurgeGeneration: expectedPurgeGeneration
+            expectedPurgeGeneration: expectedPurgeGeneration,
+            context: context,
+            dependencies: dependencies
         )
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration, context: context) else {
+            return PageResult(inserted: 0, observedChanges: 0, errorMessage: nil)
+        }
         expireReplacementTombstones(
             items: items,
             sessions: sessions,
-            context: context
+            context: pageContext
         )
         refreshSuggestedMatches(items: items, sessions: sessions)
 
         guard WearableWorkoutInboxService
-            .isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration) else {
+            .isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration, context: context) else {
             return PageResult(inserted: 0, observedChanges: 0, errorMessage: nil)
         }
-        guard PersistenceSave.commit(context, action: "sync cardio inbox") else {
+        guard PersistenceSave.commit(pageContext, action: "sync cardio inbox") else {
             return PageResult(
                 inserted: 0,
                 observedChanges: 0,
@@ -308,7 +363,8 @@ enum CardioWorkoutInboxService {
             )
         }
 
-        HealthKitManager.shared.persistCardioWorkoutAnchor(changes.newAnchor)
+        committed = true
+        dependencies.persistAnchor(changes.newAnchor)
         return PageResult(
             inserted: inserted,
             observedChanges: changes.added.count + changes.deleted.count,
@@ -338,7 +394,9 @@ enum CardioWorkoutInboxService {
         items: [CardioWorkoutInboxItem],
         sessions: [RunningSession],
         forceRefresh: Bool,
-        expectedPurgeGeneration: Int
+        expectedPurgeGeneration: Int,
+        context: ModelContext,
+        dependencies: SyncDependencies
     ) async {
         let now = Date()
         let eligible = items.filter {
@@ -359,12 +417,12 @@ enum CardioWorkoutInboxService {
 
         for item in eligible where selectedIDs.contains(item.id) {
             guard WearableWorkoutInboxService
-                .isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration) else {
+                .isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration, context: context) else {
                 return
             }
-            let details = await loadDetails(for: item)
+            let details = await dependencies.details(item)
             guard WearableWorkoutInboxService
-                .isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration) else {
+                .isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration, context: context) else {
                 return
             }
             item.healthDetailsLastAttemptAt = Date()
@@ -388,7 +446,9 @@ enum CardioWorkoutInboxService {
         items: [CardioWorkoutInboxItem],
         sessions: [RunningSession],
         forceRefresh: Bool,
-        expectedPurgeGeneration: Int
+        expectedPurgeGeneration: Int,
+        context: ModelContext,
+        dependencies: SyncDependencies
     ) async {
         let now = Date()
         let candidates = sessions.filter {
@@ -414,9 +474,9 @@ enum CardioWorkoutInboxService {
         for item in selectedItems {
             uuids.formUnion(knownHealthUUIDs(for: item).compactMap(UUID.init(uuidString:)))
         }
-        let workouts = try? await HealthKitManager.shared.workoutsForUUIDs(uuids)
+        let workouts = await dependencies.workouts(uuids)
         guard WearableWorkoutInboxService
-            .isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration) else {
+            .isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration, context: context) else {
             return
         }
 
@@ -515,9 +575,13 @@ enum CardioWorkoutInboxService {
         to session: RunningSession,
         context: ModelContext
     ) async -> Bool {
-        guard item.healthDeletionObservedAt == nil else { return false }
-
-        if let details = await loadDetails(for: item) {
+        let generation = WearableWorkoutInboxService.localDataPurgeGeneration
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation, context: context),
+              item.healthDeletionObservedAt == nil else { return false }
+        let details = await loadDetails(for: item)
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation, context: context),
+              item.healthDeletionObservedAt == nil else { return false }
+        if let details {
             apply(details, to: item)
             apply(details, to: session)
         }
@@ -534,21 +598,26 @@ enum CardioWorkoutInboxService {
         from item: CardioWorkoutInboxItem,
         context: ModelContext
     ) async -> RunningSession? {
+        let generation = WearableWorkoutInboxService.localDataPurgeGeneration
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation, context: context) else { return nil }
         let sessions = (try? context.fetch(FetchDescriptor<RunningSession>())) ?? []
         if let linkedID = item.linkedRunningSessionID,
            let existing = sessions.first(where: { $0.id == linkedID }) {
-            _ = await link(item, to: existing, context: context)
+            guard await link(item, to: existing, context: context),
+                  WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation, context: context) else { return nil }
             return existing
         }
         let itemUUIDs = knownHealthUUIDs(for: item)
         if let existing = sessions.first(where: {
             !knownHealthUUIDs(for: $0).isDisjoint(with: itemUUIDs)
         }) {
-            _ = await link(item, to: existing, context: context)
+            guard await link(item, to: existing, context: context),
+                  WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation, context: context) else { return nil }
             return existing
         }
 
         let details = await loadDetails(for: item)
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation, context: context) else { return nil }
         if let details {
             apply(details, to: item)
         }

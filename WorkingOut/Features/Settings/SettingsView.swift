@@ -727,12 +727,16 @@ struct SettingsView: View {
 
     private func refreshHealthDataNow() {
         guard !isRefreshingHealthData else { return }
-        isRefreshingHealthData = true
         let expectedPurgeGeneration =
             WearableWorkoutInboxService.localDataPurgeGeneration
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(
+            expectedPurgeGeneration, context: modelContext
+        ) else { return }
+        isRefreshingHealthData = true
 
         Task { @MainActor in
             do {
+                try ensureHealthImportIsCurrent(expectedPurgeGeneration)
                 try await HealthKitManager.shared.requestAuthorization()
                 try ensureHealthImportIsCurrent(expectedPurgeGeneration)
 
@@ -773,7 +777,7 @@ struct SettingsView: View {
     @MainActor
     private func ensureHealthImportIsCurrent(_ generation: Int) throws {
         guard WearableWorkoutInboxService
-            .isCurrentLocalDataPurgeGeneration(generation) else {
+            .isCurrentLocalDataPurgeGeneration(generation, context: modelContext) else {
             throw CancellationError()
         }
     }

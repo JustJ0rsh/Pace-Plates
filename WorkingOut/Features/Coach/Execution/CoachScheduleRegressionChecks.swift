@@ -5,6 +5,7 @@ import SwiftData
 @MainActor
 enum CoachScheduleRegressionChecks {
     static func run() async throws -> Int {
+        let draftReplacementChecks = try await CoachDraftReplacementRegressionChecks.run()
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CoachScheduleChecks-\(UUID())", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -13,7 +14,7 @@ enum CoachScheduleRegressionChecks {
             schema: schema, url: directory.appendingPathComponent("schedule.store"), cloudKitDatabase: .none)])
         let context = container.mainContext
         let repository = CoachRepository(context: context)
-        var checks = 0
+        var checks = draftReplacementChecks
         func require(_ condition: Bool, _ message: String) throws {
             checks += 1
             if !condition { throw CoachExecutionCoordinator.ExecutionError.invalid("Schedule regression: " + message) }
@@ -71,14 +72,16 @@ enum CoachScheduleRegressionChecks {
         try rejects("start draft") { _ = try repository.beginExecution(occurrenceID: firstID) }
         let staleRevision = UUID()
         document.revision = 2; document.title = "Reviewed synthetic revision"
+        let draftReview = try savedPlan(planID)
+        let draftRevision = draftReview.currentRevisionID
+        let draftUpdatedAt = draftReview.updatedAt
         do {
             _ = try await repository.importPlan(document: document, startDate: anchor, activate: false, allowCreatingExercises: true,
-                replacingDraftID: planID, expectedRevisionID: staleRevision)
+                replacingDraftID: planID, expectedRevisionID: staleRevision, expectedDraftUpdatedAt: draftUpdatedAt)
             throw CoachExecutionCoordinator.ExecutionError.invalid("Schedule regression accepted stale draft revision")
         } catch CoachRepositoryError.revisionConflict { checks += 1 }
-        let draftRevision = try savedPlan(planID).currentRevisionID
         _ = try await repository.importPlan(document: document, startDate: anchor, activate: false, allowCreatingExercises: true,
-            replacingDraftID: planID, expectedRevisionID: draftRevision)
+            replacingDraftID: planID, expectedRevisionID: draftRevision, expectedDraftUpdatedAt: draftUpdatedAt)
         rows = try savedRows(planID)
         let morningID = rows.first(where: { $0.sourceWeekID == "week_0" && $0.sourceSlotID == "morning" })!.id
         let eveningID = rows.first(where: { $0.sourceWeekID == "week_0" && $0.sourceSlotID == "evening" })!.id

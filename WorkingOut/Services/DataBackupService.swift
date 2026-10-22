@@ -569,6 +569,7 @@ enum DataBackupService {
     }
 
     static func exportAll(context: ModelContext, includePhotos: Bool = true) async throws -> URL {
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(WearableWorkoutInboxService.localDataPurgeGeneration, context: context) else { throw CancellationError() }
         try RunTracker.shared.checkpointForBackup(context: context)
         let generation = WearableWorkoutInboxService.localDataPurgeGeneration
         var file = try capture(context: context)
@@ -578,7 +579,7 @@ enum DataBackupService {
         let exportedURL = try await Task.detached(priority: .userInitiated) {
             try CoachHistoryArchive.export(snapshot, includePhotos: includePhotos)
         }.value
-        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation), !Task.isCancelled else {
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation, context: context), !Task.isCancelled else {
             try? FileManager.default.removeItem(at: exportedURL)
             throw CancellationError()
         }
@@ -586,6 +587,7 @@ enum DataBackupService {
     }
 
     static func `import`(from url: URL, context: ModelContext) async throws {
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(WearableWorkoutInboxService.localDataPurgeGeneration, context: context) else { throw CancellationError() }
         guard !restoreInProgress else { throw CoachRepositoryError.invalidValue("one restore at a time") }
         restoreInProgress = true
         defer { restoreInProgress = false }
@@ -593,7 +595,7 @@ enum DataBackupService {
         let prepared = try await Task.detached(priority: .userInitiated) {
             try CoachHistoryArchive.prepareImport(from: url)
         }.value
-        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation) else {
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation, context: context) else {
             prepared.discard(); throw CancellationError()
         }
         do { try Task.checkCancellation() } catch { prepared.discard(); throw error }
@@ -601,12 +603,13 @@ enum DataBackupService {
     }
 
     static func resumePendingRestores(context: ModelContext) async throws {
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(WearableWorkoutInboxService.localDataPurgeGeneration, context: context) else { throw CancellationError() }
         guard !restoreInProgress else { throw CoachRepositoryError.invalidValue("one restore at a time") }
         restoreInProgress = true
         defer { restoreInProgress = false }
         let generation = WearableWorkoutInboxService.localDataPurgeGeneration
         let pending = try await Task.detached(priority: .utility) { try CoachHistoryArchive.pendingRestores() }.value
-        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation), !Task.isCancelled else {
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation, context: context), !Task.isCancelled else {
             for var prepared in pending {
                 try prepared.markForRollback(); prepared.rollbackOnly = true
                 try await restorePrepared(prepared, context: context)
@@ -631,7 +634,7 @@ enum DataBackupService {
             try prepared.file.validateForRestore()
             if prepared.file.coach?.hasPersonalRecords == true && !CoachPersistence.isLocal(context) { throw CoachRepositoryError.localOwnershipRequired }
             try await Task.detached(priority: .userInitiated) { try prepared.installAssets() }.value
-            guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation), !Task.isCancelled else { throw CancellationError() }
+            guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation, context: context), !Task.isCancelled else { throw CancellationError() }
             try restore(prepared.file, context: isolated)
             prepared.discard()
         } catch {

@@ -233,6 +233,7 @@ struct CoachPlanReviewView: View {
     @State private var acknowledgePause = false
     @State private var chosenDraftID: UUID?
     @State private var expectedDraftRevisionID: UUID?
+    @State private var expectedDraftUpdatedAt: Date?
     @State private var separateCopy = false
     @State private var saving = false
     @State private var saveTask: Task<Void, Never>?
@@ -337,7 +338,11 @@ struct CoachPlanReviewView: View {
             catch { self.error = error.localizedDescription }
         }
         .onDisappear { saveTask?.cancel() }
-        .onChange(of: chosenDraftID) { _, id in expectedDraftRevisionID = plans.first(where: { $0.id == id })?.currentRevisionID }
+        .onChange(of: chosenDraftID) { _, id in
+            let draft = plans.first(where: { $0.id == id })
+            expectedDraftRevisionID = draft?.currentRevisionID
+            expectedDraftUpdatedAt = draft?.updatedAt
+        }
         .onChange(of: timeZoneIdentifier) { previous, selected in
             if restoringTimeZone { restoringTimeZone = false; return }
             let civilDate = CoachSchedule.civilDate(startDate, timeZone: TimeZone(identifier: previous) ?? .current)
@@ -359,6 +364,7 @@ struct CoachPlanReviewView: View {
                 resultID = try await repository.importPlan(document: document, startDate: startDate, activate: activate,
                     exerciseMappings: selectedMappings, allowCreatingExercises: allowCustomExercises,
                     replacingDraftID: chosenDraftID, expectedRevisionID: expectedDraftRevisionID,
+                    expectedDraftUpdatedAt: expectedDraftUpdatedAt,
                     saveAsNewPlan: separateCopy, firstPhaseReady: readyFirstPhase, timeZone: timeZone)
             } catch { self.error = error.localizedDescription }
         }

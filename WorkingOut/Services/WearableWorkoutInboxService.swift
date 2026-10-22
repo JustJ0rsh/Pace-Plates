@@ -18,6 +18,11 @@ enum WearableWorkoutInboxService {
     private static var syncInProgress = false
     private static var syncRequestedWhileRunning = false
     private static var localPurgeGeneration = 0
+    private final class RetiredStore {
+        weak var container: ModelContainer?
+        init(_ container: ModelContainer) { self.container = container }
+    }
+    private static var retiredStores: [RetiredStore] = []
 
     struct ImportedWorkout {
         let healthWorkoutUUID: String
@@ -52,8 +57,20 @@ enum WearableWorkoutInboxService {
         localPurgeGeneration
     }
 
-    static func isCurrentLocalDataPurgeGeneration(_ generation: Int) -> Bool {
-        generation == localPurgeGeneration
+    static func isCurrentLocalDataPurgeGeneration(_ generation: Int, context: ModelContext? = nil) -> Bool {
+        guard generation == localPurgeGeneration else { return false }
+        guard let context else { return true }
+        return !retiredStores.contains { $0.container === context.container }
+    }
+
+    /// Retires only this process's old container after a verified storage switch.
+    /// The shared epoch also invalidates work already suspended on that store.
+    static func retireLocalStore(_ container: ModelContainer) {
+        retiredStores.removeAll { $0.container == nil }
+        if !retiredStores.contains(where: { $0.container === container }) {
+            retiredStores.append(RetiredStore(container))
+        }
+        prepareForLocalDataPurge()
     }
 
     /// Records the successful purge boundary so a stale anchored-query batch
@@ -87,10 +104,51 @@ enum WearableWorkoutInboxService {
         return cutoff
     }
 
+    private struct SyncDependencies {
+        var canReadHealth: @MainActor () -> Bool
+        var fetchChanges: @MainActor () async throws -> HealthKitManager.CardioWorkoutChanges
+        var calories: @MainActor (HKWorkout) async -> Double?
+        var heartRate: @MainActor (HKWorkout) async -> Double?
+        var purgeCutoff: @MainActor () -> Date?
+        var persistAnchor: @MainActor (HKQueryAnchor?) -> Void
+
+        static var live: Self {
+            .init(
+                canReadHealth: { HKHealthStore.isHealthDataAvailable() && !AppLaunchConfiguration.current.shouldSkipAutomationSideEffects },
+                fetchChanges: { try await HealthKitManager.shared.fetchStrengthWorkoutChanges(since: scanCutoffDate()) },
+                calories: { try? await HealthKitManager.shared.activeEnergyKilocalories(for: $0) },
+                heartRate: { try? await HealthKitManager.shared.averageHeartRate(for: $0) },
+                purgeCutoff: { localDataPurgeCutoffDate },
+                persistAnchor: { HealthKitManager.shared.persistStrengthWorkoutAnchor($0) }
+            )
+        }
+    }
+
     /// Pulls new/deleted wearable workouts from Health and updates inbox items.
     /// Returns the number of newly added inbox items.
     @discardableResult
     static func sync(context: ModelContext) async -> Int {
+        await sync(context: context, dependencies: .live)
+    }
+
+    #if DEBUG
+    static func syncForStorageRegression(
+        context: ModelContext,
+        fetchChanges: @escaping @MainActor () async throws -> HealthKitManager.CardioWorkoutChanges,
+        persistAnchor: @escaping @MainActor (HKQueryAnchor?) -> Void
+    ) async -> Int {
+        precondition(AppLaunchConfiguration.current.isUITest)
+        return await sync(context: context, dependencies: .init(
+            canReadHealth: { true }, fetchChanges: fetchChanges,
+            calories: { _ in nil }, heartRate: { _ in nil },
+            purgeCutoff: { nil }, persistAnchor: persistAnchor
+        ))
+    }
+    #endif
+
+    private static func sync(context: ModelContext, dependencies: SyncDependencies) async -> Int {
+        let expectedPurgeGeneration = localPurgeGeneration
+        guard isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration, context: context) else { return 0 }
         guard !syncInProgress else {
             // Coalesce observer/UI triggers instead of dropping a Health update
             // that may have arrived after the active anchored query snapshot.
@@ -99,7 +157,6 @@ enum WearableWorkoutInboxService {
         }
 
         syncInProgress = true
-        let expectedPurgeGeneration = localPurgeGeneration
         defer {
             syncInProgress = false
             syncRequestedWhileRunning = false
@@ -108,47 +165,47 @@ enum WearableWorkoutInboxService {
         // Repair duplicate rows already created by older builds before touching
         // HealthKit. This also runs in UI-test mode and never changes Health data.
         _ = repairLocalDuplicateInboxItems(context: context)
-        guard expectedPurgeGeneration == localPurgeGeneration else { return 0 }
-
-        guard HKHealthStore.isHealthDataAvailable() else { return 0 }
-        guard !AppLaunchConfiguration.current.shouldSkipAutomationSideEffects else { return 0 }
+        guard isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration, context: context),
+              dependencies.canReadHealth() else { return 0 }
 
         var totalInserted = 0
         repeat {
             syncRequestedWhileRunning = false
             totalInserted += await performSingleSync(
                 context: context,
-                expectedPurgeGeneration: expectedPurgeGeneration
+                expectedPurgeGeneration: expectedPurgeGeneration,
+                dependencies: dependencies
             )
         } while syncRequestedWhileRunning &&
-                expectedPurgeGeneration == localPurgeGeneration
+                isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration, context: context)
 
         return totalInserted
     }
 
     private static func performSingleSync(
         context: ModelContext,
-        expectedPurgeGeneration: Int
+        expectedPurgeGeneration: Int,
+        dependencies: SyncDependencies
     ) async -> Int {
         let changes: HealthKitManager.CardioWorkoutChanges
         do {
-            changes = try await HealthKitManager.shared.fetchStrengthWorkoutChanges(since: scanCutoffDate())
+            changes = try await dependencies.fetchChanges()
         } catch {
             // Transient fetch failure: anchor not advanced, next sync retries.
             return 0
         }
-        guard expectedPurgeGeneration == localPurgeGeneration else { return 0 }
+        guard isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration, context: context) else { return 0 }
 
         let deletedSet = Set(changes.deletedUUIDs)
-        let purgeCutoff = localDataPurgeCutoffDate
+        let purgeCutoff = dependencies.purgeCutoff()
         var importedWorkouts: [ImportedWorkout] = []
         for workout in changes.added
         where !deletedSet.contains(workout.uuid.uuidString) &&
             (purgeCutoff.map { workout.endDate > $0 } ?? true) {
-            let calorieValue = try? await HealthKitManager.shared.activeEnergyKilocalories(for: workout)
-            guard expectedPurgeGeneration == localPurgeGeneration else { return 0 }
-            let heartRate = try? await HealthKitManager.shared.averageHeartRate(for: workout)
-            guard expectedPurgeGeneration == localPurgeGeneration else { return 0 }
+            let calorieValue = await dependencies.calories(workout)
+            guard isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration, context: context) else { return 0 }
+            let heartRate = await dependencies.heartRate(workout)
+            guard isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration, context: context) else { return 0 }
 
             importedWorkouts.append(
                 importedWorkout(
@@ -159,7 +216,7 @@ enum WearableWorkoutInboxService {
             )
         }
 
-        guard expectedPurgeGeneration == localPurgeGeneration else { return 0 }
+        guard isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration, context: context) else { return 0 }
         let result = reconcile(
             importedWorkouts: importedWorkouts,
             deleted: changes.deleted,
@@ -167,8 +224,8 @@ enum WearableWorkoutInboxService {
             context: context
         )
         if result.didCommit,
-           expectedPurgeGeneration == localPurgeGeneration {
-            HealthKitManager.shared.persistStrengthWorkoutAnchor(changes.newAnchor)
+           isCurrentLocalDataPurgeGeneration(expectedPurgeGeneration, context: context) {
+            dependencies.persistAnchor(changes.newAnchor)
         }
         return result.didCommit ? result.inserted : 0
     }
