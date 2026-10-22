@@ -50,6 +50,19 @@ struct CoachExecutionTests {
         expect(intervals.results.last?.state == .skipped, "skip result is explicit")
         let restored = try JSONDecoder().decode(CoachRunIntervalState.self, from: JSONEncoder().encode(intervals))
         expect(restored == intervals, "interval state preserves IDs, baselines, results, revision")
+        var manualDistance = restored
+        manualDistance.results[0].distanceMeters = 0.000000000000001
+        manualDistance.results[0].measurementSource = "manual"
+        expect(manualDistance.isValid && manualDistance.results[0].distanceMeters == 0.000000000000001,
+               "a tiny finite manual distance remains a saved actual measurement")
+        expect(manualDistance.results[0].paceSecondsPerKilometer == nil,
+               "pace beyond whole-second display range is unavailable instead of trapping")
+        manualDistance.results[0].distanceMeters = .leastNonzeroMagnitude
+        expect(manualDistance.isValid && manualDistance.results[0].paceSecondsPerKilometer == nil,
+               "overflowing derived pace is unavailable despite finite actual measurements")
+        manualDistance.results[0].distanceMeters = 100
+        expect(manualDistance.results[0].paceSecondsPerKilometer == 600,
+               "ordinary measured pace retains its exact value")
         var invalidAdvance = CoachRunIntervalState(steps: steps, prescriptionRevisionID: nil)
         invalidAdvance.advance(duration: .infinity, meters: nil, method: .manual)
         expect(invalidAdvance.stepIndex == 0, "invalid active duration cannot create interval results")

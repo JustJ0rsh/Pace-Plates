@@ -51,7 +51,7 @@ struct CoachSessionDetailView: View {
                                 ForEach(intervals.results) { result in
                                     VStack(alignment: .leading) {
                                         Text(intervals.steps.first(where: { $0.id == result.stepID })?.label ?? "Interval")
-                                        Text("\(result.state.rawValue.capitalized) · \(Int(result.activeDuration)) sec · \(result.distanceMeters.map { "\(Int($0)) m" } ?? "Distance unavailable")")
+                                        Text("\(result.state.rawValue.capitalized) · \(Int(result.activeDuration)) sec · \(result.distanceMeters.map { "\($0.rounded(.towardZero).formatted(.number.grouping(.never).precision(.fractionLength(0)))) m" } ?? "Distance unavailable")")
                                             .font(.caption).foregroundStyle(.secondary)
                                     }
                                 }

@@ -920,12 +920,13 @@ final class WorkingOutUITests: XCTestCase {
         app.buttons["Delete All Data"].tap()
         let confirmation = app.alerts["Delete All Data?"]
         waitForElement(confirmation)
+        XCTAssertTrue(confirmation.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Any retained pre-Coach history and legacy iCloud records are kept.")).firstMatch.exists,
+                      "Local deletion must disclose the history copies it retains")
         confirmation.buttons["Delete"].tap()
-        let result = app.alerts.containing(
-            .staticText,
-            identifier: "All Pace & Plates data has been removed. Apple Health data was not changed."
-        ).firstMatch
+        let result = app.alerts["Backup & Data"]
         waitForElement(result)
+        XCTAssertTrue(result.staticTexts.matching(NSPredicate(format: "label == %@",
+            "Current app history has been removed. Any retained pre-Coach history and legacy iCloud records are kept. Apple Health was not changed.")).firstMatch.exists)
         result.buttons["OK"].tap()
 
         selectBackupTestTab("Workouts", in: app)
