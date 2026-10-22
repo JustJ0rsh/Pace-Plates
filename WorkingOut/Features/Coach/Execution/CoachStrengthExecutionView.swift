@@ -10,18 +10,12 @@ struct CoachStrengthExecutionView: View {
     @State private var snapshot = CoachExecutionSnapshot()
     @State private var editing: SetEditorRequest?
     @State private var error: String?
-    @State private var showFinish = false
-    @State private var showAttestation = false
-    @State private var explanation = ""
+    @Environment(\.dismiss) private var dismiss
+    @State private var closeSave = WorkoutSaveBoundary()
+    @State private var didLoad = false
     @State private var previous: [CoachSetResult] = []
     @AppStorage("coach.autoRest") private var autoRest = true
     private var isFinished: Bool { execution.statusRaw != "in_progress" }
-    private var allPerformed: Bool {
-        prescription.exercises.allSatisfy { exercise in
-            exercise.sets.allSatisfy { set in result(exercise.id, set.id)?.state == .completed }
-        }
-    }
-
     var body: some View {
         List {
             Section {
@@ -94,9 +88,10 @@ struct CoachStrengthExecutionView: View {
             if !isFinished {
                 Section {
                     Button("Finish Workout", systemImage: "checkmark.circle") {
-                        if allPerformed { finish(.completed) } else { showFinish = true }
+                        if saveBeforeClosing(.finish) { dismiss() }
                     }
                     .accessibilityIdentifier("coach.workout.finish")
+                    .disabled(!didLoad)
                     Text("Closing saves your recorded sets and leaves this workout available to resume.").font(.caption).foregroundStyle(.secondary)
                 }
             } else {
@@ -104,6 +99,14 @@ struct CoachStrengthExecutionView: View {
                     Text("Saved \(execution.statusRaw). Correct a set to update your history and invalidate suggestions based on the older result.")
                     NavigationLink("Review progression") { CoachProgressionReviewView(execution: execution) }
                 }
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done") {
+                    if saveBeforeClosing(.done) { dismiss() }
+                }
+                .disabled(!didLoad)
             }
         }
         .task { load() }
@@ -122,16 +125,9 @@ struct CoachStrengthExecutionView: View {
                 }
             }
         }
-        .confirmationDialog("Prescribed work is unfinished", isPresented: $showFinish, titleVisibility: .visible) {
-            Button("Save Partial") { finish(.partial) }
-            Button("Record completion with explanation") { showAttestation = true }
-            Button("Continue", role: .cancel) {}
-        } message: { Text("\(snapshot.setResults.filter { $0.state == .completed }.count) of \(prescription.exercises.reduce(0) { $0 + $1.sets.count }) prescribed sets recorded complete.") }
-        .alert("Completion explanation", isPresented: $showAttestation) {
-            TextField("Explain the completed work", text: $explanation)
-            Button("Cancel", role: .cancel) {}
-            Button("Record Completion") { finish(.completed, explanation: explanation) }
-                .disabled(explanation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .onAppear { closeSave.beginPresentation() }
+        .onDisappear {
+            if didLoad { _ = saveBeforeClosing(.dismissal) }
         }
         .alert("Unable to Save", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("OK", role: .cancel) {}
@@ -141,6 +137,7 @@ struct CoachStrengthExecutionView: View {
     private func load() {
         do {
             snapshot = try CoachExecutionCoordinator.snapshot(execution)
+            didLoad = true
             var descriptor = FetchDescriptor<CoachSessionExecution>(sortBy: [SortDescriptor(\.startedAt, order: .reverse)])
             descriptor.predicate = #Predicate { $0.statusRaw == "completed" }
             let history = try context.fetch(descriptor).filter { $0.startedAt < execution.startedAt }
@@ -166,10 +163,20 @@ struct CoachStrengthExecutionView: View {
         save()
         if let value { CoachRestNotifications.schedule(value) }
     }
-    private func finish(_ status: CoachExecutionStatus, explanation: String? = nil) {
-        do { try CoachExecutionCoordinator.finish(execution, snapshot: snapshot, status: status, explanation: explanation, context: context) }
-        catch { self.error = error.localizedDescription }
+    private func saveBeforeClosing(_ trigger: WorkoutSaveBoundary.Trigger) -> Bool {
+        closeSave.save(trigger, persist: {
+            try CoachExecutionCoordinator.save(snapshot, execution: execution, context: context)
+        }, onFailure: { failure in
+            error = failure.localizedDescription
+            if case .dismissal = trigger {
+                let recovery = WorkoutSaveRecovery(message: failure.localizedDescription) {
+                    saveBeforeClosing(.dismissal)
+                }
+                NotificationCenter.default.post(name: WorkoutSaveRecovery.notification, object: recovery)
+            }
+        })
     }
+
 }
 
 private struct SetEditorRequest: Identifiable {

@@ -19,6 +19,7 @@ struct ContentView: View {
     @State private var selectedTab = AppLaunchConfiguration.current.initialTabSelection
     @Binding var importedWorkout: SharedWorkoutSession?
     @Binding var importedCoachProgram: CoachImportRequest?
+    @State private var workoutSaveRecovery: WorkoutSaveRecovery?
     @State private var restoreError: String?
     
     // Error handling moved to App level
@@ -88,6 +89,26 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(AppTheme.backgroundColor)
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: WorkoutSaveRecovery.notification)) { notification in
+            workoutSaveRecovery = notification.object as? WorkoutSaveRecovery
+        }
+        .alert("Workout Save Failed", isPresented: Binding(
+            get: { workoutSaveRecovery != nil },
+            set: { if !$0 { workoutSaveRecovery = nil } }
+        )) {
+            Button("Retry") {
+                if let recovery = workoutSaveRecovery, !recovery.retry() {
+                    // Re-present after SwiftUI dismisses the current alert.
+                    Task { @MainActor in
+                        await Task.yield()
+                        workoutSaveRecovery = recovery
+                    }
+                }
+            }
+            Button("Later", role: .cancel) { workoutSaveRecovery = nil }
+        } message: {
+            Text((workoutSaveRecovery?.message ?? "") + " Your pending workout remains in memory. Retry before closing the app.")
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange).receive(on: RunLoop.main)) { _ in
             persistenceController.reconcileExerciseLibraryIfNeeded()
