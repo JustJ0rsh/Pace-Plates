@@ -16,6 +16,14 @@ extension CoachPersistenceRegressionChecks {
             try CoachLocalOwnership.prepareDirectory(folder)
             return (folder.appendingPathComponent("ownership", isDirectory: true), folder.appendingPathComponent("default.store"))
         }
+        let temporary = FileManager.default.temporaryDirectory
+        let trailingSlash = URL(fileURLWithPath: temporary.path + "/", isDirectory: true)
+        try require(PersistenceController.isSyntheticDescendant(root, of: trailingSlash),
+                    "temporary-directory trailing slash does not reject a contained fixture")
+        try require(!PersistenceController.isSyntheticDescendant(temporary, of: temporary),
+                    "temporary root itself is not an owned fixture")
+        try require(!PersistenceController.isSyntheticDescendant(URL(fileURLWithPath: temporary.path + "-outside/example"), of: temporary),
+                    "prefix sibling is not a contained fixture")
         let (freshRoot, freshLegacy) = try paths("fresh")
         let fresh = PersistenceController(storageRootForRegression: freshRoot, legacyStoreForRegression: freshLegacy)
         try require(fresh.isCoachLocal && !fresh.isCloudBacked && fresh.storageError == nil, "fresh startup selects explicit local storage")

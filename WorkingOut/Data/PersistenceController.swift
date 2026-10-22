@@ -180,11 +180,17 @@ class PersistenceController {
     }
 
     #if DEBUG
+    static func isSyntheticDescendant(_ child: URL, of parent: URL) -> Bool {
+        let childParts = child.resolvingSymlinksInPath().standardizedFileURL.pathComponents
+        let parentParts = parent.resolvingSymlinksInPath().standardizedFileURL.pathComponents
+        return childParts.count > parentParts.count
+            && Array(childParts.prefix(parentParts.count)) == parentParts
+    }
+
     /// Uses the production startup decision with paths owned by a test fixture.
     convenience init(storageRootForRegression root: URL, legacyStoreForRegression legacy: URL) {
-        let temporary = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().path + "/"
-        precondition(root.resolvingSymlinksInPath().path.hasPrefix(temporary))
-        precondition(legacy.resolvingSymlinksInPath().path.hasPrefix(root.deletingLastPathComponent().resolvingSymlinksInPath().path + "/"))
+        precondition(Self.isSyntheticDescendant(root, of: FileManager.default.temporaryDirectory))
+        precondition(Self.isSyntheticDescendant(legacy, of: root.deletingLastPathComponent()))
         self.init(inMemory: false, storageRoot: root, legacyStore: legacy)
     }
 
