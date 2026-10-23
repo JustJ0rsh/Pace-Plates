@@ -21,6 +21,7 @@ struct HomeView: View {
     
     @State private var selectedChartTab: ChartTab = .volume
     @State private var quickWorkoutSession: WorkoutSession? = nil
+    @State private var recentWorkoutToOpen: WorkoutSession? = nil
     @State private var showWorkoutTemplates: Bool = false
     @State private var showQuickRunTracking: Bool = false
     @State private var quickCardioActivityType: String = "running"
@@ -116,13 +117,10 @@ struct HomeView: View {
         let startOfWindow = last7DaysDomain.lowerBound
         
         // workoutSessions is sorted by date descending
-        let relevantSessions = workoutSessions.prefix { $0.date >= startOfWindow }.filter(\.countsAsPerformedActivity)
+        let relevantSessions = workoutSessions.prefix { $0.date >= startOfWindow }.filter { WorkoutStatistics.hasActivity($0) }
         
         let perSession: [(date: Date, volume: Double)] = relevantSessions.map { session in
-            let total = (session.exerciseLogs ?? []).reduce(0.0) { acc, log in
-                let weightInPreferred = UnitConverter.weight(log.weight, from: log.weightUnit, to: preferredWeightUnit)
-                return acc + (Double(log.effectiveReps) * weightInPreferred)
-            }
+            let total = WorkoutStatistics.volume(for: session, unit: preferredWeightUnit)
             return (date: session.date, volume: total)
         }
         
@@ -131,7 +129,7 @@ struct HomeView: View {
         }
         
         let summed: [(date: Date, volume: Double)] = grouped.map { (day, items) in
-            (date: day, volume: items.reduce(0) { $0 + $1.volume })
+            (date: day, volume: WorkoutStatistics.sumFiniteVolumes(items.map(\.volume)))
         }
         
         return summed.sorted { $0.date < $1.date }
@@ -157,7 +155,7 @@ struct HomeView: View {
     private var selectedChartSummary: String {
         switch selectedChartTab {
         case .volume:
-            let total = workoutVolumePerDayLast7.reduce(0) { $0 + $1.volume }
+            let total = WorkoutStatistics.sumFiniteVolumes(workoutVolumePerDayLast7.map(\.volume))
             guard total > 0 else { return "Log a workout to see your volume trend." }
             return "You lifted \(formattedWholeNumber(total)) \(preferredWeightUnit) this week."
         case .runs:
@@ -320,7 +318,7 @@ struct HomeView: View {
     private var activityDailyStreakDays: Int {
         let calendar = Calendar.current
         let runDays = runningSessions.map { calendar.startOfDay(for: $0.date) }
-        let workoutDays = workoutSessions.filter(\.countsAsPerformedActivity).map { calendar.startOfDay(for: $0.date) }
+        let workoutDays = workoutSessions.filter { WorkoutStatistics.hasActivity($0) }.map { calendar.startOfDay(for: $0.date) }
         let activityDays = Set(runDays + workoutDays)
         guard !activityDays.isEmpty else { return 0 }
         let today = calendar.startOfDay(for: Date())
@@ -347,7 +345,7 @@ struct HomeView: View {
 
     private var activityWeeklyStreakWeeks: Int {
         let calendar = Calendar.current
-        let allDates = runningSessions.map { $0.date } + workoutSessions.filter(\.countsAsPerformedActivity).map { $0.date }
+        let allDates = runningSessions.map { $0.date } + workoutSessions.filter { WorkoutStatistics.hasActivity($0) }.map { $0.date }
         guard !allDates.isEmpty else { return 0 }
         let weeksWithActivity: Set<Date> = Set(allDates.map { calendar.startOfWeek(for: $0) })
         let thisWeek = calendar.startOfWeek(for: Date())
@@ -436,8 +434,10 @@ struct HomeView: View {
                 .foregroundColor(AppTheme.textColor)
 
             if let lastWorkout = workoutSessions.first {
-                NavigationLink {
-                    WorkoutSessionDetailView(session: lastWorkout)
+                Button {
+                    // Pin the tapped record. Creating a plan can change the
+                    // newest query result while this detail is still open.
+                    recentWorkoutToOpen = lastWorkout
                 } label: {
                     HomeRecentActivityRow(
                         icon: "figure.strengthtraining.traditional",
@@ -797,6 +797,10 @@ struct HomeView: View {
         .tint(AppTheme.accentColor)
         .navigationDestination(item: $quickWorkoutSession) { session in
             WorkoutSessionDetailView(session: session, isNewSession: true)
+        }
+        .navigationDestination(item: $recentWorkoutToOpen) { session in
+            WorkoutSessionDetailView(session: session)
+                .id(session.id)
         }
         .sheet(isPresented: $showQuickRunTracking) {
             NavigationStack {

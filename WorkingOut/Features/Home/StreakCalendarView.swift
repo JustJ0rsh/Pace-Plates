@@ -26,7 +26,7 @@ struct StreakCalendarView: View {
         let runDays = runningSessions.map { calendar.startOfDay(for: $0.date) }
         set.formUnion(runDays)
         // Cardio logged within gym sessions
-        for s in workoutSessions where s.countsAsPerformedActivity {
+        for s in workoutSessions where WorkoutStatistics.hasActivity(s) {
             if sessionHasCardio(s) { set.insert(calendar.startOfDay(for: s.date)) }
         }
         return set
@@ -34,7 +34,7 @@ struct StreakCalendarView: View {
 
     private var liftDays: Set<Date> {
         var set = Set<Date>()
-        for s in workoutSessions where s.countsAsPerformedActivity {
+        for s in workoutSessions where WorkoutStatistics.hasActivity(s) {
             if sessionHasStrength(s) { set.insert(calendar.startOfDay(for: s.date)) }
         }
         return set
@@ -72,17 +72,18 @@ struct StreakCalendarView: View {
     }
 
     private func sessionHasStrength(_ s: WorkoutSession) -> Bool {
-        let logs = s.exerciseLogs ?? []
+        let logs = WorkoutStatistics.confirmedLogs(in: s)
         return logs.contains { log in
             let type = (log.exerciseType ?? "strength").lowercased()
             if type == "cardio" { return false }
-            // consider it strength if reps or weight present
+            // Timed strength work (for example a hold) also counts as activity.
             return (log.reps > 0) || (log.weight > 0)
+                || (log.durationSeconds ?? 0) > 0 || (log.actualDurationSeconds ?? 0) > 0
         }
     }
 
     private func sessionHasCardio(_ s: WorkoutSession) -> Bool {
-        let logs = s.exerciseLogs ?? []
+        let logs = WorkoutStatistics.confirmedLogs(in: s)
         return logs.contains { log in
             if (log.exerciseType ?? "").lowercased() == "cardio" { return true }
             // Fallback heuristics based on name
