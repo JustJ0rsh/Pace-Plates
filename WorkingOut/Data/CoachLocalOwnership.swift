@@ -79,8 +79,8 @@ enum CoachLocalOwnership {
         try handle.synchronize()
     }
 
-    /// SQLite's backup API reads a consistent snapshot including WAL content;
-    /// copying the main SQLite file alone can lose recently saved records.
+    /// SQLite's backup API reads a consistent snapshot including live WAL
+    /// content. Cold WAL-format files use a verified disposable source clone.
     static func copyStore(from source: URL, to destination: URL) throws {
         let sourceURL = canonicalSQLiteURL(source)
         let destinationURL = canonicalSQLiteURL(destination)
@@ -88,14 +88,23 @@ enum CoachLocalOwnership {
               ![destinationURL.path, destinationURL.path + "-wal", destinationURL.path + "-shm"].contains(where: FileManager.default.fileExists(atPath:)) else {
             throw OwnershipError.unavailable("The copy destination is not a new, unselected store. The original history is unchanged.")
         }
-        var sourceDB: OpaquePointer?
-        var destinationDB: OpaquePointer?
-        guard sqlite3_open_v2(sourceURL.path, &sourceDB, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
-            if let sourceDB { sqlite3_close(sourceDB) }
-            throw OwnershipError.unavailable("The original store could not be opened for a read-only copy.")
+        try withReadableSource(sourceURL) { sourceDB in
+            try copyStore(from: sourceDB, to: destinationURL)
         }
-        defer { sqlite3_close(sourceDB) }
-        guard sqlite3_open_v2(destinationURL.path, &destinationDB, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK else {
+    }
+
+    /// Shared by raw verification and backup so both use the same guarded
+    /// cold-source path and never normalize the retained original.
+    static func withReadableSource<T>(_ source: URL, _ body: (OpaquePointer) throws -> T) throws -> T {
+        do { return try CoachSQLiteReadSnapshot.withReadOnlySource(source, body) }
+        catch let error as CoachSQLiteReadSnapshot.SnapshotError {
+            throw migrationError(error.localizedDescription)
+        }
+    }
+
+    private static func copyStore(from sourceDB: OpaquePointer, to destination: URL) throws {
+        var destinationDB: OpaquePointer?
+        guard sqlite3_open_v2(destination.path, &destinationDB, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK else {
             if let destinationDB { sqlite3_close(destinationDB) }
             throw OwnershipError.unavailable("There is not enough writable storage to prepare the local copy.")
         }

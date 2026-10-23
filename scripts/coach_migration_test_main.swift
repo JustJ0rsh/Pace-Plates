@@ -1,6 +1,7 @@
 // File-copy integration test using the actual SQLite and external-asset copiers.
 import Foundation
 import SwiftData
+import SQLite3
 
 @Model final class RouteMigrationProbe {
     var id: UUID = UUID()
@@ -71,6 +72,42 @@ typealias CardioWorkoutInboxItem = RouteMigrationProbe
         let partial = try url("partial")
         try CoachLocalOwnership.copyStore(from: source, to: partial)
         check(FileManager.default.fileExists(atPath: partial.path), "Interrupted unselected copy is separate")
+
+        // Exercise the real cold reader and copier using this two-model
+        // SwiftData probe graph plus external bytes, not only raw SQLite.
+        let cold = try url("cold")
+        try CoachLocalOwnership.copyStore(from: source, to: cold)
+        try CoachLocalOwnership.copyAuxiliaryFiles(from: source, to: cold)
+        var pointer: OpaquePointer?
+        guard sqlite3_open_v2(cold.path, &pointer, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK,
+              let db = pointer else { fatalError("Cold fixture open failed") }
+        guard sqlite3_exec(db, "PRAGMA journal_mode=WAL", nil, nil, nil) == SQLITE_OK else { fatalError("Cold fixture WAL failed") }
+        var persist: Int32 = 0, frames: Int32 = -1, copied: Int32 = -1
+        check(sqlite3_file_control(db, "main", SQLITE_FCNTL_PERSIST_WAL, &persist) == SQLITE_OK, "Cold fixture cleanup configured")
+        check(sqlite3_wal_checkpoint_v2(db, "main", SQLITE_CHECKPOINT_TRUNCATE, &frames, &copied) == SQLITE_OK && frames == 0 && copied == 0, "Cold fixture fully checkpointed")
+        check(sqlite3_close(db) == SQLITE_OK, "Cold fixture closed")
+        let coldBytes = try Data(contentsOf: cold)
+        check(coldBytes[18] == 2 && coldBytes[19] == 2 && !FileManager.default.fileExists(atPath: cold.path + "-wal") && !FileManager.default.fileExists(atPath: cold.path + "-shm"), "Closed WAL source has no sidecars")
+        let coldCheckpoint = try CoachLocalOwnership.rawCheckpoint(cold)
+        let coldDestination = try url("cold-destination")
+        try CoachLocalOwnership.copyStore(from: cold, to: coldDestination)
+        try CoachLocalOwnership.copyAuxiliaryFiles(from: cold, to: coldDestination)
+        let coldRestored = try open(coldDestination)
+        let coldRows = try coldRestored.mainContext.fetch(FetchDescriptor<RouteMigrationProbe>())
+        check(coldRows.count == 1 && coldRows[0].id == row.id, "Cold migration preserves stable ID once")
+        check(coldRows[0].payload == payload, "Cold migration preserves full external payload")
+        check(coldRows[0].date == row.date && coldRows[0].unit == row.unit && coldRows[0].status == row.status, "Cold migration preserves scalar values")
+        check(coldRows[0].children?.first?.id == child.id && coldRows[0].children?.first?.value == nil, "Cold migration preserves relationship and missing actual")
+        try CoachLocalOwnership.verifyRetainedColumns(coldCheckpoint, at: coldDestination)
+        check(true, "Cold destination passes original raw field and asset verification")
+        check(try Data(contentsOf: cold) == coldBytes, "Cold source bytes remain identical")
+        check(!FileManager.default.fileExists(atPath: cold.path + "-wal") && !FileManager.default.fileExists(atPath: cold.path + "-shm"), "Cold source receives no sidecars")
+        let retriedCold = try url("cold-retry")
+        try CoachLocalOwnership.copyStore(from: cold, to: retriedCold)
+        try CoachLocalOwnership.copyAuxiliaryFiles(from: cold, to: retriedCold)
+        let retryContainer = try open(retriedCold)
+        check(try retryContainer.mainContext.fetchCount(FetchDescriptor<RouteMigrationProbe>()) == 1, "Cold copy retry does not duplicate records")
+        check(try CoachLocalOwnership.rawCheckpoint(cold).identity == coldCheckpoint.identity, "Cold source records and external asset digest remain exact")
         let support = source.deletingLastPathComponent().appendingPathComponent(".default_SUPPORT")
         let link = support.appendingPathComponent("escape")
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: source)

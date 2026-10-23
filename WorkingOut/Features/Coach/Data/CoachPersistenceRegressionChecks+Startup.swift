@@ -180,49 +180,58 @@ extension CoachPersistenceRegressionChecks {
                     "the sole cold fixture writer naturally closes without sidecars; " + syntheticSidecarState(coldURL))
         let coldBytesBefore = try syntheticStoreBytes(coldURL)
         let coldController = PersistenceController(storageRootForRegression: coldRoot, legacyStoreForRegression: coldURL)
-        var coldReadable = false
-        var coldIdentity: String?
-        do {
-            coldIdentity = try CoachLocalOwnership.rawCheckpoint(coldURL, phase: "Closed synthetic legacy source").identity
-            coldReadable = true
-        } catch {
-            guard case CoachLocalOwnership.OwnershipError.unavailable(let message) = error,
-                  message.contains("(SQLite 14, OS ") else { throw error }
+        let coldIdentity = try CoachLocalOwnership.rawCheckpoint(coldURL, phase: "Closed synthetic legacy source").identity
+        try await coldController.migrateForStorageRegression(interruptAfter: nil)
+        let coldWorkouts = try coldController.container.mainContext.fetch(FetchDescriptor<WorkoutSession>())
+        let coldRuns = try coldController.container.mainContext.fetch(FetchDescriptor<RunningSession>())
+        try require(coldController.isCoachLocal && coldWorkouts.count == 1 && coldWorkouts[0].id == coldValues.workout
+                    && coldRuns.count == 1 && coldRuns[0].id == coldValues.run && coldRuns[0].locations == coldValues.route,
+                    "cold legacy migration preserves records and external asset identities")
+        try require(try CoachLocalOwnership.rawCheckpoint(coldURL, phase: "Closed retained source after migration").identity == coldIdentity,
+                    "cold migration leaves source records and assets unchanged")
+        try require(try syntheticStoreBytes(coldURL) == coldBytesBefore,
+                    "cold migration preserves original file and asset bytes")
+        try require(!FileManager.default.fileExists(atPath: coldURL.path + "-wal")
+                    && !FileManager.default.fileExists(atPath: coldURL.path + "-shm"),
+                    "cold source inspection never creates original sidecars")
+
+        for interruption in ["allocated", "copied", "verified", "selected"] {
+            let (retryRoot, retryURL) = try paths("cold-" + interruption)
+            try CoachLocalOwnership.copyStore(from: coldURL, to: retryURL)
+            try CoachLocalOwnership.copyAuxiliaryFiles(from: coldURL, to: retryURL)
+            try prepareSyntheticColdWAL(retryURL)
+            let retryBefore = try syntheticStoreBytes(retryURL)
+            let pending = PersistenceController(storageRootForRegression: retryRoot, legacyStoreForRegression: retryURL)
+            var interrupted = false
+            do { try await pending.migrateForStorageRegression(interruptAfter: interruption) }
+            catch { interrupted = true }
+            try require(interrupted, "cold migration interruption is observed")
+            let resumed = PersistenceController(storageRootForRegression: retryRoot, legacyStoreForRegression: retryURL)
+            if !resumed.isCoachLocal { try await resumed.migrateForStorageRegression(interruptAfter: nil) }
+            let rows = try resumed.container.mainContext.fetch(FetchDescriptor<WorkoutSession>())
+            let runs = try resumed.container.mainContext.fetch(FetchDescriptor<RunningSession>())
+            try require(resumed.isCoachLocal && resumed.storageError == nil && rows.count == 1 && rows[0].id == coldValues.workout,
+                        "cold migration retries select one preserved workout")
+            try require(runs.count == 1 && runs[0].id == coldValues.run && runs[0].locations == coldValues.route,
+                        "cold migration retry preserves route bytes")
+            try require(try syntheticStoreBytes(retryURL) == retryBefore,
+                        "cold migration interruption and retry never rewrite original files")
         }
-        if coldReadable {
-            try await coldController.migrateForStorageRegression(interruptAfter: nil)
-            let coldWorkouts = try coldController.container.mainContext.fetch(FetchDescriptor<WorkoutSession>())
-            let coldRuns = try coldController.container.mainContext.fetch(FetchDescriptor<RunningSession>())
-            try require(coldController.isCoachLocal && coldWorkouts.count == 1 && coldWorkouts[0].id == coldValues.workout
-                        && coldRuns.count == 1 && coldRuns[0].id == coldValues.run && coldRuns[0].locations == coldValues.route,
-                        "supported cold legacy migration preserves records and external asset identities")
-            try require(try CoachLocalOwnership.rawCheckpoint(coldURL, phase: "Closed retained source after migration").identity == coldIdentity,
-                        "supported cold migration leaves source records and assets unchanged")
-            try require(try syntheticStoreBytes(coldURL) == coldBytesBefore,
-                        "supported cold migration preserves original file and asset bytes")
-            StartupStorageEvidence.coldSourceMigrationStatus = "supported: deterministic cold WAL fixture migrated with records and assets preserved"
-        } else {
-            // This is an explicit unsupported capability, not a successful
-            // migration. Prove the production boundary refuses it safely;
-            // successful live-WAL migrations below still run independently.
-            var refused = false
-            do { try await coldController.migrateForStorageRegression(interruptAfter: nil) }
-            catch {
-                guard case CoachLocalOwnership.OwnershipError.unavailable(let message) = error,
-                      message.contains("(SQLite 14, OS ") else { throw error }
-                refused = true
-            }
-            try require(refused && !coldController.isCoachLocal && coldController.needsLegacyMigration && coldController.storageError != nil,
-                        "unsupported cold WAL remains in recovery rather than reporting migration success")
-            try require(try CoachLocalOwnership.selectedStoreURL(root: coldRoot) == nil,
-                        "unsupported cold WAL never selects a destination")
-            try require(try syntheticStoreBytes(coldURL) == coldBytesBefore,
-                        "unsupported cold WAL leaves original main file and all assets byte-identical")
-            try require(!FileManager.default.fileExists(atPath: coldURL.path + "-wal")
-                        && !FileManager.default.fileExists(atPath: coldURL.path + "-shm"),
-                        "unsupported cold WAL does not create or remove source sidecars")
-            StartupStorageEvidence.coldSourceMigrationStatus = "unsupported: read-only cold WAL returned SQLITE_CANTOPEN(14); recovery and source preservation verified, migration not completed"
-        }
+
+        let (damagedRoot, damagedURL) = try paths("damaged-cold")
+        try FileManager.default.copyItem(at: coldURL, to: damagedURL)
+        var damaged = try Data(contentsOf: damagedURL)
+        damaged.removeLast(512)
+        try damaged.write(to: damagedURL)
+        let recovery = PersistenceController(storageRootForRegression: damagedRoot, legacyStoreForRegression: damagedURL)
+        var refusedDamage = false
+        do { try await recovery.migrateForStorageRegression(interruptAfter: nil) }
+        catch { refusedDamage = true }
+        try require(refusedDamage && !recovery.isCoachLocal && recovery.storageError != nil,
+                    "damaged cold store remains in recovery")
+        try require(try CoachLocalOwnership.selectedStoreURL(root: damagedRoot) == nil && Data(contentsOf: damagedURL) == damaged,
+                    "damaged cold store is retained without selecting partial history")
+        StartupStorageEvidence.coldSourceMigrationStatus = "supported: cold WAL migration and interruption retries preserve records/assets; corrupt source remains in recovery"
 
         return checks
     }

@@ -112,19 +112,12 @@ extension CoachLocalOwnership {
     /// inventory of persisted fields. Core Data bookkeeping is checked in the
     /// raw-copy digest, but may legitimately change when a copy is opened.
     static func rawCheckpoint(_ url: URL, phase: String = "History") throws -> RawCheckpoint {
-        let attributes = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-        guard attributes.isRegularFile == true, attributes.isSymbolicLink != true else {
-            throw migrationError("The retained storage file is an unsupported link or file type.")
+        try withReadableSource(url) { db in
+            try rawCheckpoint(url, database: db, phase: phase)
         }
-        var database: OpaquePointer?
-        guard sqlite3_open_v2(canonicalSQLiteURL(url).path, &database, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = database else {
-            if let database { sqlite3_close(database) }
-            throw migrationError("The retained SQLite history could not be read.")
-        }
-        defer { sqlite3_close(db) }
-        sqlite3_busy_timeout(db, 5_000)
-        guard sqlite3_exec(db, "BEGIN", nil, nil, nil) == SQLITE_OK else { throw sqliteFailure("A consistent history snapshot was unavailable", database: db) }
-        defer { sqlite3_exec(db, "ROLLBACK", nil, nil, nil) }
+    }
+
+    private static func rawCheckpoint(_ url: URL, database db: OpaquePointer, phase: String) throws -> RawCheckpoint {
         var statement: OpaquePointer?
         let prepared = sqlite3_prepare_v2(db, "SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name", -1, &statement, nil)
         guard prepared == SQLITE_OK, let tablesStatement = statement else {
@@ -276,16 +269,13 @@ extension CoachLocalOwnership {
     private static func verificationDiagnostic(_ checkpoint: RawCheckpoint, copy: OpaquePointer,
                                                actual: [String: String], assetsMatch: Bool) throws -> String {
         let changed = checkpoint.tableDigests.keys.sorted().filter { checkpoint.tableDigests[$0] != actual[$0] }
-        var source: OpaquePointer?
-        guard sqlite3_open_v2(canonicalSQLiteURL(checkpoint.source).path, &source, SQLITE_OPEN_READONLY, nil) == SQLITE_OK,
-              let sourceDB = source else {
-            if let source { sqlite3_close(source) }
-            return "Records changed: \(!changed.isEmpty); assets changed: \(!assetsMatch); source diagnostic unavailable."
+        return try withReadableSource(checkpoint.source) { sourceDB in
+            try verificationDiagnostic(checkpoint, source: sourceDB, copy: copy, changed: changed, assetsMatch: assetsMatch)
         }
-        defer { sqlite3_close(sourceDB) }
-        sqlite3_busy_timeout(sourceDB, 5_000)
-        guard sqlite3_exec(sourceDB, "BEGIN", nil, nil, nil) == SQLITE_OK else { return "Source diagnostic snapshot unavailable." }
-        defer { sqlite3_exec(sourceDB, "ROLLBACK", nil, nil, nil) }
+    }
+
+    private static func verificationDiagnostic(_ checkpoint: RawCheckpoint, source sourceDB: OpaquePointer,
+                                               copy: OpaquePointer, changed: [String], assetsMatch: Bool) throws -> String {
         let sourceNames = try entityNameMap(sourceDB), copyNames = try entityNameMap(copy)
         var descriptions: [String] = []
         for table in changed.prefix(4) {
