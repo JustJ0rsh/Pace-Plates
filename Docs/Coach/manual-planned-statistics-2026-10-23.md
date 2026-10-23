@@ -19,8 +19,10 @@ The owner clarified the intended behavior: manual entry should count without che
 
 Evidence: `/tmp/pace-workout-statistics-final-membership-20261023/`. Existing rows are classified by their stored planning identifiers; ambiguous older unmarked rows are not rewritten or backfilled.
 
-The source has independent review and Swift parsing checks. The full iOS compile and physical-device acceptance remain required before installation. Eagle 1's latest availability check failed before app inspection with CoreDevice 4016; no device app was changed by this patch.
+The source has independent review and Swift parsing checks. The initial iOS QA build passed 270 device checks (210 storage/recovery and 60 statistics checks). Physical UI testing confirmed manual rows without circles, Finish saving directly, and planned rows with circles. That UI test also caught Home's latest-workout destination changing when a new plan reordered its query. Home now pins the tapped workout until its detail is dismissed; this follow-up passed independent source review and requires the explicit phone regression below before normal installation.
 
-No model fields were added. The plan marker uses an existing provenance string on newly chosen plans only. No real workout records were inspected, changed, copied, migrated or deleted during this fix. The existing approved recovery backup remains untouched.
+Phone regression: open a manual workout from Home; create a separate plan with different values; Finish the plan; verify the original detail still shows its original title, manual mode and values. Return Home and verify the latest row opens the new plan; reopen the original from history and verify it is unchanged.
+
+No model fields were added. The plan marker uses an existing provenance string on newly chosen plans only. No real workout records were inspected or edited during development. Before the normal app update, a fresh private app/shared-container recovery copy was made under the owner's explicit approval without inspecting record contents. The prior recovery backup remains untouched.
 
 Local test evidence and final counts are recorded in the associated handoff; no App Store upload or release is part of this change.

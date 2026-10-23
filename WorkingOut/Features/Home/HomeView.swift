@@ -21,6 +21,7 @@ struct HomeView: View {
     
     @State private var selectedChartTab: ChartTab = .volume
     @State private var quickWorkoutSession: WorkoutSession? = nil
+    @State private var recentWorkoutToOpen: WorkoutSession? = nil
     @State private var showWorkoutTemplates: Bool = false
     @State private var showQuickRunTracking: Bool = false
     @State private var quickCardioActivityType: String = "running"
@@ -433,8 +434,10 @@ struct HomeView: View {
                 .foregroundColor(AppTheme.textColor)
 
             if let lastWorkout = workoutSessions.first {
-                NavigationLink {
-                    WorkoutSessionDetailView(session: lastWorkout)
+                Button {
+                    // Pin the tapped record. Creating a plan can change the
+                    // newest query result while this detail is still open.
+                    recentWorkoutToOpen = lastWorkout
                 } label: {
                     HomeRecentActivityRow(
                         icon: "figure.strengthtraining.traditional",
@@ -794,6 +797,10 @@ struct HomeView: View {
         .tint(AppTheme.accentColor)
         .navigationDestination(item: $quickWorkoutSession) { session in
             WorkoutSessionDetailView(session: session, isNewSession: true)
+        }
+        .navigationDestination(item: $recentWorkoutToOpen) { session in
+            WorkoutSessionDetailView(session: session)
+                .id(session.id)
         }
         .sheet(isPresented: $showQuickRunTracking) {
             NavigationStack {
