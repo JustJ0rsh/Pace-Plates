@@ -1,0 +1,20 @@
+Pace & Plates brings strength training, run tracking, and body-weight trends together on your iPhone and iPad.
+
+STRENGTH TRAINING
+Log exercises, sets, reps, and weight. Manual entries count toward your progress without an extra completion checkbox. Use + Plan for workouts you want to plan in advance, then check off sets as you perform them. Review workout history, volume charts, and personal records.
+
+RUNS AND CARDIO
+Track runs, walks, hikes, and other supported activities with distance, duration, pace, and route maps. Review previous sessions and use optional Apple Health integration to read supported fitness information or save workouts with your permission.
+
+WEIGHT AND COACH
+Log weigh-ins and view trends over time. Organize training programs, record actual results, and keep optional nutrition, recovery, body-measurement, and progress-photo records.
+
+OPTIONAL APPLE SERVICES
+Use weather, maps, Calendar, and Apple Health features with the permissions and actions you choose. Community features can submit scores and achievements to Game Center; participation is optional. Built-in AI generation uses Apple Intelligence on compatible devices. Copying a reviewed prompt for an external AI service is a separate action that you control.
+
+LOCAL HISTORY IN VERSION 2.5
+Version 2.5 stores app history on your device with CloudKit synchronization disabled. New history and edits do not sync to your other devices. Keep deliberate backups for recovery or transfer: Settings > Backup exports a versioned history archive, optionally including progress photos. Older JSON backups remain importable.
+
+Older versions may have private iCloud copies. Updating to version 2.5 does not delete those copies or change older app versions on other devices. Current-history deletion, Apple Health records, original library photos, and exported files have separate deletion controls. See the privacy policy for details.
+
+No account is required for local logging. The app has no advertising or analytics SDKs and does not send your saved app history to developer-operated servers. Information you choose to share, export, or send through optional services follows the selected destination's rules.
