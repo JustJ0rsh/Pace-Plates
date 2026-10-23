@@ -11,6 +11,8 @@ struct CoachSessionDetailView: View {
     @State private var error: String?
     @State private var explanation = ""
     @State private var showingAttestation = false
+    @State private var phase: CoachPhase?
+    @Query private var phaseReviews: [CoachPhaseReview]
 
     var body: some View {
         Group {
@@ -22,24 +24,18 @@ struct CoachSessionDetailView: View {
                         Text(session.title).font(.title2.bold())
                         Text(session.currentCivilDate ?? session.scheduledDate.formatted(date: .abbreviated, time: .omitted))
                         Text(session.status.replacingOccurrences(of: "_", with: " ").capitalized).foregroundStyle(.secondary)
-                        if let notes = session.notes ?? template?.notes, !notes.isEmpty { Text(notes) }
                     }
                     if let template {
-                        prescriptionSections(template)
-                        if template.kind != "rest", ["pending", "in_progress"].contains(session.status) {
-                            Section {
-                                Button(session.status == "in_progress" ? "Resume Session" : "Start Session", systemImage: "play.fill", action: start)
-                                    .accessibilityIdentifier("coach.session.start")
-                                Button("Record completion without logs") { showingAttestation = true }
-                            }
-                        } else if template.kind == "rest" {
-                            Text("Rest has no workout execution and is excluded from training completion.").foregroundStyle(.secondary)
-                        }
+                        sessionActions(template)
                         if template.kind != "rest", session.executionID == nil, ["pending", "skipped"].contains(session.status) {
                             Section {
                                 Button(session.status == "skipped" ? "Undo Skip" : "Skip Session") { toggleSkip() }
                                     .accessibilityIdentifier("coach.session.skip")
                             }
+                        }
+                        prescriptionSections(template)
+                        if let notes = session.notes ?? template.notes, !notes.isEmpty {
+                            Section("Session notes") { Text(notes) }
                         }
                         if let execution, let data = execution.snapshotData,
                            let snapshot = try? JSONDecoder().decode(CoachExecutionSnapshot.self, from: data),
@@ -79,6 +75,66 @@ struct CoachSessionDetailView: View {
         .alert("Coach", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("OK", role: .cancel) {}
         } message: { Text(error ?? "") }
+    }
+
+    @ViewBuilder
+    private func sessionActions(_ value: CoachSessionTemplate) -> some View {
+        if value.kind == "rest" {
+            Text("Rest has no workout execution and is excluded from training completion.").foregroundStyle(.secondary)
+        } else if ["pending", "in_progress"].contains(session.status) {
+            Section {
+                if session.executionID == nil, let plan = session.plan, plan.status != "active" {
+                    Text(plan.status == "draft" ? "This session is saved in your draft plan." : "This plan is \(plan.status).")
+                    Text("\(plan.status == "draft" ? "Start" : "Resume") the plan before starting or checking off this session.")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    NavigationLink(plan.status == "draft" ? "Start Plan" : "Resume Plan") {
+                        CoachProgramDetailView(plan: plan)
+                    }
+                    .accessibilityIdentifier("coach.session.review_plan")
+                } else if session.executionID == nil, let phase, needsPhaseReview, let plan = session.plan {
+                    Text("Review \(phase.title) before you start.").font(.headline)
+                    Text("Confirm this phase’s sessions and guidance are right for you. Your planned session stays here while you review.")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    NavigationLink("Review Phase") { CoachProgramDetailView(plan: plan) }
+                        .accessibilityIdentifier("coach.session.review_phase")
+                } else {
+                    Button(startTitle(for: value), systemImage: value.kind == "recovery" ? "checkmark.circle" : "play.fill", action: start)
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("coach.session.start")
+                    if hasActiveRecording {
+                        Text("Resume this activity to finish or cancel its recording.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else if value.kind != "recovery" {
+                        Button("Mark as Done", systemImage: "checkmark.circle") { showingAttestation = true }
+                            .accessibilityIdentifier("coach.session.mark_done")
+                        Text("Already completed it? Check it off with an explanation. Measurements stay blank.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private var needsPhaseReview: Bool {
+        guard phase?.advanceMode == .reviewRequired else { return false }
+        return !phaseReviews.contains {
+            $0.planID == session.plan?.id && $0.phaseID == session.phaseID &&
+            $0.revisionID == session.revisionID && $0.statusRaw == "ready"
+        }
+    }
+
+    private var hasActiveRecording: Bool {
+        RunTracker.shared.hasRecoverableActivity && RunTracker.shared.plannedTarget?.canonicalOccurrenceID == session.id
+    }
+
+    private func startTitle(for value: CoachSessionTemplate) -> String {
+        if value.kind == "recovery" { return "Mark as Done" }
+        let action = session.status == "in_progress" ? "Resume" : "Start"
+        switch value.kind {
+        case "strength": return "\(action) Workout"
+        case "running": return "\(action) Run"
+        default: return "\(action) Activity"
+        }
     }
 
     @ViewBuilder
@@ -131,6 +187,11 @@ struct CoachSessionDetailView: View {
     }
     private func load() {
         do {
+            phase = nil
+            if let revisionID = session.revisionID,
+               let revision = try context.fetch(FetchDescriptor<CoachPlanRevision>(predicate: #Predicate { $0.id == revisionID })).first {
+                phase = try JSONDecoder().decode(CoachPlanDocument.self, from: revision.documentData).phases.first { $0.id == session.phaseID }
+            }
             if let data = session.prescriptionData { template = try JSONDecoder().decode(CoachSessionTemplate.self, from: data) }
             if let executionID = session.executionID {
                 execution = try context.fetch(FetchDescriptor<CoachSessionExecution>(predicate: #Predicate { $0.id == executionID })).first
@@ -158,6 +219,10 @@ struct CoachSessionDetailView: View {
     }
     private func attest() {
         do {
+            guard !hasActiveRecording else {
+                error = "Resume this activity to finish or cancel its recording before checking it off."
+                return
+            }
             let record = try CoachRepository(context: context).beginExecution(occurrenceID: session.id)
             try CoachRepository(context: context).finishExecution(executionID: record.id, status: .completed,
                 notes: explanation, provenance: "manual_attestation")

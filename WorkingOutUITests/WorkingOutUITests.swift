@@ -52,7 +52,7 @@ final class WorkingOutUITests: XCTestCase {
         defer { app.terminate() }
         waitForElement(app.buttons["coach.add_plan"])
         app.buttons["coach.add_plan"].tap()
-        app.buttons["Paste from ChatGPT or Import File"].tap()
+        app.buttons["coach.add_plan.paste"].tap()
         let input = app.textViews["coach.import.paste"]
         waitForElement(input)
         input.tap()
@@ -74,7 +74,11 @@ final class WorkingOutUITests: XCTestCase {
         saved.tap()
         let session = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "coach.today.session.")).firstMatch
         revealCoach(session, in: app, attempts: 10)
-        session.tap()
+        let occurrenceID = String(session.identifier.dropFirst("coach.today.session.".count))
+        selectBackupTestTab("Workouts", in: app)
+        let plannedWorkout = app.buttons["workouts.planned.session." + occurrenceID]
+        revealCoach(plannedWorkout, in: app)
+        plannedWorkout.tap()
         waitForElement(app.buttons["coach.session.start"])
         app.buttons["coach.session.start"].tap()
         let set = app.buttons["coach.set.press.one"]
@@ -89,7 +93,16 @@ final class WorkingOutUITests: XCTestCase {
         let finish = app.buttons["coach.workout.finish"]
         revealCoach(finish, in: app, attempts: 6)
         finish.tap()
-        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Saved completed.")).firstMatch.waitForExistence(timeout: 5), app.debugDescription)
+        XCTAssertTrue(finish.waitForNonExistence(timeout: 5), "Finish saves the entered set and closes")
+        XCTAssertFalse(app.buttons["Save Partial"].exists)
+        selectBackupTestTab("Coach", in: app)
+        returnToCoachRoot(app)
+        let savedOccurrence = app.buttons["coach.today.session." + occurrenceID]
+        revealCoach(savedOccurrence, in: app)
+        XCTAssertFalse(savedOccurrence.label.contains("Done"), "Saving must not invent completion")
+        savedOccurrence.tap()
+        XCTAssertTrue(set.waitForExistence(timeout: 5))
+        XCTAssertTrue(set.label.contains("2 reps"), "The same planned occurrence retains its entered actual")
     }
 
     func testCoachDailyEntriesRetainUnknownFields() {
@@ -133,7 +146,7 @@ final class WorkingOutUITests: XCTestCase {
         let app = launchApp(startTab: "ai", fixture: nil)
         defer { app.terminate() }
         app.buttons["coach.add_plan"].tap()
-        app.buttons["Paste from ChatGPT or Import File"].tap()
+        app.buttons["coach.add_plan.paste"].tap()
         let input = app.textViews["coach.import.paste"]
         waitForElement(input)
         XCTAssertFalse(app.buttons["coach.import.review"].isEnabled)
@@ -142,6 +155,12 @@ final class WorkingOutUITests: XCTestCase {
         let error = app.staticTexts["coach.import.error"]
         revealCoach(error, in: app)
         XCTAssertFalse(app.navigationBars["Review Program"].exists)
+        // The error list may scroll the lazy form's editor out of its accessibility tree.
+        for _ in 0..<6 {
+            if input.exists && input.isHittable { break }
+            app.collectionViews.firstMatch.swipeDown()
+        }
+        XCTAssertTrue(input.exists && input.isHittable, "The original JSON must remain reachable for correction")
         XCTAssertEqual(input.value as? String, "{\"broken\":true}")
         input.tap()
         input.typeKey("a", modifierFlags: .command)
@@ -153,7 +172,7 @@ final class WorkingOutUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["coach.import.error"].exists)
         // Leaving review must neither import nor activate the draft.
         returnToCoachRoot(app)
-        app.segmentedControls["coach.section"].buttons["Program"].tap()
+        revealCoach(app.buttons["coach.plans.open"], in: app); app.buttons["coach.plans.open"].tap()
         XCTAssertFalse(app.buttons["Audit Recovery Program"].exists)
     }
 
@@ -177,22 +196,16 @@ final class WorkingOutUITests: XCTestCase {
         revealCoach(draft, in: app); draft.tap()
         let saved = app.buttons["coach.plan.open_saved"]
         revealCoach(saved, in: app); saved.tap()
-        XCTAssertTrue(app.buttons["Review Start or Resume"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["coach.plan.start"].waitForExistence(timeout: 5))
         let session = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "coach.today.session.")).firstMatch
         revealCoach(session, in: app, attempts: 10); session.tap()
-        app.buttons["coach.session.start"].tap()
+        XCTAssertFalse(app.buttons["coach.session.start"].exists, "A draft should explain how to start the plan before offering workout execution")
+        XCTAssertFalse(app.alerts["Coach"].exists)
         let attestation = app.alerts["Record Completion"]
-        XCTAssertTrue(attestation.waitForExistence(timeout: 5))
-        XCTAssertFalse(attestation.buttons["Record"].isEnabled)
-        attestation.textFields.firstMatch.tap(); attestation.textFields.firstMatch.typeText("Gentle mobility")
-        attestation.buttons["Record"].tap()
-        let blocked = app.alerts["Coach"]
-        XCTAssertTrue(blocked.waitForExistence(timeout: 5), "A draft must not record actual training")
-        blocked.buttons["OK"].tap()
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        let activate = app.buttons["Review Start or Resume"]
+        let activate = app.buttons["coach.plan.start"]
         for _ in 0..<8 where !activate.isHittable { app.swipeDown() }
-        activate.tap(); app.buttons["Keep Existing Dates"].tap()
+        activate.tap(); app.buttons["Start with These Dates"].tap()
         revealCoach(session, in: app, attempts: 10); session.tap()
         let skip = app.buttons["coach.session.skip"]
         revealCoach(skip, in: app); skip.tap()
@@ -208,16 +221,16 @@ final class WorkingOutUITests: XCTestCase {
         XCTAssertTrue(app.buttons["coach.session.start"].waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Completed"].exists)
         returnToCoachRoot(app)
-        app.segmentedControls["coach.section"].buttons["Program"].tap()
+        revealCoach(app.buttons["coach.plans.open"], in: app); app.buttons["coach.plans.open"].tap()
         openCoachReview(Self.coachRecoveryFixture, in: app)
         let duplicate = app.buttons["Open Audit Recovery Program"]
         revealCoach(duplicate, in: app)
-        revealCoach(app.buttons["coach.plan.save_draft"], in: app)
+        XCTAssertTrue(app.buttons["coach.plan.save_draft"].exists)
         XCTAssertFalse(app.buttons["coach.plan.save_draft"].isEnabled)
         XCTAssertFalse(app.buttons["coach.plan.activate"].isEnabled)
     }
 
-    func testCoachUnrecordedStrengthFinishesPartialAndReopens() {
+    func testCoachFinishSavesUnrecordedStrengthAndReopensWithoutConfirmation() {
         let app = launchApp(startTab: "ai", fixture: nil)
         defer { app.terminate() }
         openCoachReview(Self.coachProgramFixture, in: app)
@@ -233,26 +246,13 @@ final class WorkingOutUITests: XCTestCase {
         app.buttons["coach.session.start"].tap()
         let finish = app.buttons["coach.workout.finish"]
         revealCoach(finish, in: app); finish.tap()
-        XCTAssertTrue(app.buttons["Save Partial"].waitForExistence(timeout: 5))
-        let continueButton = app.buttons["Continue"]
-        if continueButton.exists {
-            continueButton.tap()
-        } else {
-            // iOS presents the cancel action as dismissal outside the popover.
-            let lastAction = app.buttons["Record completion with explanation"].frame
-            let window = app.windows.firstMatch
-            let y = min(lastAction.maxY + 80, window.frame.maxY - 110)
-            window.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: window.frame.width / 2, dy: y - window.frame.minY)).tap()
-        }
-        let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.buttons["Save Partial"])
-        XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 5), .completed)
-        XCTAssertTrue(finish.exists)
-        finish.tap(); app.buttons["Save Partial"].tap()
-        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Saved partial.")).firstMatch.waitForExistence(timeout: 5))
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(finish.waitForNonExistence(timeout: 5), "Finish saves and closes directly")
+        XCTAssertFalse(app.buttons["Save Partial"].exists)
+        XCTAssertFalse(app.buttons["Record completion with explanation"].exists)
         revealCoach(session, in: app); session.tap()
         XCTAssertFalse(app.buttons["coach.session.start"].exists)
-        XCTAssertFalse(app.buttons["coach.workout.finish"].exists)
+        XCTAssertTrue(app.buttons["coach.workout.finish"].waitForExistence(timeout: 5),
+                      "Saving the editor leaves the unfinished execution available to resume")
         let set = app.buttons["coach.set.press.one"]
         XCTAssertTrue(set.waitForExistence(timeout: 5))
         XCTAssertTrue(set.label.contains("Not recorded"), "Unperformed sets must not acquire invented actuals")
@@ -290,7 +290,8 @@ final class WorkingOutUITests: XCTestCase {
         XCTAssertFalse(set.label.contains("Not recorded"))
         let finish = app.buttons["coach.workout.finish"]
         revealCoach(finish, in: app); finish.tap()
-        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Saved completed.")).firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(finish.waitForNonExistence(timeout: 5), "Finish saves and closes without changing completion state")
+        XCTAssertFalse(app.buttons["Save Partial"].exists)
         selectBackupTestTab("Workouts", in: app)
         XCTAssertTrue(app.staticTexts["1 result"].waitForExistence(timeout: 10), "Resume must preserve one actual workout")
     }
@@ -306,7 +307,10 @@ final class WorkingOutUITests: XCTestCase {
         let session = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "coach.today.session.")).firstMatch
         revealCoach(session, in: app, attempts: 10)
         let occurrenceID = session.identifier
-        session.tap(); app.buttons["coach.session.start"].tap()
+        selectBackupTestTab("Runs", in: app)
+        let plannedRun = app.buttons["runs.planned.session." + occurrenceID.dropFirst("coach.today.session.".count)]
+        revealCoach(plannedRun, in: app); plannedRun.tap()
+        app.buttons["coach.session.start"].tap()
         waitForElement(app.buttons["Start"]); app.buttons["Start"].tap()
         waitForElement(app.buttons["Pause"])
         XCTAssertTrue(app.otherElements["coach.run.interval"].exists || app.descendants(matching: .any)["coach.run.interval"].exists)
@@ -338,7 +342,7 @@ final class WorkingOutUITests: XCTestCase {
         returnToCoachRoot(app)
         let completed = app.buttons[occurrenceID]
         revealCoach(completed, in: app)
-        XCTAssertTrue(completed.label.contains("Partial"), "The exact occurrence must receive the saved run outcome")
+        XCTAssertTrue(completed.label.contains("Partly completed"), "The exact occurrence must receive the saved run outcome")
     }
 
     private static let coachRunningFixture = """
@@ -352,7 +356,7 @@ final class WorkingOutUITests: XCTestCase {
     private func openCoachReview(_ json: String, in app: XCUIApplication) {
         let add = app.buttons["coach.add_plan"]
         revealCoach(add, in: app); add.tap()
-        app.buttons["Paste from ChatGPT or Import File"].tap()
+        app.buttons["coach.add_plan.paste"].tap()
         let input = app.textViews["coach.import.paste"]
         waitForElement(input); input.tap(); input.typeText(json)
         app.buttons["coach.import.review"].tap()
@@ -361,10 +365,10 @@ final class WorkingOutUITests: XCTestCase {
 
     private func returnToCoachRoot(_ app: XCUIApplication) {
         for _ in 0..<7 {
-            if app.segmentedControls["coach.section"].exists { return }
+            if app.buttons["coach.plans.open"].exists { return }
             app.navigationBars.buttons.element(boundBy: 0).tap()
         }
-        XCTAssertTrue(app.segmentedControls["coach.section"].exists)
+        XCTAssertTrue(app.buttons["coach.plans.open"].exists)
     }
 
     func testInterruptedRunRestoresPausedAfterRelaunch() {
@@ -515,7 +519,7 @@ final class WorkingOutUITests: XCTestCase {
 
         let coach = launchApp(startTab: "ai")
         XCTAssertTrue(coach.navigationBars["Coach"].waitForExistence(timeout: 5))
-        waitForElement(coach.segmentedControls["coach.section"])
+        waitForElement(coach.buttons["coach.plans.open"])
         captureAppStoreScreenshot("03-coach")
         coach.terminate()
 
@@ -1204,7 +1208,12 @@ final class WorkingOutUITests: XCTestCase {
     private func revealCoach(_ element: XCUIElement, in app: XCUIApplication, attempts: Int = 6) {
         if !element.exists { _ = element.waitForExistence(timeout: 2) }
         for attempt in 0...attempts {
-            if element.exists && element.isHittable { return }
+            let footerTop = app.descendants(matching: .any).matching(NSPredicate(format: "identifier IN %@", ["coach.plan.activate", "coach.plan.save_draft", "coach.plan.next_step", "coach.import.review", "coach.prompt.paste_reply", "coach.prompt.copy"])).allElementsBoundByIndex
+                .filter { $0.frame.minY > app.frame.midY && $0.frame.intersects(app.frame) }.map { $0.frame.minY }.min() ?? app.frame.maxY
+            let navigationBottom = app.navigationBars.firstMatch.exists ? app.navigationBars.firstMatch.frame.maxY : app.frame.minY
+            // A visible row label does not guarantee that the switch thumb clears the pinned footer.
+            let switchVisible = !element.exists || element.elementType != .switch || (element.frame.midY > navigationBottom + 12 && element.frame.midY < footerTop - 12)
+            if element.exists && element.isHittable && switchVisible { return }
             guard attempt < attempts else { break }
             if let scroller = (app.collectionViews.allElementsBoundByIndex + app.scrollViews.allElementsBoundByIndex)
                 .last(where: { $0.frame.width > 0 && $0.frame.height > 0 && $0.frame.intersects(app.frame) }) {
@@ -1212,7 +1221,9 @@ final class WorkingOutUITests: XCTestCase {
                 let keyboard = app.keyboards.firstMatch
                 let keyboardTop = keyboard.exists && keyboard.frame.height > 0 ? keyboard.frame.minY : app.frame.maxY
                 let tabTop = app.tabBars.allElementsBoundByIndex.filter { $0.frame.minY > app.frame.midY && $0.frame.height > 0 }.map { $0.frame.minY }.min() ?? app.frame.maxY
-                let bottom = min(frame.maxY, keyboardTop, tabTop, app.frame.maxY) - 20
+                let pinnedTop = app.descendants(matching: .any).matching(NSPredicate(format: "identifier IN %@", ["coach.plan.activate", "coach.plan.save_draft", "coach.plan.next_step", "coach.import.review", "coach.prompt.paste_reply", "coach.prompt.copy"])).allElementsBoundByIndex
+                    .filter { $0.frame.minY > app.frame.midY && $0.frame.intersects(app.frame) }.map { $0.frame.minY }.min() ?? app.frame.maxY
+                let bottom = min(frame.maxY, keyboardTop, tabTop, pinnedTop, app.frame.maxY) - 24
                 let top = max(frame.minY, app.frame.minY) + 40
                 guard bottom > top + 30 else { break }
                 let towardTop = element.exists && element.frame.maxY <= top

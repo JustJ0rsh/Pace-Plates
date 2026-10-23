@@ -12,6 +12,8 @@ struct WorkoutLogView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage(AppTheme.storageKey) private var appTheme: AppThemeOption = .appDefault
     @Query(sort: [SortDescriptor<WorkoutSession>(\.date, order: .reverse)]) private var workoutSessions: [WorkoutSession]
+    @Query private var plannedSessions: [PlannedSession]
+    @Query private var trainingPlans: [TrainingPlan]
     @Query(sort: [SortDescriptor<ExerciseDefinition>(\.name)]) private var exerciseDefinitions: [ExerciseDefinition]
     @Query(filter: #Predicate<HealthWorkoutInboxItem> {
         $0.statusRaw == "pending" && $0.healthDeletionObservedAt == nil
@@ -66,12 +68,15 @@ struct WorkoutLogView: View {
     // MARK: Body
 
     var body: some View {
+        let _ = trainingPlans.map(\.updatedAt)
         let historySessions = filteredWorkoutSessions
+        let planned = CoachPlannedActivities(plannedSessions, kind: .workouts)
 
         ScrollView {
             VStack(spacing: 16) {
+                    CoachPlannedActivityCard(kind: .workouts, projection: planned)
                     // Empty-state tile similar to Weight tab
-                    if workoutSessions.isEmpty {
+                    if workoutSessions.isEmpty && planned.sessions.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
                             ContentUnavailableView(
                                 "No workouts yet",

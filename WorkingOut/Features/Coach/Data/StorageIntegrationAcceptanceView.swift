@@ -20,7 +20,8 @@ struct StorageIntegrationAcceptanceView: View {
             let startedAt = ISO8601DateFormatter().string(from: Date())
             let result: [String: Any]
             do {
-                let count = try await CoachPersistenceRegressionChecks.run()
+                var count = try await CoachPersistenceRegressionChecks.run()
+                count += try await CoachPlannedActivityRegressionChecks.run()
                 let coldUnavailable = CoachPersistenceRegressionChecks.coldSourceMigrationStatus.hasPrefix("unsupported")
                 status = "PASS: \(count) synthetic storage checks"
                     + (coldUnavailable ? "\nCold-source migration is unavailable; recovery safely retains its history." : "")

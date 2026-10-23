@@ -118,6 +118,8 @@ struct CoachProgressView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .navigationTitle("Progress")
+        .navigationBarTitleDisplayMode(.inline)
         .task { load() }
         .onChange(of: rangeRaw) { _, _ in load() }
         .onChange(of: selectedPlanID) { _, _ in loadProgramSessions() }

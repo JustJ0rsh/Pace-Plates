@@ -36,6 +36,8 @@ struct RunLogView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Query private var chartSessions: [RunningSession]
+    @Query private var plannedSessions: [PlannedSession]
+    @Query private var trainingPlans: [TrainingPlan]
     @State private var historyPage: [RunningSession] = []
     @State private var historyResultCount = 0
     @State private var totalRunCount = 0
@@ -130,8 +132,10 @@ struct RunLogView: View {
     }
 
     var body: some View {
+        let _ = trainingPlans.map(\.updatedAt)
         let visibleHistoryRuns = historyPage
         let canLoadMoreHistoryRuns = historyResultCount > visibleHistoryRuns.count
+        let planned = CoachPlannedActivities(plannedSessions, kind: .runs)
 
         ScrollView {
             VStack(spacing: 16) {
@@ -139,6 +143,7 @@ struct RunLogView: View {
                 ActiveRunBanner(activityName: activityName, activityIcon: activityIcon) { type in
                     presentRunTracking(for: type)
                 }
+                CoachPlannedActivityCard(kind: .runs, projection: planned)
 
                 // Unified Runs tile (header + chart or placeholder)
                 let calendar = Calendar.current
@@ -218,7 +223,10 @@ struct RunLogView: View {
                             .font(.subheadline)
                             .foregroundStyle(AppTheme.secondaryTextColor)
 
-                        if daily.isEmpty {
+                        if daily.isEmpty && !planned.sessions.isEmpty {
+                            Text("No completed activities in this date range. Open a planned session above to begin.")
+                                .font(.subheadline).foregroundStyle(.secondary)
+                        } else if daily.isEmpty {
                             VStack(spacing: 10) {
                                 ContentUnavailableView(
                                     "No Runs Logged",

@@ -14,9 +14,15 @@ struct CoachHomeView: View {
         }
         .navigationTitle("Coach")
         .toolbar {
+            if persistence.isCoachLocal {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink("Add Plan", destination: CoachAddPlanView())
+                        .accessibilityIdentifier("coach.add_plan.toolbar")
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 NavigationLink { AIPlannerView() } label: {
-                    Label("Ask Coach", systemImage: "sparkles").labelStyle(.titleAndIcon)
+                    Label("Ask Coach", systemImage: "sparkles").labelStyle(.iconOnly)
                 }
                 .accessibilityIdentifier("coach.ask")
             }
@@ -69,23 +75,10 @@ private struct CoachStorageReviewView: View {
 }
 
 private struct CoachLocalHomeView: View {
-    enum Section: String, CaseIterable { case today = "Today", program = "Program", progress = "Progress" }
-    @State private var section: Section = .today
-
     var body: some View {
-        VStack(spacing: 0) {
-            Picker("Coach section", selection: $section) {
-                ForEach(Section.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented).padding()
-            .accessibilityIdentifier("coach.section")
-            switch section {
-            case .today: CoachTodayView()
-            case .program: CoachProgramLibraryView()
-            case .progress: CoachProgressView()
-            }
-        }
-        .background(AppTheme.backgroundColor)
+        CoachTodayView()
+            .background(AppTheme.backgroundColor)
+            .accessibilityIdentifier("coach.dashboard")
     }
 }
 
@@ -131,12 +124,14 @@ struct CoachTodayView: View {
             if let plan = projection.plan {
                 NavigationLink { CoachProgramDetailView(plan: plan) } label: {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("TODAY").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                         Text(plan.title).font(.title2.bold()).foregroundStyle(.primary)
+                        Label("View Plan", systemImage: "calendar").font(.subheadline)
                         Text(Date(), format: .dateTime.weekday(.wide).month().day()).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }
-                if projection.today.isEmpty { Text("No sessions scheduled today.").foregroundStyle(.secondary) }
+                .accessibilityIdentifier("coach.plan.current")
+                Text("Today").font(.headline)
+                if projection.today.isEmpty { Text("No workouts planned today. Your next sessions are below.").foregroundStyle(.secondary) }
                 ForEach(projection.today) { CoachSessionRow(session: $0) }
                 if !projection.overdue.isEmpty {
                     DisclosureGroup("Overdue · \(projection.overdue.count)") {
@@ -144,17 +139,36 @@ struct CoachTodayView: View {
                     }
                 }
                 if !compact, !projection.next.isEmpty {
-                    Text("Next").font(.headline)
+                    Text("Coming up").font(.headline)
                     ForEach(projection.next) { CoachSessionRow(session: $0, showDate: true) }
                 }
+            } else if let savedPlan = plans.first(where: { $0.currentRevisionID != nil && ["draft", "paused"].contains($0.status) }) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(savedPlan.status == "draft" ? "Your plan is saved" : "Your plan is paused").font(.title2.bold())
+                    Text(savedPlan.title).font(.headline)
+                    Text("Start your plan to see today’s workouts and runs here. You can also find them in the Workouts and Runs tabs.")
+                        .foregroundStyle(.secondary)
+                    NavigationLink { CoachProgramDetailView(plan: savedPlan) } label: {
+                        Label(savedPlan.status == "draft" ? "Review and Start Plan" : "Review and Resume Plan", systemImage: "play.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("coach.plan.saved")
+                }
             } else {
-                ContentUnavailableView("Make room for your next goal", systemImage: "calendar.badge.plus",
-                                       description: Text("Create a program, import a plan from ChatGPT, or check in whenever you like."))
-                NavigationLink { CoachAddPlanView() } label: { Label("Add Plan", systemImage: "plus") }
-                    .buttonStyle(.borderedProminent).accessibilityIdentifier("coach.add_plan")
-                NavigationLink("Log a Workout") { WorkoutLogView() }
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Your workouts, ready to follow").font(.title2.bold())
+                    Text("Add a plan to schedule workouts and runs, then check them off as you go.")
+                        .foregroundStyle(.secondary)
+                    NavigationLink { CoachAddPlanView() } label: { Label("Add Plan", systemImage: "plus") }
+                        .buttonStyle(.borderedProminent).accessibilityIdentifier("coach.add_plan")
+                }
             }
             if !compact {
+                ViewThatFits(in: .horizontal) {
+                    HStack { planLinks }
+                    VStack(alignment: .leading) { planLinks }
+                }
+                Divider()
                 Text("Daily check-in").font(.headline)
                 ViewThatFits(in: .horizontal) {
                     HStack { checkInButtons }
@@ -166,6 +180,13 @@ struct CoachTodayView: View {
                 .buttonStyle(.bordered)
             }
         }
+    }
+
+    @ViewBuilder private var planLinks: some View {
+        NavigationLink { CoachProgramLibraryView() } label: { Label("Your Plans", systemImage: "calendar") }
+            .buttonStyle(.bordered).accessibilityIdentifier("coach.plans.open")
+        NavigationLink { CoachProgressView() } label: { Label("Progress", systemImage: "chart.xyaxis.line") }
+            .buttonStyle(.bordered).accessibilityIdentifier("coach.progress.open")
     }
 
     @ViewBuilder private var checkInButtons: some View {
@@ -185,11 +206,18 @@ struct CoachSessionRow: View {
                 Image(systemName: icon).font(.title2).frame(width: 32).foregroundStyle(AppTheme.accentColor)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(session.title).font(.headline).foregroundStyle(.primary)
-                    if showDate { Text(session.currentCivilDate ?? "").font(.caption) }
+                    if showDate {
+                        let zone = session.plan.map(CoachRepository.timeZone) ?? .current
+                        Text(CoachDate.date(session.currentCivilDate ?? CoachDate.civil(session.scheduledDate, timeZone: zone), timeZone: zone),
+                             format: Date.FormatStyle(date: .abbreviated, time: .omitted, timeZone: zone))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     Text(status + (session.isOptional ? " · Optional" : "")).font(.subheadline).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 8)
-                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
+                Image(systemName: session.status == "completed" ? "checkmark.circle.fill" : "chevron.right")
+                    .font(session.status == "completed" ? .title3 : .caption)
+                    .foregroundStyle(session.status == "completed" ? Color.green : Color.secondary)
             }
             .padding(12).background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
             .contentShape(Rectangle())
@@ -199,7 +227,13 @@ struct CoachSessionRow: View {
         .accessibilityIdentifier("coach.today.session.\(session.id.uuidString)")
     }
     private var status: String {
-        session.status == "in_progress" ? "In progress · Resume" : session.status.replacingOccurrences(of: "_", with: " ").capitalized
+        switch session.status {
+        case "pending": return "Planned"
+        case "in_progress": return "In progress · Resume"
+        case "completed": return "Done"
+        case "partial": return "Partly completed"
+        default: return session.status.replacingOccurrences(of: "_", with: " ").capitalized
+        }
     }
     private var icon: String {
         switch session.activityType {
