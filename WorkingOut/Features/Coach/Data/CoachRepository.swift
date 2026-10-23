@@ -28,8 +28,13 @@ struct CoachExerciseMapping: Identifiable {
     var requiresSelection: Bool { candidates.count > 1 }
 }
 
+/// A nil ID explicitly records that activation was reviewed with no active plan.
+struct CoachActivationReview: Equatable, Sendable {
+    let activePlanID: UUID?
+}
+
 enum CoachRepositoryError: LocalizedError {
-    case localOwnershipRequired, missingRecord, invalidValue(String), ambiguousExercise(String), futureOnly, revisionConflict, dateCollision
+    case localOwnershipRequired, missingRecord, invalidValue(String), ambiguousExercise(String), futureOnly, revisionConflict, dateCollision, activationReviewChanged
     var errorDescription: String? {
         switch self {
         case .localOwnershipRequired: return "Review and enable local storage before saving Coach records."
@@ -39,6 +44,7 @@ enum CoachRepositoryError: LocalizedError {
         case .futureOnly: return "Only selected, unstarted future sessions can be changed."
         case .revisionConflict: return "Review the changed revision, then choose a draft replacement, selected future sessions, or a new plan."
         case .dateCollision: return "More than one entry exists on this date. Select the entry to edit before merging these records."
+        case .activationReviewChanged: return "The active plan changed while saving. Review which plan will pause, then start again."
         }
     }
 }
@@ -135,8 +141,9 @@ final class CoachRepository {
     @discardableResult
     func importPlan(document: CoachPlanDocument, startDate: Date, activate: Bool,
                     exerciseMappings: [String: UUID] = [:], allowCreatingExercises: Bool = false,
-                    replacingDraftID: UUID? = nil, expectedRevisionID: UUID? = nil, saveAsNewPlan: Bool = false, firstPhaseReady: Bool = false,
-                    timeZone: TimeZone = .current) async throws -> UUID {
+                    replacingDraftID: UUID? = nil, expectedRevisionID: UUID? = nil, expectedDraftUpdatedAt: Date? = nil,
+                    saveAsNewPlan: Bool = false, firstPhaseReady: Bool = false,
+                    timeZone: TimeZone = .current, activationReview: CoachActivationReview? = nil) async throws -> UUID {
         try requireLocal()
         let generation = WearableWorkoutInboxService.localDataPurgeGeneration
         let zone = timeZone
@@ -146,7 +153,7 @@ final class CoachRepository {
             return (validated, rows)
         }.value
         try Task.checkCancellation()
-        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation) else { throw CancellationError() }
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation, context: context) else { throw CancellationError() }
         let savedPlans = try plans()
         if !saveAsNewPlan, let existing = savedPlans.first(where: { $0.sourceProgramID == document.programId && $0.fingerprint == prepared.0.fingerprint }) { return existing.id }
         if !saveAsNewPlan && replacingDraftID == nil && savedPlans.contains(where: { $0.sourceProgramID == document.programId }) { throw CoachRepositoryError.revisionConflict }
@@ -164,10 +171,19 @@ final class CoachRepository {
         }
         return try transaction { isolated in
             let existingPlans = try isolated.fetch(FetchDescriptor<TrainingPlan>())
+            if activate, let activationReview {
+                let activeIDs = existingPlans.filter { $0.status == "active" }.map(\.id)
+                guard activeIDs.count == (activationReview.activePlanID == nil ? 0 : 1),
+                      activeIDs.first == activationReview.activePlanID else {
+                    throw CoachRepositoryError.activationReviewChanged
+                }
+            }
             let plan: TrainingPlan
             if let replacement = replacingDraftID {
                 guard let draft = existingPlans.first(where: { $0.id == replacement }), draft.status == "draft" else { throw CoachRepositoryError.revisionConflict }
-                guard expectedRevisionID == draft.currentRevisionID, document.revision > draft.sourceRevision else { throw CoachRepositoryError.revisionConflict }
+                guard expectedRevisionID == draft.currentRevisionID,
+                      let expectedDraftUpdatedAt, expectedDraftUpdatedAt == draft.updatedAt,
+                      document.revision > draft.sourceRevision else { throw CoachRepositoryError.revisionConflict }
                 guard (draft.sessions ?? []).allSatisfy({ $0.executionID == nil && $0.status == "pending" }) else { throw CoachRepositoryError.futureOnly }
                 for row in draft.sessions ?? [] { isolated.delete(row) }
                 plan = draft
@@ -265,6 +281,7 @@ final class CoachRepository {
         }
         try transaction { isolated in
             guard let row = try isolated.fetch(FetchDescriptor<PlannedSession>()).first(where: { $0.id == id }) else { throw CoachRepositoryError.missingRecord }
+            guard row.completionProvenance != "removed_by_reviewed_revision" else { throw CoachRepositoryError.invalidValue("session still included in this program") }
             guard row.executionID == nil else { throw CoachRepositoryError.invalidValue("session outcome in the workout logger") }
             if status == .pending && row.status != "skipped" { throw CoachRepositoryError.invalidValue("skipped session to return to pending") }
             if status != .pending && row.status != "pending" { throw CoachRepositoryError.invalidValue("unstarted session outcome") }
@@ -316,6 +333,7 @@ final class CoachRepository {
     func beginExecution(occurrenceID: UUID) throws -> CoachSessionExecution {
         let executionID: UUID = try transaction { isolated in
             guard let row = try isolated.fetch(FetchDescriptor<PlannedSession>()).first(where: { $0.id == occurrenceID }), row.activityType != "rest" else { throw CoachRepositoryError.missingRecord }
+            guard row.completionProvenance != "removed_by_reviewed_revision" else { throw CoachRepositoryError.invalidValue("session still included in this program") }
             if let id = row.executionID, let current = try isolated.fetch(FetchDescriptor<CoachSessionExecution>()).first(where: { $0.id == id }) { return current.id }
             guard row.status == "pending" else { throw CoachRepositoryError.invalidValue("unstarted session") }
             guard row.plan?.status == CoachPlanStatus.active.rawValue else { throw CoachRepositoryError.invalidValue("active program before starting a new session") }

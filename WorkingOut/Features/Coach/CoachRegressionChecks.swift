@@ -9,10 +9,11 @@ struct CoachRegressionChecksView: View {
             .accessibilityIdentifier("coach.regression.result")
             .task {
                 do {
+                    let storageCount = try await CoachStorageTransitionRegressionChecks.run()
                     let executionCount = try await CoachExecutionRegressionChecks.run()
-                    let persistenceCount = try await CoachPersistenceRegressionChecks.run()
+                    let persistenceCount = try await CoachPersistenceRegressionChecks.run() + CoachSavedBackupRegressionChecks.run()
                     let scheduleCount = try await CoachScheduleRegressionChecks.run()
-                    result = "Coach checks passed: \(executionCount + persistenceCount + scheduleCount)"
+                    result = "Coach checks passed: \(storageCount + executionCount + persistenceCount + scheduleCount)"
                 } catch { result = "Coach checks failed: \(error.localizedDescription)" }
             }
     }

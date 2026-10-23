@@ -26,6 +26,8 @@ struct AppLaunchConfiguration {
     let shouldResetState: Bool
     let startTab: UITestStartTab?
     let shouldShowOnboardingForTesting: Bool
+    /// A unique synthetic Keychain namespace; unavailable in Release or on devices.
+    let naturalProfileTestScope: String?
 
     init(processInfo: ProcessInfo) {
         // Automation hooks can wipe UserDefaults, swap in an in-memory store, and
@@ -44,13 +46,25 @@ struct AppLaunchConfiguration {
         fixtureName = environment["UITEST_FIXTURE"]
         shouldResetState = environment["UITEST_RESET_STATE"] == "1"
         startTab = environment["UITEST_START_TAB"].flatMap(UITestStartTab.init(rawValue:))
-        shouldShowOnboardingForTesting = environment["UITEST_SHOW_ONBOARDING"] == "1"
+        #if targetEnvironment(simulator)
+        if hasUITestFlag, environment["UITEST_NATURAL_PROFILE"] == "1",
+           let scope = environment["UITEST_PROFILE_SCOPE"].flatMap(UUID.init(uuidString:)) {
+            naturalProfileTestScope = scope.uuidString
+        } else {
+            naturalProfileTestScope = nil
+        }
+        #else
+        naturalProfileTestScope = nil
+        #endif
+        shouldShowOnboardingForTesting = naturalProfileTestScope == nil
+            && environment["UITEST_SHOW_ONBOARDING"] == "1"
         #else
         isUITest = false
         fixtureName = nil
         shouldResetState = false
         startTab = nil
         shouldShowOnboardingForTesting = false
+        naturalProfileTestScope = nil
         #endif
     }
 
@@ -60,6 +74,10 @@ struct AppLaunchConfiguration {
 
     var usesIsolatedStore: Bool {
         isUITest
+    }
+
+    var usesNaturalProfileForTesting: Bool {
+        naturalProfileTestScope != nil
     }
 
     var usesCoreTabsFixture: Bool {
@@ -84,6 +102,18 @@ struct AppLaunchConfiguration {
 
         if shouldResetState, let bundleIdentifier {
             UserDefaults.standard.removePersistentDomain(forName: bundleIdentifier)
+        }
+
+        if usesNaturalProfileForTesting {
+            // Exercise the ordinary onboarding decision and profile persistence.
+            // Keep integrations inert; never seed profile or completion flags.
+            UserDefaults.standard.set(false, forKey: "showVitalsOnHome")
+            UserDefaults.standard.set(WearableDevicePreference.none.rawValue,
+                                      forKey: WearableDevicePreference.storageKey)
+            UserDefaults.standard.set(false, forKey: "enableWeeklyWeightReminder")
+            UserDefaults.standard.set(false, forKey: "enableBackgroundRunTracking")
+            UserDefaults.standard.set(false, forKey: "runsPendingHealthImport")
+            return
         }
 
         // The profile keys (age, heightValue, targetWeight, sex) are read once by

@@ -43,6 +43,23 @@ enum CoachPersistenceRegressionChecks {
         try require(FileManager.default.fileExists(atPath: sourceURL.path + "-wal"), "source fixture includes WAL state")
         try CoachLocalOwnership.copyStore(from: sourceURL, to: destination)
         try CoachLocalOwnership.copyAuxiliaryFiles(from: sourceURL, to: destination)
+        let snapshotHandle = try FileHandle(forReadingFrom: destination)
+        let snapshotHeader = try snapshotHandle.read(upToCount: 20) ?? Data()
+        try snapshotHandle.close()
+        try require(snapshotHeader.count == 20 && snapshotHeader[18] == 1 && snapshotHeader[19] == 1,
+                    "new snapshot is independently readable without WAL/SHM sidecars")
+        try require(try CoachLocalOwnership.rawCheckpoint(destination, phase: "Synthetic copied snapshot").identity
+                    == CoachLocalOwnership.rawCheckpoint(sourceURL, phase: "Synthetic retained source").identity,
+                    "snapshot normalization preserves every raw record and source WAL contents")
+        var rejectedSamePath = false
+        do { try CoachLocalOwnership.copyStore(from: sourceURL, to: sourceURL) }
+        catch { rejectedSamePath = true }
+        try require(rejectedSamePath, "copier rejects a destination that is the retained source")
+        let sourceHandle = try FileHandle(forReadingFrom: sourceURL)
+        let sourceHeader = try sourceHandle.read(upToCount: 20) ?? Data()
+        try sourceHandle.close()
+        try require(sourceHeader.count == 20 && sourceHeader[18] == 2 && sourceHeader[19] == 2,
+                    "normalizing a new snapshot leaves the source in WAL mode")
         let schema = PersistenceController.coachSchema
         let migrated = try ModelContainer(for: schema, configurations: [ModelConfiguration(CoachPersistence.configurationName, schema: schema, url: destination, cloudKitDatabase: .none)])
         try require(try CoachLocalOwnership.identityInventory(migrated.mainContext) == before, "migration preserves every existing model ID")
@@ -101,7 +118,7 @@ enum CoachPersistenceRegressionChecks {
         try DataBackupService.restore(graph, context: restored.mainContext)
         try require(try restored.mainContext.fetchCount(FetchDescriptor<CoachNutritionLog>()) == 1 && restored.mainContext.fetchCount(FetchDescriptor<CoachRecoveryCheckIn>()) == 1 && restored.mainContext.fetchCount(FetchDescriptor<CoachWaistMeasurement>()) == 1, "all daily records restore idempotently")
         try require(try CoachLocalOwnership.snapshotDigest(restored.mainContext) == CoachLocalOwnership.snapshotDigest(migrated.mainContext), "complete backup graph round trip")
-        for version in 1...4 {
+        for version in 1...5 {
             var legacy = graph; legacy.formatVersion = version; legacy.coach = nil
             let encoder = JSONEncoder()
             var object = try JSONSerialization.jsonObject(with: encoder.encode(legacy)) as! [String: Any]
@@ -110,7 +127,7 @@ enum CoachPersistenceRegressionChecks {
             for collection in ["workoutSessions", "exerciseLogs", "runningSessions", "weightEntries"] {
                 if var rows = object[collection] as? [[String: Any]] {
                     for index in rows.indices {
-                        for key in laterKeys { rows[index].removeValue(forKey: key) }
+                        if version < 5 { for key in laterKeys { rows[index].removeValue(forKey: key) } }
                         if version < 3 && ["workoutSessions", "exerciseLogs"].contains(collection) {
                             for key in v3Keys { rows[index].removeValue(forKey: key) }
                         }
@@ -119,10 +136,30 @@ enum CoachPersistenceRegressionChecks {
                 }
             }
             let decoded = try JSONDecoder().decode(BackupFile.self, from: JSONSerialization.data(withJSONObject: object))
+            // Legacy formats and an empty Coach graph still carry personal
+            // workouts, routes and weights. Neither may restore to a nonlocal
+            // destination, even when no Health source identity is present.
+            for hasEmptyCoach in [false, true] {
+                var rejected = decoded
+                rejected.coach = hasEmptyCoach ? CoachBackupGraph() : nil
+                do {
+                    try DataBackupService.restore(rejected, context: source.mainContext)
+                    throw CoachRepositoryError.invalidValue("nonlocal restore unexpectedly accepted")
+                } catch CoachRepositoryError.localOwnershipRequired { count += 1 }
+                try require(!source.mainContext.hasChanges && (try CoachLocalOwnership.snapshotDigest(source.mainContext)) == beforeValues,
+                            "v\(version) nonlocal rejection leaves all legacy records unchanged")
+            }
             let (_, target) = try store("v\(version)", local: true)
             try DataBackupService.restore(decoded, context: target.mainContext)
             try require(try target.mainContext.fetchCount(FetchDescriptor<WorkoutSession>()) == 1, "legacy backup v\(version) decodes and restores")
+            try require(try target.mainContext.fetch(FetchDescriptor<RunningSession>()).first?.locations == route,
+                        "v\(version) local restore preserves exact route bytes")
         }
+        do {
+            try await DataBackupService.import(from: root.appendingPathComponent("unread-backup.pacebackup"), context: source.mainContext)
+            throw CoachRepositoryError.invalidValue("nonlocal import unexpectedly opened its source")
+        } catch CoachRepositoryError.localOwnershipRequired { count += 1 }
+        try require(!source.mainContext.hasChanges, "nonlocal public import rejects before file or model mutation")
         var movedLegacyArchive = graph
         movedLegacyArchive.coach?.plannedSessions[0].scheduleRevision = 3
         movedLegacyArchive.coach?.plannedSessions[0].localScheduleOverride = nil
@@ -160,6 +197,20 @@ enum CoachPersistenceRegressionChecks {
         try require(savedZoneOccurrence?.originalCivilDate == "2026-09-14" && savedZoneOccurrence?.currentCivilDate == "2026-09-14" && savedZoneOccurrence.map { CoachRepository.civilDate($0.scheduledDate, timeZone: selectedZone) } == "2026-09-14",
             "imported occurrence dates use the persisted selected time zone")
         count += try await runFailureCases(root: root)
+        count += try await runStartupCases(root: root)
+        let (_, retired) = try store("retired-restore", local: true)
+        let retiredGeneration = WearableWorkoutInboxService.localDataPurgeGeneration
+        WearableWorkoutInboxService.retireLocalStore(retired)
+        do {
+            try DataBackupService.requireLocalRestoreDestination(restored.mainContext, generation: retiredGeneration)
+            throw CoachRepositoryError.invalidValue("stale restore epoch unexpectedly accepted")
+        } catch is CancellationError { count += 1 }
+        do {
+            try DataBackupService.restore(graph, context: retired.mainContext)
+            throw CoachRepositoryError.invalidValue("retired restore context unexpectedly accepted")
+        } catch is CancellationError { count += 1 }
+        try require(!retired.mainContext.hasChanges && (try retired.mainContext.fetchCount(FetchDescriptor<WorkoutSession>())) == 0,
+                    "retired context rejection leaves no restored rows")
         return count
     }
 }

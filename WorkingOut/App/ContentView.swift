@@ -19,13 +19,78 @@ struct ContentView: View {
     @State private var selectedTab = AppLaunchConfiguration.current.initialTabSelection
     @Binding var importedWorkout: SharedWorkoutSession?
     @Binding var importedCoachProgram: CoachImportRequest?
+    @StateObject private var workoutSaveRecoveries = WorkoutSaveRecoveryStore.shared
+    @State private var presentedWorkoutRecoveryID: UUID?
+    @State private var showWorkoutRecoveries = false
     @State private var restoreError: String?
+    @State private var migrationError: String?
     
     // Error handling moved to App level
     // @State private var showImportError: Bool = false
     // @State private var importErrorMessage: String = ""
 
     var body: some View {
+        Group {
+            #if DEBUG
+            if launchConfiguration.usesIsolatedStore && launchConfiguration.fixtureName == "storage_integration_checks" {
+                StorageIntegrationAcceptanceView()
+            } else if let error = persistenceController.storageError {
+                storageRecovery(error)
+            } else {
+                mainContent
+            }
+            #else
+            if let error = persistenceController.storageError {
+                storageRecovery(error)
+            } else {
+                mainContent
+            }
+            #endif
+        }
+    }
+
+    private func storageRecovery(_ error: String) -> some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Image(systemName: "externaldrive.badge.exclamationmark")
+                .font(.largeTitle)
+            Text("Your history needs attention").font(.title.bold())
+            Text(error)
+            if persistenceController.needsLegacyMigration {
+                Text("Continue by making and verifying a protected local copy. Your original history is retained. New edits on this device will stay local and will not sync to other devices through the legacy iCloud store.")
+                Text("Existing cloud copies are not removed. Use a deliberate history backup to transfer or recover future local edits. Apple Health and your Photos library remain separate.")
+                    .foregroundStyle(.secondary)
+                if let migrationError { Text(migrationError).foregroundStyle(.red) }
+                Button {
+                    migrationError = nil
+                    Task { @MainActor in
+                        do { try await persistenceController.migrateLegacyHistory() }
+                        catch { migrationError = error.localizedDescription }
+                    }
+                } label: {
+                    HStack {
+                        if persistenceController.isMigratingHistory { ProgressView() }
+                        Text(persistenceController.isMigratingHistory
+                             ? "Verifying your local copy…" : "Copy History and Continue Locally")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(persistenceController.isMigratingHistory)
+                .accessibilityIdentifier("storage.migrate")
+            } else {
+                Text("Close and reopen the app to retry. Your retained history has not been replaced or deleted.")
+            }
+        }
+        .padding(24)
+        .frame(maxWidth: 640)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AppTheme.backgroundColor)
+        .preferredColorScheme(appTheme.preferredColorScheme)
+        .accessibilityIdentifier("storage.recovery")
+    }
+
+    // Do not construct normal views or start their import/recovery tasks while
+    // storage is unavailable. A visual overlay does not fence background work.
+    private var mainContent: some View {
         TabView(selection: $selectedTab) {
             // Left side - Use Group to prevent unnecessary NavigationStack recreation
             // Nav bar buttons set their color explicitly via AppTheme.toolbarButtonColor
@@ -63,6 +128,14 @@ struct ContentView: View {
             if launchConfiguration.isUITest && launchConfiguration.fixtureName == "coach_calendar_checks" {
                 CoachCalendarRegressionChecksView()
             }
+            #if targetEnvironment(simulator)
+            if launchConfiguration.usesNaturalProfileForTesting {
+                Text(UserProfileStore.shared.naturalProfileTestStatus)
+                    .font(.caption2)
+                    .accessibilityIdentifier("readiness.syntheticProfile")
+                    .allowsHitTesting(false)
+            }
+            #endif
         }
         #endif
         .background(AppTheme.backgroundColor.ignoresSafeArea())
@@ -73,13 +146,51 @@ struct ContentView: View {
         .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .tabBar)
         .modelContainer(persistenceController.container)
         .id(persistenceController.storageGeneration)
-        .overlay {
-            if let error = persistenceController.storageError {
-                ContentUnavailableView("Your history needs attention", systemImage: "externaldrive.badge.exclamationmark",
-                                       description: Text(error + " Close and reopen the app to retry. No records have been deleted."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(AppTheme.backgroundColor)
+        .onReceive(NotificationCenter.default.publisher(for: WorkoutSaveRecovery.notification)) { notification in
+            if let recovery = notification.object as? WorkoutSaveRecovery {
+                if !showWorkoutRecoveries { presentedWorkoutRecoveryID = recovery.id }
             }
+        }
+        .safeAreaInset(edge: .bottom) {
+            if !workoutSaveRecoveries.pending.isEmpty {
+                Button {
+                    showWorkoutRecoveries = true
+                } label: {
+                    Label("Retry unsaved workouts (\(workoutSaveRecoveries.pending.count))", systemImage: "arrow.clockwise.circle")
+                        .frame(maxWidth: .infinity)
+                        .padding(10)
+                }
+                .background(.regularMaterial)
+                .accessibilityIdentifier("workout.saveRecovery")
+            }
+        }
+        .sheet(isPresented: $showWorkoutRecoveries) {
+            NavigationStack {
+                List(workoutSaveRecoveries.pending) { recovery in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(recovery.title.isEmpty ? "Workout" : recovery.title).font(.headline)
+                        Text(recovery.message).font(.caption)
+                        Button("Retry Save") { workoutSaveRecoveries.retry(id: recovery.id) }
+                    }
+                }
+                .navigationTitle("Unsaved Workouts")
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { showWorkoutRecoveries = false }
+                    }
+                }
+            }
+        }
+        .alert("Workout Save Failed", isPresented: Binding(
+            get: { presentedWorkoutRecoveryID != nil },
+            set: { if !$0 { presentedWorkoutRecoveryID = nil } }
+        )) {
+            Button("Retry") {
+                if let id = presentedWorkoutRecoveryID { workoutSaveRecoveries.retry(id: id) }
+            }
+            Button("Later", role: .cancel) { presentedWorkoutRecoveryID = nil }
+        } message: {
+            Text((workoutSaveRecoveries.recovery(id: presentedWorkoutRecoveryID)?.message ?? "") + " Your draft remains available under Retry unsaved workouts. Retry before closing the app.")
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange).receive(on: RunLoop.main)) { _ in
             persistenceController.reconcileExerciseLibraryIfNeeded()
@@ -150,7 +261,8 @@ struct ContentView: View {
                 didCompleteProfileSetup = false
                 didShowTutorial = false
                 showTutorial = true
-            } else if launchConfiguration.shouldSkipAutomationSideEffects {
+            } else if launchConfiguration.shouldSkipAutomationSideEffects
+                && !launchConfiguration.usesNaturalProfileForTesting {
                 didCompleteProfileSetup = true
                 didShowTutorial = true
                 showTutorial = false

@@ -163,6 +163,7 @@ enum CoachExecutionRegressionChecks {
         try CoachExecutionCoordinator.mirrorRunCheckpoint(checkpoint, context: runContext)
         try require(try CoachExecutionCoordinator.snapshot(runExecution).runRecoveryData == nil, "late active checkpoint cannot overwrite a terminal run")
         count += try await progressionChecks(container("progression.store"))
+        count += try await CoachPlannedActivityRegressionChecks.run()
         return count
     }
 

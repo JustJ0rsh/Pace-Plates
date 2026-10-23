@@ -1,6 +1,6 @@
 # Coach program JSON interchange contract, version 1
 
-Status: proposed implementation specification, not an implemented feature. The authoritative artifacts are `coach-plan-v1.schema.json` for shape/types and this document for semantics and import behavior. `example-coach-plan.json` is a generic two-week import fixture, not an individualized exercise or nutrition prescription.
+Status: version 1 implementation contract. The authoritative artifacts are `coach-plan-v1.schema.json` for shape/types and this document for semantics and import behavior. `example-coach-plan.json` is a generic two-week import fixture, not an individualized exercise or nutrition prescription.
 
 ## Boundary and implementation ownership
 
@@ -12,7 +12,7 @@ Version 1 contains program definitions and prescribed targets. It contains no st
 
 ## Document and identities
 
-Required root keys are `format`, `schemaVersion`, `programId`, `revision`, `title`, `goal`, `preferredUnits`, `phases`, `sessionTemplates`, `weekPatterns`, and `weeks`. The only recognized format is `pace-and-plates.coach-program`, and the only supported schemaVersion is integer 1. Unknown versions fail with an actionable compatibility error before any write. This proposal intentionally does not define a future extension namespace: unknown fields are errors, including unknown nested fields.
+Required root keys are `format`, `schemaVersion`, `programId`, `revision`, `title`, `goal`, `preferredUnits`, `phases`, `sessionTemplates`, `weekPatterns`, and `weeks`. The only recognized format is `pace-and-plates.coach-program`, and the only supported schemaVersion is integer 1. Unknown versions fail with an actionable compatibility error before any write. Version 1 does not define an extension namespace: unknown fields are errors, including unknown nested fields.
 
 `programId` is an opaque author key, not a display title or an authoritative local database ID. `revision` is a positive author revision number, not schemaVersion. All author IDs are case-sensitive ASCII strings matching the schema. Preserve them when revising the same program. Each local imported copy receives its own UUID and import-family UUID, so two unrelated documents using the same programId cannot overwrite one another or collide across imports or restores. Persist author IDs as source identifiers alongside local identities. Follow the implementation plan's protected local ownership boundary for personalized programs and tracking.
 
@@ -94,7 +94,11 @@ Before committing a reviewed import, recheck the target revision and plan state 
 
 ## Copy ChatGPT Prompt behavior
 
+Add Plan offers separate Paste Program JSON and Import JSON File choices. File selection reads bounded UTF-8 input and immediately validates it before opening review; neither route saves before explicit confirmation. Review shows the number of scheduled strength workouts, runs, cardio/recovery sessions, and rest days across all explicit weeks. Starting and saving a draft have distinct explanations, and a successful save presents a prominent Open Program destination.
+
 The Coach Add Plan flow provides Copy ChatGPT Prompt. The copied prompt must name the exact schema version and include the complete current contract/schema or a self-contained compact equivalent; a private local schema file path alone is unusable by ChatGPT. Include one small example and the required semantic constraints. Keep the example explicitly marked as format-only, not personal exercise advice. Do not require ChatGPT to call an API or access the app.
+
+The copyable prompt explains the three-step handoff: describe requirements, copy into ChatGPT, and return with the complete JSON reply. It includes the complete current JSON schema, self-contained generation constraints, and the format-only example; it does not copy developer migration or implementation instructions. It makes explicit that templates need slot references and explicit week entries to become a schedule, that every strength set must be a separate object, and that running prescriptions require structured segments, including steady runs.
 
 The prompt asks for exactly one JSON object and no prose or Markdown fences, stable IDs, explicit ordered weeks, references that resolve, real numeric types and units, structured sets/intervals, reviewed progression only, and no actual personal logs. It prohibits unsupported fields and directs ChatGPT to leave optional unavailable targets absent rather than guessing. It explains that multi-session days use multiple slots, repeated weeks use explicit week entries referencing reusable patterns, and changed prescriptions use separate templates/patterns.
 
@@ -115,6 +119,6 @@ Manual authoring and in-app AI use the same preview, unresolved-exercise resolut
 9. Resolve an unknown exercise to custom, choose a substitution with a different load basis, and verify the full prescription is reviewed and the actual selected movement is logged. Editing the shared library later cannot rewrite prior prescriptions or results.
 10. Completed and partial sets/intervals, actual nutrition/body/recovery values, photos, Health IDs, and Calendar/event identifiers never appear in portable export. Full private backup is tested separately.
 
-## Artifact verification performed
+## Repeatable validation
 
-The schema and example were generated as UTF-8 JSON and checked with Python's JSON parser. The verification accompanying delivery checks every local schema reference, strict object shapes, the example against every schema keyword used here, aggregate expansion counts, cross-references, identities, and targeted invalid mutations. This dependency-free check covers this document's schema subset; it is not an independent conformance certification of JSON Schema 2020-12. Both the bundled and system Python lacked `jsonschema`, and no dependency was installed. App implementation must add a real standards-conformant validation path or a tested native equivalent and run the full acceptance suite on the persisted Coach flows.
+`Docs/Coach/contract-validation.md` records the native validator and schedule checks, import/persistence tests, and their evidence boundaries. The schema is bundled unchanged with the prompt. `WorkingOutUITests/CoachImportGuidanceUITests.swift` covers the guided routes, executable prompt content, and a native Files import of the synthetic `scripts/fixtures/Coach Import Test.json` fixture. Native Files coverage requires that fixture in an isolated Simulator's Files provider; a skipped prerequisite is not a passing import test. Build and Simulator acceptance remain separate from source parsing and schema fixture checks.

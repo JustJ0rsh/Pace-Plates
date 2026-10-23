@@ -10,6 +10,8 @@ enum CoachLocalOwnership {
         let directory: String
         let selectedAt: Date
         let legacyStorePath: String
+        var migrationID: UUID? = nil
+        var checkpoint: String? = nil
     }
 
     enum OwnershipError: LocalizedError {
@@ -33,40 +35,75 @@ enum CoachLocalOwnership {
         try protectedURL.setResourceValues(values)
     }
 
-    static func selectedStoreURL() throws -> URL? {
+    static func selectedStoreURL(root: URL = CoachLocalOwnership.root) throws -> URL? {
         let marker = root.appendingPathComponent("selection.json")
         guard FileManager.default.fileExists(atPath: marker.path) else { return nil }
         let selection = try JSONDecoder().decode(Selection.self, from: Data(contentsOf: marker))
-        guard selection.version == 1, UUID(uuidString: selection.directory) != nil else {
+        guard [1, 2].contains(selection.version), UUID(uuidString: selection.directory) != nil else {
             throw OwnershipError.unavailable("The local storage selection could not be read. Your original records have been retained.")
         }
-        return root.appendingPathComponent(selection.directory, isDirectory: true).appendingPathComponent("default.store")
+        if selection.version == 2 {
+            guard let journal = try readJournal(root: root), journal.id == selection.migrationID,
+                  journal.directory == selection.directory, journal.source == selection.legacyStorePath,
+                  journal.checkpoint == selection.checkpoint, selection.checkpoint != nil,
+                  ["verified", "active"].contains(journal.phase) else {
+                throw migrationError("The selected history does not match its verified migration journal.")
+            }
+        }
+        let directory = root.appendingPathComponent(selection.directory, isDirectory: true)
+        if FileManager.default.fileExists(atPath: directory.path),
+           try directory.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink == true {
+            throw migrationError("The selected storage directory is an unsupported link.")
+        }
+        let store = directory.appendingPathComponent("default.store")
+        if FileManager.default.fileExists(atPath: store.path),
+           try store.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink == true {
+            throw migrationError("The selected storage file is an unsupported link.")
+        }
+        return store
     }
 
-    static func newStagingStore() throws -> URL {
+    static func newStagingStore(root: URL = CoachLocalOwnership.root) throws -> URL {
         try prepareDirectory(root)
         let directory = root.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try prepareDirectory(directory)
         return directory.appendingPathComponent("default.store")
     }
 
-    static func select(_ destination: URL, legacy: URL) throws {
-        let selection = Selection(version: 1, directory: destination.deletingLastPathComponent().lastPathComponent,
-                                  selectedAt: Date(), legacyStorePath: legacy.path)
+    static func select(_ destination: URL, legacy: URL, root: URL = CoachLocalOwnership.root, journal: MigrationJournal? = nil) throws {
+        let selection = Selection(version: journal == nil ? 1 : 2, directory: destination.deletingLastPathComponent().lastPathComponent,
+                                  selectedAt: Date(), legacyStorePath: legacy.standardizedFileURL.path, migrationID: journal?.id, checkpoint: journal?.checkpoint)
         let data = try JSONEncoder().encode(selection)
         try data.write(to: root.appendingPathComponent("selection.json"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        let handle = try FileHandle(forWritingTo: root.appendingPathComponent("selection.json")); defer { try? handle.close() }
+        try handle.synchronize()
     }
 
-    /// SQLite's backup API reads a consistent snapshot including WAL content;
-    /// copying the main SQLite file alone can lose recently saved records.
+    /// SQLite's backup API reads a consistent snapshot including live WAL
+    /// content. Cold WAL-format files use a verified disposable source clone.
     static func copyStore(from source: URL, to destination: URL) throws {
-        var sourceDB: OpaquePointer?
-        var destinationDB: OpaquePointer?
-        guard sqlite3_open_v2(source.path, &sourceDB, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
-            if let sourceDB { sqlite3_close(sourceDB) }
-            throw OwnershipError.unavailable("The original store could not be opened for a read-only copy.")
+        let sourceURL = canonicalSQLiteURL(source)
+        let destinationURL = canonicalSQLiteURL(destination)
+        guard sourceURL != destinationURL,
+              ![destinationURL.path, destinationURL.path + "-wal", destinationURL.path + "-shm"].contains(where: FileManager.default.fileExists(atPath:)) else {
+            throw OwnershipError.unavailable("The copy destination is not a new, unselected store. The original history is unchanged.")
         }
-        defer { sqlite3_close(sourceDB) }
+        try withReadableSource(sourceURL) { sourceDB in
+            try copyStore(from: sourceDB, to: destinationURL)
+        }
+    }
+
+    /// Shared by raw verification and backup so both use the same guarded
+    /// cold-source path and never normalize the retained original.
+    static func withReadableSource<T>(_ source: URL, _ body: (OpaquePointer) throws -> T) throws -> T {
+        do { return try CoachSQLiteReadSnapshot.withReadOnlySource(source, body) }
+        catch let error as CoachSQLiteReadSnapshot.SnapshotError {
+            throw migrationError(error.localizedDescription)
+        }
+    }
+
+    private static func copyStore(from sourceDB: OpaquePointer, to destination: URL) throws {
+        var destinationDB: OpaquePointer?
         guard sqlite3_open_v2(destination.path, &destinationDB, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK else {
             if let destinationDB { sqlite3_close(destinationDB) }
             throw OwnershipError.unavailable("There is not enough writable storage to prepare the local copy.")
@@ -82,8 +119,33 @@ enum CoachLocalOwnership {
         guard result == SQLITE_DONE, finished == SQLITE_OK else {
             throw OwnershipError.unavailable("The store was busy or the copy was interrupted. Retry after other activity has finished.")
         }
+        // Backup preserves the source WAL header even though this new snapshot
+        // has no shared-memory/WAL sidecars. Normalize only the unselected copy
+        // while its sole writable connection is open. A subsequent read-only
+        // verifier can then open it without creating sidecars. The source
+        // remains read-only and its journaling mode is never changed.
+        var modeStatement: OpaquePointer?
+        let prepared = sqlite3_prepare_v2(destinationDB, "PRAGMA journal_mode=DELETE", -1, &modeStatement, nil)
+        guard prepared == SQLITE_OK, let modeStatement else {
+            if let modeStatement { sqlite3_finalize(modeStatement) }
+            throw OwnershipError.unavailable("The new snapshot could not be made independently readable. The original history is unchanged.")
+        }
+        defer { sqlite3_finalize(modeStatement) }
+        guard sqlite3_step(modeStatement) == SQLITE_ROW,
+              let mode = sqlite3_column_text(modeStatement, 0),
+              String(cString: mode).lowercased() == "delete",
+              sqlite3_step(modeStatement) == SQLITE_DONE else {
+            throw OwnershipError.unavailable("The new snapshot retained an unsupported journaling mode. The original history is unchanged.")
+        }
         try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
                                              ofItemAtPath: destination.path)
+    }
+
+    /// Resolve the existing parent without asking Foundation to resolve a
+    /// not-yet-created database tail. All connections use the same WAL name.
+    static func canonicalSQLiteURL(_ url: URL) -> URL {
+        url.deletingLastPathComponent().resolvingSymlinksInPath()
+            .appendingPathComponent(url.lastPathComponent).standardizedFileURL
     }
 
     @MainActor

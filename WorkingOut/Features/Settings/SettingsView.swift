@@ -586,8 +586,11 @@ struct SettingsView: View {
             Button("Delete", role: .destructive) { deleteAllAppData() }
         } message: {
             let cloud = PersistenceController.shared.isCloudBacked
+            let coachLocal = PersistenceController.shared.isCoachLocal
             Text(
-                cloud
+                coachLocal
+                    ? "This removes the current app history and app-owned photos on this device. Any retained pre-Coach history and legacy iCloud records are kept. Apple Health is not changed. This action cannot be undone."
+                    : cloud
                     ? "This removes Pace & Plates data from this device and the app's iCloud store. It does not delete workouts or measurements from Apple Health. This action cannot be undone."
                     : "This removes Pace & Plates data from this device. It does not delete workouts or measurements from Apple Health. This action cannot be undone."
             )
@@ -724,12 +727,16 @@ struct SettingsView: View {
 
     private func refreshHealthDataNow() {
         guard !isRefreshingHealthData else { return }
-        isRefreshingHealthData = true
         let expectedPurgeGeneration =
             WearableWorkoutInboxService.localDataPurgeGeneration
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(
+            expectedPurgeGeneration, context: modelContext
+        ) else { return }
+        isRefreshingHealthData = true
 
         Task { @MainActor in
             do {
+                try ensureHealthImportIsCurrent(expectedPurgeGeneration)
                 try await HealthKitManager.shared.requestAuthorization()
                 try ensureHealthImportIsCurrent(expectedPurgeGeneration)
 
@@ -770,7 +777,7 @@ struct SettingsView: View {
     @MainActor
     private func ensureHealthImportIsCurrent(_ generation: Int) throws {
         guard WearableWorkoutInboxService
-            .isCurrentLocalDataPurgeGeneration(generation) else {
+            .isCurrentLocalDataPurgeGeneration(generation, context: modelContext) else {
             throw CancellationError()
         }
     }
@@ -1170,7 +1177,9 @@ struct SettingsView: View {
     private func deleteAllLocal() {
         do {
             try deleteAllEntities()
-            alertMessage = "All Pace & Plates data has been removed. Apple Health data was not changed."
+            alertMessage = PersistenceController.shared.isCoachLocal
+                ? "Current app history has been removed. Any retained pre-Coach history and legacy iCloud records are kept. Apple Health was not changed."
+                : "All Pace & Plates data has been removed. Apple Health data was not changed."
             showAlert = true
         } catch {
             alertMessage = "Delete failed: \(error.localizedDescription)"

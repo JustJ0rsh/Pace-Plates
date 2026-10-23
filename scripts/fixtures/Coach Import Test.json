@@ -1,0 +1,92 @@
+{
+  "format": "pace-and-plates.coach-program",
+  "schemaVersion": 1,
+  "programId": "file-import-test",
+  "revision": 1,
+  "title": "File Import Test Plan",
+  "goal": "Verify scheduled workout and running imports",
+  "preferredUnits": {
+    "weight": "kg",
+    "distance": "km"
+  },
+  "phases": [
+    {
+      "id": "phase",
+      "title": "First phase",
+      "advanceMode": "scheduled"
+    }
+  ],
+  "sessionTemplates": [
+    {
+      "kind": "strength",
+      "id": "lift",
+      "title": "Import Test Lift",
+      "exercises": [
+        {
+          "id": "press",
+          "exercise": {
+            "key": "test-press",
+            "name": "Import Test Press",
+            "equipment": []
+          },
+          "prescriptionBasis": "total",
+          "loadBasis": "addedToBodyweight",
+          "sets": [
+            {
+              "id": "one",
+              "role": "working",
+              "target": {
+                "kind": "reps",
+                "min": 1,
+                "max": 2
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "running",
+      "id": "run",
+      "title": "Import Test Run",
+      "warmup": [],
+      "main": [
+        {
+          "kind": "segment",
+          "id": "easy",
+          "activity": "run",
+          "target": {
+            "kind": "duration",
+            "seconds": 600
+          }
+        }
+      ],
+      "cooldown": []
+    }
+  ],
+  "weekPatterns": [
+    {
+      "id": "pattern",
+      "title": "Week",
+      "slots": [
+        {
+          "id": "lift-slot",
+          "dayOffset": 0,
+          "sessionTemplateId": "lift"
+        },
+        {
+          "id": "run-slot",
+          "dayOffset": 0,
+          "sessionTemplateId": "run"
+        }
+      ]
+    }
+  ],
+  "weeks": [
+    {
+      "id": "week",
+      "phaseId": "phase",
+      "weekPatternId": "pattern"
+    }
+  ]
+}

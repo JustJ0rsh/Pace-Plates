@@ -17,25 +17,41 @@ enum CoachWeightRepository {
     /// remain separate, and exact Health deletion IDs remove only their copy.
     static func importHealth(context: ModelContext, preferredUnit: String = "kg") async throws -> Int {
         guard CoachPersistence.isLocal(context) else { throw CoachRepositoryError.localOwnershipRequired }
-        guard HKHealthStore.isHealthDataAvailable(), let type = HKQuantityType.quantityType(forIdentifier: .bodyMass) else { return 0 }
         let generation = WearableWorkoutInboxService.localDataPurgeGeneration
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation, context: context) else { throw CancellationError() }
+        guard HKHealthStore.isHealthDataAvailable(), let type = HKQuantityType.quantityType(forIdentifier: .bodyMass) else { return 0 }
         let cutoff = WearableWorkoutInboxService.localDataPurgeCutoffDate
-        let store = HKHealthStore()
-        try await store.requestAuthorization(toShare: [], read: [type])
-        let anchor: HKQueryAnchor? = (try? Data(contentsOf: anchorURL)).flatMap { try? NSKeyedUnarchiver.unarchivedObject(ofClass: HKQueryAnchor.self, from: $0) }
-        let result: ([CoachHealthWeightSample], [String], HKQueryAnchor?) = try await withCheckedThrowingContinuation { continuation in
-            let query = HKAnchoredObjectQuery(type: type, predicate: nil, anchor: anchor, limit: HKObjectQueryNoLimit) { _, added, deleted, nextAnchor, error in
-                if let error { continuation.resume(throwing: error); return }
-                let samples = (added as? [HKQuantitySample] ?? []).map {
-                    CoachHealthWeightSample(id: $0.uuid.uuidString, observedAt: $0.endDate,
-                                            kilograms: $0.quantity.doubleValue(for: .gramUnit(with: .kilo)), sourceName: $0.sourceRevision.source.name)
+        return try await importHealthChanges(context: context, preferredUnit: preferredUnit, generation: generation, cutoff: cutoff, fetchChanges: {
+            let store = HKHealthStore()
+            try await store.requestAuthorization(toShare: [], read: [type])
+            guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation, context: context) else { throw CancellationError() }
+            let anchor: HKQueryAnchor? = (try? Data(contentsOf: anchorURL)).flatMap { try? NSKeyedUnarchiver.unarchivedObject(ofClass: HKQueryAnchor.self, from: $0) }
+            return try await withCheckedThrowingContinuation { continuation in
+                let query = HKAnchoredObjectQuery(type: type, predicate: nil, anchor: anchor, limit: HKObjectQueryNoLimit) { _, added, deleted, nextAnchor, error in
+                    if let error { continuation.resume(throwing: error); return }
+                    let samples = (added as? [HKQuantitySample] ?? []).map {
+                        CoachHealthWeightSample(id: $0.uuid.uuidString, observedAt: $0.endDate,
+                                                kilograms: $0.quantity.doubleValue(for: .gramUnit(with: .kilo)), sourceName: $0.sourceRevision.source.name)
+                    }
+                    continuation.resume(returning: (samples, (deleted ?? []).map { $0.uuid.uuidString }, nextAnchor))
                 }
-                continuation.resume(returning: (samples, (deleted ?? []).map { $0.uuid.uuidString }, nextAnchor))
+                store.execute(query)
             }
-            store.execute(query)
-        }
+        }, persistAnchor: { next in
+            try CoachPersistence.protect(CoachPersistence.directory, isDirectory: true)
+            try NSKeyedArchiver.archivedData(withRootObject: next, requiringSecureCoding: true).write(to: anchorURL, options: [.atomic, .completeFileProtectionUnlessOpen])
+            try CoachPersistence.protect(anchorURL)
+        })
+    }
+
+    private static func importHealthChanges(context: ModelContext, preferredUnit: String, generation: Int, cutoff: Date?,
+        fetchChanges: @MainActor () async throws -> ([CoachHealthWeightSample], [String], HKQueryAnchor?),
+        persistAnchor: @MainActor (HKQueryAnchor) throws -> Void) async throws -> Int {
+        guard CoachPersistence.isLocal(context) else { throw CoachRepositoryError.localOwnershipRequired }
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation, context: context) else { throw CancellationError() }
+        let result = try await fetchChanges()
         try Task.checkCancellation()
-        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation) else { throw CancellationError() }
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation, context: context) else { throw CancellationError() }
         let isolated = ModelContext(context.container); isolated.autosaveEnabled = false
         do {
             let records = try isolated.fetch(FetchDescriptor<WeightEntry>())
@@ -59,14 +75,21 @@ enum CoachWeightRepository {
                 record.sourceHealthSampleID = sample.id; record.sourceName = sample.sourceName; record.provenance = "health"
             }
             try isolated.save()
-            if let next = result.2 {
-                try CoachPersistence.protect(CoachPersistence.directory, isDirectory: true)
-                try NSKeyedArchiver.archivedData(withRootObject: next, requiringSecureCoding: true).write(to: anchorURL, options: [.atomic, .completeFileProtectionUnlessOpen])
-                try CoachPersistence.protect(anchorURL)
-            }
+            if let next = result.2 { try persistAnchor(next) }
             return count
         } catch { isolated.rollback(); throw error }
     }
+
+    #if DEBUG
+    static func importForStorageRegression(context: ModelContext,
+        fetchChanges: @MainActor () async throws -> ([CoachHealthWeightSample], [String], HKQueryAnchor?),
+        persistAnchor: @MainActor (HKQueryAnchor) throws -> Void) async throws -> Int {
+        precondition(AppLaunchConfiguration.current.isUITest)
+        return try await importHealthChanges(context: context, preferredUnit: "kg",
+            generation: WearableWorkoutInboxService.localDataPurgeGeneration, cutoff: nil,
+            fetchChanges: fetchChanges, persistAnchor: persistAnchor)
+    }
+    #endif
 
     static func removeAnchorAfterPurge() throws {
         if FileManager.default.fileExists(atPath: anchorURL.path) { try FileManager.default.removeItem(at: anchorURL) }

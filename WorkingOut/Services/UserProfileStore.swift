@@ -36,8 +36,8 @@ final class UserProfileStore {
 
     private enum Backend {
         case keychain
-        /// UI-test runs never touch the simulator keychain so state cannot leak
-        /// between tests; values are seeded from the launch fixture in UserDefaults.
+        /// Ordinary UI tests use memory. The explicit natural-profile probe uses
+        /// a UUID-scoped synthetic Keychain service on the simulator only.
         case memory
     }
 
@@ -84,7 +84,8 @@ final class UserProfileStore {
     private init() {
         let defaults = UserDefaults.standard
 
-        if AppLaunchConfiguration.current.usesIsolatedStore {
+        if AppLaunchConfiguration.current.usesIsolatedStore
+            && !AppLaunchConfiguration.current.usesNaturalProfileForTesting {
             backend = .memory
             profile = Self.readLegacyProfile(from: defaults)
             return
@@ -124,10 +125,32 @@ final class UserProfileStore {
     private static var baseQuery: [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: Bundle.main.bundleIdentifier ?? "PaceAndPlates",
+            kSecAttrService as String: keychainService,
             kSecAttrAccount as String: keychainAccount,
         ]
     }
+
+    private static var keychainService: String {
+        let appService = Bundle.main.bundleIdentifier ?? "PaceAndPlates"
+        if let scope = AppLaunchConfiguration.current.naturalProfileTestScope {
+            return appService + ".synthetic-natural-profile." + scope
+        }
+        return appService
+    }
+
+    #if DEBUG && targetEnvironment(simulator)
+    /// Readback is deliberately limited to the unique synthetic service. Tests
+    /// can distinguish a saved Keychain item from in-memory or defaults values.
+    var naturalProfileTestStatus: String {
+        guard AppLaunchConfiguration.current.usesNaturalProfileForTesting else { return "disabled" }
+        let matchesKeychain = backend == .keychain && Self.readFromKeychain() == profile
+        let defaultsCleared = Self.legacyDefaultsKeys.allSatisfy {
+            UserDefaults.standard.object(forKey: $0) == nil
+        }
+        return "keychain=\(matchesKeychain);defaultsCleared=\(defaultsCleared);"
+            + "age=\(profile.age);height=\(profile.heightValue);target=\(profile.targetWeight);sex=\(profile.sex)"
+    }
+    #endif
 
     private static func readFromKeychain() -> Profile? {
         var query = baseQuery

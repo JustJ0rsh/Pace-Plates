@@ -10,7 +10,7 @@ struct CoachProgramLibraryView: View {
             ForEach(CoachPlanStatus.allCases, id: \.self) { status in
                 let matching = plans.filter { $0.status == status.rawValue }
                 if !matching.isEmpty {
-                    Section(status.rawValue.capitalized) {
+                    Section(status == .draft ? "Ready to start" : status.rawValue.capitalized) {
                         ForEach(matching) { plan in
                             NavigationLink { CoachProgramDetailView(plan: plan) } label: {
                                 VStack(alignment: .leading, spacing: 4) {
@@ -24,6 +24,8 @@ struct CoachProgramLibraryView: View {
                 }
             }
         }
+        .navigationTitle("Your Plans")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -53,61 +55,80 @@ struct CoachProgramDetailView: View {
                 Text(plan.title).font(.title2.bold())
                 Text(plan.goal)
                 Text(plan.status.capitalized + " · " + (plan.startCivilDate ?? CoachDate.civil(plan.startDate))).foregroundStyle(.secondary)
-                if let overview = plan.overview { Text(overview) }
+                if let overview = plan.overview, !overview.isEmpty {
+                    DisclosureGroup("About this plan") { Text(overview) }
+                }
                 if plan.timeZoneIdentifier != TimeZone.current.identifier, !plan.timeZoneIdentifier.isEmpty {
                     Text("This program keeps its dates in \(plan.timeZoneIdentifier). Your device is now in \(TimeZone.current.identifier). Review future dates and reminders before changing the schedule.").font(.caption)
                 }
             }
-            Section("Program actions") {
-                if plan.status != "active" {
-                    Button("Review Start or Resume") { confirmActivate = true }
-                } else { Button("Pause Program") { perform { try $0.setPlanStatus(planID: plan.id, status: .paused) } } }
-                NavigationLink("Move, swap or repeat sessions") { CoachScheduleEditorView(plan: plan) }
-                NavigationLink("Review progression") { CoachProgressionReviewView(plan: plan) }
-                NavigationLink("Calendar and reminders") { CoachCalendarReviewView(plan: plan) }
-                if let document {
-                    NavigationLink("Edit a new revision") {
-                        CoachPlanBuilderView(document: revised(document))
-                    }
-                    Button("Review Program Export") { reviewExport = true }
-                }
-                Button("Mark Program Finished") { perform { try $0.setPlanStatus(planID: plan.id, status: .finished) } }
-                Button(plan.status == "archived" ? "Return to Draft" : "Archive Program") {
-                    perform { try $0.setPlanStatus(planID: plan.id, status: plan.status == "archived" ? .draft : .archived) }
-                }
-                if plan.currentRevisionID != nil { Button("Delete Program", role: .destructive) { confirmingDelete = true }.disabled(deleting) }
-            }
-            Section("Phase readiness") {
-                ForEach(gates.filter { gate in gate.planID == plan.id && (gate.revisionID == plan.currentRevisionID || rows.contains { $0.revisionID == gate.revisionID && $0.phaseID == gate.phaseID && $0.status == "pending" }) }) { gate in
-                    VStack(alignment: .leading, spacing: 8) {
-                        let phase = phase(for: gate)
-                        Text(phase?.title ?? gate.phaseID).font(.headline)
-                        if let overview = phase?.overview { Text(overview) }
-                        if let targets = phase?.recoveryTargets {
-                            if let sleep = targets.sleepHours { Text("Sleep guidance: \(sleep.min.formatted())–\(sleep.max.formatted()) hours") }
-                            if let fields = targets.checkInFields { Text("Suggested check-ins: " + fields.map(\.rawValue).joined(separator: ", ")) }
-                            if let notes = targets.notes { Text(notes) }
-                        }
-                        DisclosureGroup("Review this phase’s sessions") {
-                            ForEach(rows.filter { $0.revisionID == gate.revisionID && $0.phaseID == gate.phaseID }) { CoachSessionRow(session: $0, showDate: true) }
-                        }
-                        Text(gate.statusRaw == "ready" ? "Readiness confirmed" : "Awaiting your review").foregroundStyle(.secondary)
-                        if gate.revisionID != plan.currentRevisionID { Text("Retained earlier prescription").font(.caption) }
-                        if gate.statusRaw != "ready" {
-                            Button("I reviewed this phase and am ready") { perform { try $0.reviewPhase(planID: plan.id, phaseID: gate.phaseID, ready: true, revisionID: gate.revisionID) } }
-                        }
-                    }
+            if plan.status != "active" {
+                Section {
+                    Text(plan.status == "draft" ? "This plan is saved. Start it to add its sessions to your daily schedule." : "Resume this plan to follow its remaining sessions.")
+                        .foregroundStyle(.secondary)
+                    Button(plan.status == "draft" ? "Start Plan" : "Resume Plan", systemImage: "play.fill") { confirmActivate = true }
+                        .accessibilityIdentifier("coach.plan.start")
                 }
             }
-            Section("Weeks") {
-                Picker("Selected week", selection: $selectedWeek) { ForEach(weeks, id: \.self) { Text("Week \($0 + 1)").tag($0) } }
+            Section("Schedule") {
+                Picker("Week", selection: $selectedWeek) { ForEach(weeks, id: \.self) { Text("Week \($0 + 1)").tag($0) } }
                     .accessibilityIdentifier("coach.program.week")
-                ForEach(rows.filter { $0.weekIndex == selectedWeek }) { CoachSessionRow(session: $0, showDate: true) }
+                Text("Tap a workout or run to start it, log your results, or mark it as done.")
+                    .font(.caption).foregroundStyle(.secondary)
+                ForEach(rows.filter { $0.weekIndex == selectedWeek && $0.completionProvenance != "removed_by_reviewed_revision" }) { CoachSessionRow(session: $0, showDate: true) }
+            }
+            if !gates.filter({ $0.planID == plan.id }).isEmpty {
+                Section {
+                    DisclosureGroup("Phase reviews") {
+                        ForEach(gates.filter { gate in gate.planID == plan.id && (gate.revisionID == plan.currentRevisionID || rows.contains { $0.revisionID == gate.revisionID && $0.phaseID == gate.phaseID && $0.status == "pending" }) }) { gate in
+                            VStack(alignment: .leading, spacing: 8) {
+                                let phase = phase(for: gate)
+                                Text(phase?.title ?? gate.phaseID).font(.headline)
+                                if let overview = phase?.overview { Text(overview) }
+                                if let targets = phase?.recoveryTargets {
+                                    if let sleep = targets.sleepHours { Text("Sleep guidance: \(sleep.min.formatted())–\(sleep.max.formatted()) hours") }
+                                    if let fields = targets.checkInFields { Text("Suggested check-ins: " + fields.map(\.rawValue).joined(separator: ", ")) }
+                                    if let notes = targets.notes { Text(notes) }
+                                }
+                                DisclosureGroup("Review this phase’s sessions") {
+                                    ForEach(rows.filter { $0.revisionID == gate.revisionID && $0.phaseID == gate.phaseID && $0.completionProvenance != "removed_by_reviewed_revision" }) { CoachSessionRow(session: $0, showDate: true) }
+                                }
+                                Text(gate.statusRaw == "ready" ? "Readiness confirmed" : "Awaiting your review").foregroundStyle(.secondary)
+                                if gate.revisionID != plan.currentRevisionID { Text("Retained earlier prescription").font(.caption) }
+                                if gate.statusRaw != "ready" {
+                                    Button("I reviewed this phase and am ready") { perform { try $0.reviewPhase(planID: plan.id, phaseID: gate.phaseID, ready: true, revisionID: gate.revisionID) } }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Section {
+                DisclosureGroup("Plan options") {
+                    if plan.status == "active" {
+                        Button("Pause Plan") { perform { try $0.setPlanStatus(planID: plan.id, status: .paused) } }
+                    }
+                    NavigationLink("Move, swap or repeat sessions") { CoachScheduleEditorView(plan: plan) }
+                    NavigationLink("Review progression") { CoachProgressionReviewView(plan: plan) }
+                    NavigationLink("Calendar and reminders") { CoachCalendarReviewView(plan: plan) }
+                    if let document {
+                        NavigationLink("Edit a new revision") {
+                            CoachPlanBuilderView(document: revised(document))
+                        }
+                        Button("Review Program Export") { reviewExport = true }
+                    }
+                    Button("Mark Program Finished") { perform { try $0.setPlanStatus(planID: plan.id, status: .finished) } }
+                    Button(plan.status == "archived" ? "Return to Draft" : "Archive Program") {
+                        perform { try $0.setPlanStatus(planID: plan.id, status: plan.status == "archived" ? .draft : .archived) }
+                    }
+                    if plan.currentRevisionID != nil { Button("Delete Program", role: .destructive) { confirmingDelete = true }.disabled(deleting) }
+                }
             }
             if let error { Text(error).foregroundStyle(.red) }
         }
-        .navigationTitle("Program")
-        .task(id: plan.currentRevisionID) { do { document = try CoachRepository(context: context).document(for: plan); startDate = plan.startDate; selectedWeek = weeks.first ?? 0 } catch { self.error = error.localizedDescription } }
+        .navigationTitle("Your Plan")
+        .navigationBarTitleDisplayMode(.inline)
+        .task(id: plan.currentRevisionID) { do { document = try CoachRepository(context: context).document(for: plan); startDate = plan.startDate; selectedWeek = currentWeek } catch { self.error = error.localizedDescription } }
         .confirmationDialog("Delete this program?", isPresented: $confirmingDelete, titleVisibility: .visible) {
             if calendarMappings.contains(where: { mapping in rows.contains { $0.id == mapping.plannedSessionID } }) {
                 Button("Remove App Calendar Events and Delete", role: .destructive) { deleteProgram(keepCalendarEvents: false) }
@@ -119,7 +140,7 @@ struct CoachProgramDetailView: View {
             Text("Completed workouts, measurements and daily check-ins are preserved. Finish any activity in progress first. Program reminders are canceled.")
         }
         .confirmationDialog("Start \(plan.title)?", isPresented: $confirmActivate, titleVisibility: .visible) {
-            Button("Keep Existing Dates") { perform { try $0.activate(planID: plan.id) } }
+            Button("Start with These Dates") { perform { try $0.activate(planID: plan.id) } }
         } message: {
             Text((allPlans.first(where: { $0.id != plan.id && $0.status == "active" }).map { "This pauses “\($0.title)” and preserves its history. " } ?? "") + "Session dates stay fixed. To shift remaining work, open Move, swap or repeat sessions and review every affected date before applying.")
         }
@@ -141,6 +162,15 @@ struct CoachProgramDetailView: View {
             if case .failure(let failure) = result { error = failure.localizedDescription }
         }
     }
+    private var currentWeek: Int {
+        let zone = CoachRepository.timeZone(plan)
+        let today = CoachDate.civil(Date(), timeZone: zone)
+        let visible = rows.filter { $0.completionProvenance != "removed_by_reviewed_revision" }
+        return visible.first(where: { $0.status == "in_progress" })?.weekIndex
+            ?? visible.first(where: { ($0.currentCivilDate ?? CoachDate.civil($0.scheduledDate, timeZone: zone)) >= today })?.weekIndex
+            ?? weeks.last ?? 0
+    }
+
     private func revised(_ value: CoachPlanDocument) -> CoachPlanDocument { var copy = value; copy.revision += 1; return copy }
     private func phase(for gate: CoachPhaseReview) -> CoachPhase? {
         let source: CoachPlanDocument?
@@ -226,7 +256,7 @@ struct CoachScheduleEditorView: View {
                 DatePicker("New week begins", selection: $repeatDate, displayedComponents: .date)
                     .environment(\.timeZone, CoachRepository.timeZone(plan))
                 if !repeatWeekID.isEmpty {
-                    ForEach(rows.filter { $0.sourceWeekID == repeatWeekID }) { row in
+                    ForEach(rows.filter { $0.sourceWeekID == repeatWeekID && $0.completionProvenance != "removed_by_reviewed_revision" }) { row in
                         let date = repeatPreviewDate(row)
                         LabeledContent(row.title, value: CoachDate.civil(date, timeZone: CoachRepository.timeZone(plan)))
                     }

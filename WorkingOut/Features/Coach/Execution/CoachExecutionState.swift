@@ -118,7 +118,10 @@ struct CoachRunIntervalResult: Codable, Hashable, Identifiable, Sendable {
     enum Method: String, Codable, Sendable { case target, manual, earlyFinish, skip }
     var paceSecondsPerKilometer: Double? {
         guard let distanceMeters, distanceMeters > 0, activeDuration > 0 else { return nil }
-        return activeDuration / distanceMeters * 1_000
+        let pace = activeDuration / distanceMeters * 1_000
+        // Finite measurements can still overflow the whole-second pace display.
+        guard pace.isFinite, pace < Double(Int.max) else { return nil }
+        return pace
     }
 }
 

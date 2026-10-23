@@ -1,0 +1,1466 @@
+{
+  "base_main": "a3a869f6232bbd970b45951a49f17d7245141120",
+  "reviewed_pr7": "0f69a4022f17f54fe54fb5b2d1fc6201a8c75ec2",
+  "scope": "Legacy schema CloudKit-capable fields; capability not evidence of upload. Relationships recorded separately in report.",
+  "model_count": 14,
+  "stored_field_count": 253,
+  "models": [
+    {
+      "model": "ExerciseDefinition",
+      "source": "WorkingOut/Models/ExerciseDefinition.swift",
+      "unchanged_main_to_pr7": true,
+      "stored_fields": [
+        {
+          "name": "id",
+          "line": 6,
+          "declaration": "var id: UUID = UUID()"
+        },
+        {
+          "name": "name",
+          "line": 7,
+          "declaration": "var name: String = \"\""
+        },
+        {
+          "name": "muscleGroup",
+          "line": 8,
+          "declaration": "var muscleGroup: String = \"\""
+        },
+        {
+          "name": "isUserDefined",
+          "line": 9,
+          "declaration": "var isUserDefined: Bool = false"
+        }
+      ],
+      "additional_relationship_declarations": [
+        {
+          "field": "logs",
+          "line": 10,
+          "declaration": "@Relationship(deleteRule: .nullify, inverse: \\ExerciseLog.exerciseDefinition) var logs: [ExerciseLog]?"
+        }
+      ]
+    },
+    {
+      "model": "WorkoutSession",
+      "source": "WorkingOut/Models/WorkoutSession.swift",
+      "unchanged_main_to_pr7": true,
+      "stored_fields": [
+        {
+          "name": "id",
+          "line": 6,
+          "declaration": "var id: UUID = UUID()"
+        },
+        {
+          "name": "executionStatusRaw",
+          "line": 8,
+          "declaration": "var executionStatusRaw: String = \"legacy_recorded\""
+        },
+        {
+          "name": "plannedSessionID",
+          "line": 9,
+          "declaration": "var plannedSessionID: UUID? = nil"
+        },
+        {
+          "name": "coachExecutionID",
+          "line": 10,
+          "declaration": "var coachExecutionID: UUID? = nil"
+        },
+        {
+          "name": "endedAt",
+          "line": 11,
+          "declaration": "var endedAt: Date? = nil"
+        },
+        {
+          "name": "completionProvenance",
+          "line": 12,
+          "declaration": "var completionProvenance: String? = nil"
+        },
+        {
+          "name": "date",
+          "line": 20,
+          "declaration": "var date: Date = Date()"
+        },
+        {
+          "name": "title",
+          "line": 21,
+          "declaration": "var title: String = \"\""
+        },
+        {
+          "name": "notes",
+          "line": 22,
+          "declaration": "var notes: String?"
+        },
+        {
+          "name": "shouldSaveAsTemplate",
+          "line": 26,
+          "declaration": "var shouldSaveAsTemplate: Bool = false"
+        },
+        {
+          "name": "sourceTemplateID",
+          "line": 27,
+          "declaration": "var sourceTemplateID: UUID? // ID of the template this session was created from"
+        },
+        {
+          "name": "isSampleData",
+          "line": 28,
+          "declaration": "var isSampleData: Bool = false"
+        },
+        {
+          "name": "healthWorkoutUUID",
+          "line": 31,
+          "declaration": "var healthWorkoutUUID: String? = nil"
+        },
+        {
+          "name": "healthDuration",
+          "line": 32,
+          "declaration": "var healthDuration: TimeInterval? = nil"
+        },
+        {
+          "name": "healthCalories",
+          "line": 33,
+          "declaration": "var healthCalories: Double? = nil"
+        },
+        {
+          "name": "healthAvgHeartRate",
+          "line": 34,
+          "declaration": "var healthAvgHeartRate: Double? = nil"
+        },
+        {
+          "name": "healthSourceName",
+          "line": 35,
+          "declaration": "var healthSourceName: String? = nil"
+        },
+        {
+          "name": "healthActivityType",
+          "line": 36,
+          "declaration": "var healthActivityType: String? = nil"
+        }
+      ],
+      "additional_relationship_declarations": [
+        {
+          "field": "exerciseLogs",
+          "line": 23,
+          "declaration": "@Relationship(deleteRule: .cascade, inverse: \\ExerciseLog.workoutSession) var exerciseLogs: [ExerciseLog]?"
+        },
+        {
+          "field": "generatedTemplate",
+          "line": 24,
+          "declaration": "@Relationship(deleteRule: .nullify) var generatedTemplate: WorkoutTemplate?"
+        }
+      ]
+    },
+    {
+      "model": "ExerciseLog",
+      "source": "WorkingOut/Models/ExerciseLog.swift",
+      "unchanged_main_to_pr7": true,
+      "stored_fields": [
+        {
+          "name": "id",
+          "line": 6,
+          "declaration": "var id: UUID = UUID()"
+        },
+        {
+          "name": "coachSetResultID",
+          "line": 9,
+          "declaration": "var coachSetResultID: String? = nil"
+        },
+        {
+          "name": "actualReps",
+          "line": 10,
+          "declaration": "var actualReps: Int? = nil"
+        },
+        {
+          "name": "actualWeight",
+          "line": 11,
+          "declaration": "var actualWeight: Double? = nil"
+        },
+        {
+          "name": "actualDurationSeconds",
+          "line": 12,
+          "declaration": "var actualDurationSeconds: Double? = nil"
+        },
+        {
+          "name": "actualEffortScale",
+          "line": 13,
+          "declaration": "var actualEffortScale: String? = nil"
+        },
+        {
+          "name": "actualEffort",
+          "line": 14,
+          "declaration": "var actualEffort: Double? = nil"
+        },
+        {
+          "name": "performedExerciseKey",
+          "line": 15,
+          "declaration": "var performedExerciseKey: String? = nil"
+        },
+        {
+          "name": "prescriptionBasis",
+          "line": 16,
+          "declaration": "var prescriptionBasis: String? = nil"
+        },
+        {
+          "name": "loadBasis",
+          "line": 17,
+          "declaration": "var loadBasis: String? = nil"
+        },
+        {
+          "name": "reps",
+          "line": 20,
+          "declaration": "var reps: Int = 0"
+        },
+        {
+          "name": "weight",
+          "line": 21,
+          "declaration": "var weight: Double = 0"
+        },
+        {
+          "name": "weightUnit",
+          "line": 22,
+          "declaration": "var weightUnit: String = \"lbs\""
+        },
+        {
+          "name": "durationSeconds",
+          "line": 25,
+          "declaration": "var durationSeconds: Int? = nil  // Duration in seconds"
+        },
+        {
+          "name": "distance",
+          "line": 26,
+          "declaration": "var distance: Double? = nil      // Distance covered"
+        },
+        {
+          "name": "distanceUnit",
+          "line": 27,
+          "declaration": "var distanceUnit: String? = nil  // \"mi\" or \"km\""
+        },
+        {
+          "name": "caloriesBurned",
+          "line": 28,
+          "declaration": "var caloriesBurned: Int? = nil   // Optional calories"
+        },
+        {
+          "name": "avgHeartRate",
+          "line": 29,
+          "declaration": "var avgHeartRate: Int? = nil     // Optional average heart rate"
+        },
+        {
+          "name": "notes",
+          "line": 30,
+          "declaration": "var notes: String? = nil         // Optional notes for the set"
+        },
+        {
+          "name": "setNumber",
+          "line": 33,
+          "declaration": "var setNumber: Int = 0"
+        },
+        {
+          "name": "exerciseOrder",
+          "line": 34,
+          "declaration": "var exerciseOrder: Int = 0  // Preserves the order exercises should be displayed in"
+        },
+        {
+          "name": "exerciseName",
+          "line": 36,
+          "declaration": "var exerciseName: String?"
+        },
+        {
+          "name": "exerciseType",
+          "line": 37,
+          "declaration": "var exerciseType: String? = \"strength\"  // \"strength\" or \"cardio\""
+        },
+        {
+          "name": "isCompleted",
+          "line": 39,
+          "declaration": "var isCompleted: Bool = false // Track if the set was completed"
+        },
+        {
+          "name": "isIsolated",
+          "line": 41,
+          "declaration": "var isIsolated: Bool = false"
+        }
+      ],
+      "additional_relationship_declarations": [
+        {
+          "field": "exerciseDefinition",
+          "line": 43,
+          "declaration": "@Relationship(deleteRule: .nullify) var exerciseDefinition: ExerciseDefinition?"
+        },
+        {
+          "field": "workoutSession",
+          "line": 44,
+          "declaration": "@Relationship(deleteRule: .nullify) var workoutSession: WorkoutSession?"
+        }
+      ]
+    },
+    {
+      "model": "RunningSession",
+      "source": "WorkingOut/Models/RunningSession.swift",
+      "unchanged_main_to_pr7": true,
+      "stored_fields": [
+        {
+          "name": "id",
+          "line": 7,
+          "declaration": "var id: UUID = UUID()"
+        },
+        {
+          "name": "canonicalPlannedSessionID",
+          "line": 8,
+          "declaration": "var canonicalPlannedSessionID: UUID? = nil"
+        },
+        {
+          "name": "coachExecutionID",
+          "line": 9,
+          "declaration": "var coachExecutionID: UUID? = nil"
+        },
+        {
+          "name": "executionStatusRaw",
+          "line": 10,
+          "declaration": "var executionStatusRaw: String = \"legacy_recorded\""
+        },
+        {
+          "name": "hasMeasuredDistance",
+          "line": 11,
+          "declaration": "var hasMeasuredDistance: Bool = true"
+        },
+        {
+          "name": "intervalResultsData",
+          "line": 12,
+          "declaration": "var intervalResultsData: Data? = nil"
+        },
+        {
+          "name": "date",
+          "line": 14,
+          "declaration": "var date: Date = Date()"
+        },
+        {
+          "name": "distance",
+          "line": 15,
+          "declaration": "var distance: Double = 0"
+        },
+        {
+          "name": "distanceUnit",
+          "line": 16,
+          "declaration": "var distanceUnit: String = \"km\""
+        },
+        {
+          "name": "duration",
+          "line": 17,
+          "declaration": "var duration: TimeInterval = 0"
+        },
+        {
+          "name": "calories",
+          "line": 20,
+          "declaration": "var calories: Double? = nil"
+        },
+        {
+          "name": "notes",
+          "line": 21,
+          "declaration": "var notes: String?"
+        },
+        {
+          "name": "locations",
+          "line": 22,
+          "declaration": "@Attribute(.externalStorage) var locations: Data = Data() // Stores encoded route coordinates outside the main row"
+        },
+        {
+          "name": "healthWorkoutUUID",
+          "line": 25,
+          "declaration": "var healthWorkoutUUID: String? = nil"
+        },
+        {
+          "name": "healthDistanceLastAttemptAt",
+          "line": 26,
+          "declaration": "var healthDistanceLastAttemptAt: Date? = nil"
+        },
+        {
+          "name": "metricSourceHealthWorkoutUUID",
+          "line": 31,
+          "declaration": "var metricSourceHealthWorkoutUUID: String? = nil"
+        },
+        {
+          "name": "linkedHealthWorkoutUUIDsRaw",
+          "line": 32,
+          "declaration": "var linkedHealthWorkoutUUIDsRaw: String = \"\""
+        },
+        {
+          "name": "healthMetricSourceName",
+          "line": 33,
+          "declaration": "var healthMetricSourceName: String? = nil"
+        },
+        {
+          "name": "plannedSessionID",
+          "line": 37,
+          "declaration": "var plannedSessionID: UUID? = nil"
+        },
+        {
+          "name": "isSampleData",
+          "line": 42,
+          "declaration": "var isSampleData: Bool = false"
+        },
+        {
+          "name": "activityType",
+          "line": 45,
+          "declaration": "var activityType: String = \"running\""
+        },
+        {
+          "name": "avgHeartRate",
+          "line": 48,
+          "declaration": "var avgHeartRate: Double? = nil // bpm"
+        },
+        {
+          "name": "maxHeartRate",
+          "line": 49,
+          "declaration": "var maxHeartRate: Double? = nil // bpm"
+        },
+        {
+          "name": "minHeartRate",
+          "line": 50,
+          "declaration": "var minHeartRate: Double? = nil // bpm"
+        },
+        {
+          "name": "avgCadence",
+          "line": 53,
+          "declaration": "var avgCadence: Double? = nil // steps per minute"
+        },
+        {
+          "name": "maxCadence",
+          "line": 54,
+          "declaration": "var maxCadence: Double? = nil // steps per minute"
+        },
+        {
+          "name": "avgStrideLength",
+          "line": 55,
+          "declaration": "var avgStrideLength: Double? = nil // meters"
+        },
+        {
+          "name": "verticalOscillation",
+          "line": 56,
+          "declaration": "var verticalOscillation: Double? = nil // centimeters"
+        },
+        {
+          "name": "groundContactTime",
+          "line": 57,
+          "declaration": "var groundContactTime: Double? = nil // milliseconds"
+        },
+        {
+          "name": "totalAscent",
+          "line": 60,
+          "declaration": "var totalAscent: Double? = nil // meters"
+        },
+        {
+          "name": "totalDescent",
+          "line": 61,
+          "declaration": "var totalDescent: Double? = nil // meters"
+        },
+        {
+          "name": "minElevation",
+          "line": 62,
+          "declaration": "var minElevation: Double? = nil // meters"
+        },
+        {
+          "name": "maxElevation",
+          "line": 63,
+          "declaration": "var maxElevation: Double? = nil // meters"
+        },
+        {
+          "name": "avgPower",
+          "line": 66,
+          "declaration": "var avgPower: Double? = nil // watts"
+        },
+        {
+          "name": "maxPower",
+          "line": 67,
+          "declaration": "var maxPower: Double? = nil // watts"
+        }
+      ],
+      "additional_relationship_declarations": [
+        {
+          "field": "plannedSession",
+          "line": 39,
+          "declaration": "var plannedSession: RunningPlanSession?"
+        }
+      ]
+    },
+    {
+      "model": "RunningPlan",
+      "source": "WorkingOut/Models/RunningPlan.swift",
+      "unchanged_main_to_pr7": true,
+      "stored_fields": [
+        {
+          "name": "id",
+          "line": 6,
+          "declaration": "var id: UUID = UUID()"
+        },
+        {
+          "name": "name",
+          "line": 7,
+          "declaration": "var name: String = \"\""
+        },
+        {
+          "name": "source",
+          "line": 8,
+          "declaration": "var source: String = \"built_in\" // built_in | ai"
+        },
+        {
+          "name": "style",
+          "line": 9,
+          "declaration": "var style: String = \"hybrid\""
+        },
+        {
+          "name": "targetDistanceMeters",
+          "line": 10,
+          "declaration": "var targetDistanceMeters: Double = 0"
+        },
+        {
+          "name": "primaryGoal",
+          "line": 11,
+          "declaration": "var primaryGoal: String = \"hybrid\""
+        },
+        {
+          "name": "durationWeeks",
+          "line": 12,
+          "declaration": "var durationWeeks: Int = 0"
+        },
+        {
+          "name": "daysPerWeek",
+          "line": 13,
+          "declaration": "var daysPerWeek: Int = 4"
+        },
+        {
+          "name": "startDate",
+          "line": 14,
+          "declaration": "var startDate: Date = Date()"
+        },
+        {
+          "name": "isActive",
+          "line": 15,
+          "declaration": "var isActive: Bool = false"
+        },
+        {
+          "name": "isArchived",
+          "line": 16,
+          "declaration": "var isArchived: Bool = false"
+        },
+        {
+          "name": "createdAt",
+          "line": 17,
+          "declaration": "var createdAt: Date = Date()"
+        },
+        {
+          "name": "updatedAt",
+          "line": 18,
+          "declaration": "var updatedAt: Date = Date()"
+        },
+        {
+          "name": "profileSnapshotJSON",
+          "line": 19,
+          "declaration": "var profileSnapshotJSON: String? = nil"
+        },
+        {
+          "name": "aiPrompt",
+          "line": 20,
+          "declaration": "var aiPrompt: String? = nil"
+        }
+      ],
+      "additional_relationship_declarations": [
+        {
+          "field": "sessions",
+          "line": 23,
+          "declaration": "var sessions: [RunningPlanSession]? = nil"
+        }
+      ]
+    },
+    {
+      "model": "RunningPlanSession",
+      "source": "WorkingOut/Models/RunningPlanSession.swift",
+      "unchanged_main_to_pr7": true,
+      "stored_fields": [
+        {
+          "name": "id",
+          "line": 6,
+          "declaration": "var id: UUID = UUID()"
+        },
+        {
+          "name": "weekIndex",
+          "line": 13,
+          "declaration": "var weekIndex: Int = 0"
+        },
+        {
+          "name": "dayIndex",
+          "line": 14,
+          "declaration": "var dayIndex: Int = 0"
+        },
+        {
+          "name": "scheduledDate",
+          "line": 15,
+          "declaration": "var scheduledDate: Date? = nil"
+        },
+        {
+          "name": "sessionType",
+          "line": 16,
+          "declaration": "var sessionType: String = \"easy\" // easy | interval | tempo | long | recovery | rest"
+        },
+        {
+          "name": "targetDistanceMeters",
+          "line": 17,
+          "declaration": "var targetDistanceMeters: Double? = nil"
+        },
+        {
+          "name": "targetDurationSeconds",
+          "line": 18,
+          "declaration": "var targetDurationSeconds: Double? = nil"
+        },
+        {
+          "name": "targetPaceMinPerMile",
+          "line": 19,
+          "declaration": "var targetPaceMinPerMile: Double? = nil"
+        },
+        {
+          "name": "intensityLevel",
+          "line": 20,
+          "declaration": "var intensityLevel: String = \"moderate\" // easy | moderate | hard"
+        },
+        {
+          "name": "notes",
+          "line": 21,
+          "declaration": "var notes: String? = nil"
+        },
+        {
+          "name": "status",
+          "line": 22,
+          "declaration": "var status: String = \"pending\" // pending | completed | skipped"
+        },
+        {
+          "name": "completionSource",
+          "line": 23,
+          "declaration": "var completionSource: String? = nil // manual | auto | tracked"
+        },
+        {
+          "name": "completedAt",
+          "line": 24,
+          "declaration": "var completedAt: Date? = nil"
+        },
+        {
+          "name": "completedRunSessionID",
+          "line": 25,
+          "declaration": "var completedRunSessionID: UUID? = nil"
+        }
+      ],
+      "additional_relationship_declarations": [
+        {
+          "field": "plan",
+          "line": 9,
+          "declaration": "var plan: RunningPlan?"
+        },
+        {
+          "field": "completedRun",
+          "line": 11,
+          "declaration": "var completedRun: RunningSession?"
+        }
+      ]
+    },
+    {
+      "model": "TrainingPlan",
+      "source": "WorkingOut/Models/TrainingPlan.swift",
+      "unchanged_main_to_pr7": true,
+      "stored_fields": [
+        {
+          "name": "id",
+          "line": 8,
+          "declaration": "var id: UUID = UUID()"
+        },
+        {
+          "name": "sourceProgramID",
+          "line": 10,
+          "declaration": "var sourceProgramID: String? = nil"
+        },
+        {
+          "name": "sourceRevision",
+          "line": 11,
+          "declaration": "var sourceRevision: Int = 0"
+        },
+        {
+          "name": "fingerprint",
+          "line": 12,
+          "declaration": "var fingerprint: String? = nil"
+        },
+        {
+          "name": "currentRevisionID",
+          "line": 13,
+          "declaration": "var currentRevisionID: UUID? = nil"
+        },
+        {
+          "name": "startCivilDate",
+          "line": 14,
+          "declaration": "var startCivilDate: String? = nil"
+        },
+        {
+          "name": "timeZoneIdentifier",
+          "line": 15,
+          "declaration": "var timeZoneIdentifier: String = \"\""
+        },
+        {
+          "name": "durationWeeks",
+          "line": 16,
+          "declaration": "var durationWeeks: Int = 0"
+        },
+        {
+          "name": "activatedAt",
+          "line": 17,
+          "declaration": "var activatedAt: Date? = nil"
+        },
+        {
+          "name": "pausedAt",
+          "line": 18,
+          "declaration": "var pausedAt: Date? = nil"
+        },
+        {
+          "name": "title",
+          "line": 20,
+          "declaration": "var title: String = \"\""
+        },
+        {
+          "name": "goal",
+          "line": 21,
+          "declaration": "var goal: String = \"\""
+        },
+        {
+          "name": "overview",
+          "line": 22,
+          "declaration": "var overview: String? = nil"
+        },
+        {
+          "name": "guidance",
+          "line": 23,
+          "declaration": "var guidance: String? = nil"
+        },
+        {
+          "name": "source",
+          "line": 24,
+          "declaration": "var source: String = \"coach\" // coach_ai | running_assistant | manual"
+        },
+        {
+          "name": "status",
+          "line": 25,
+          "declaration": "var status: String = \"active\" // draft | active | archived"
+        },
+        {
+          "name": "startDate",
+          "line": 26,
+          "declaration": "var startDate: Date = Date()"
+        },
+        {
+          "name": "createdAt",
+          "line": 27,
+          "declaration": "var createdAt: Date = Date()"
+        },
+        {
+          "name": "updatedAt",
+          "line": 28,
+          "declaration": "var updatedAt: Date = Date()"
+        },
+        {
+          "name": "sourceAIConversationID",
+          "line": 32,
+          "declaration": "var sourceAIConversationID: UUID? = nil"
+        },
+        {
+          "name": "sourceRunningPlanID",
+          "line": 33,
+          "declaration": "var sourceRunningPlanID: UUID? = nil"
+        }
+      ],
+      "additional_relationship_declarations": [
+        {
+          "field": "sessions",
+          "line": 36,
+          "declaration": "var sessions: [PlannedSession]? = nil"
+        }
+      ]
+    },
+    {
+      "model": "PlannedSession",
+      "source": "WorkingOut/Models/PlannedSession.swift",
+      "unchanged_main_to_pr7": true,
+      "stored_fields": [
+        {
+          "name": "id",
+          "line": 6,
+          "declaration": "var id: UUID = UUID()"
+        },
+        {
+          "name": "sourceWeekID",
+          "line": 8,
+          "declaration": "var sourceWeekID: String? = nil"
+        },
+        {
+          "name": "sourceSlotID",
+          "line": 9,
+          "declaration": "var sourceSlotID: String? = nil"
+        },
+        {
+          "name": "sourceTemplateID",
+          "line": 10,
+          "declaration": "var sourceTemplateID: String? = nil"
+        },
+        {
+          "name": "phaseID",
+          "line": 11,
+          "declaration": "var phaseID: String? = nil"
+        },
+        {
+          "name": "prescriptionData",
+          "line": 12,
+          "declaration": "@Attribute(.externalStorage) var prescriptionData: Data? = nil"
+        },
+        {
+          "name": "revisionID",
+          "line": 13,
+          "declaration": "var revisionID: UUID? = nil"
+        },
+        {
+          "name": "originalCivilDate",
+          "line": 14,
+          "declaration": "var originalCivilDate: String? = nil"
+        },
+        {
+          "name": "currentCivilDate",
+          "line": 15,
+          "declaration": "var currentCivilDate: String? = nil"
+        },
+        {
+          "name": "intraDayOrder",
+          "line": 16,
+          "declaration": "var intraDayOrder: Int = 0"
+        },
+        {
+          "name": "isOptional",
+          "line": 17,
+          "declaration": "var isOptional: Bool = false"
+        },
+        {
+          "name": "executionID",
+          "line": 18,
+          "declaration": "var executionID: UUID? = nil"
+        },
+        {
+          "name": "scheduleRevision",
+          "line": 19,
+          "declaration": "var scheduleRevision: Int = 0"
+        },
+        {
+          "name": "localScheduleOverride",
+          "line": 20,
+          "declaration": "var localScheduleOverride: Bool = false"
+        },
+        {
+          "name": "completionProvenance",
+          "line": 21,
+          "declaration": "var completionProvenance: String? = nil"
+        },
+        {
+          "name": "title",
+          "line": 26,
+          "declaration": "var title: String = \"\""
+        },
+        {
+          "name": "activityType",
+          "line": 27,
+          "declaration": "var activityType: String = \"workout\" // strength | run | cardio | recovery | rest | workout"
+        },
+        {
+          "name": "scheduledDate",
+          "line": 28,
+          "declaration": "var scheduledDate: Date = Date()"
+        },
+        {
+          "name": "weekIndex",
+          "line": 29,
+          "declaration": "var weekIndex: Int = 0"
+        },
+        {
+          "name": "dayIndex",
+          "line": 30,
+          "declaration": "var dayIndex: Int = 0"
+        },
+        {
+          "name": "status",
+          "line": 31,
+          "declaration": "var status: String = \"pending\" // pending | completed | skipped"
+        },
+        {
+          "name": "notes",
+          "line": 32,
+          "declaration": "var notes: String? = nil"
+        },
+        {
+          "name": "targetDistanceMeters",
+          "line": 34,
+          "declaration": "var targetDistanceMeters: Double? = nil"
+        },
+        {
+          "name": "targetDurationSeconds",
+          "line": 35,
+          "declaration": "var targetDurationSeconds: Double? = nil"
+        },
+        {
+          "name": "targetPaceMinPerMile",
+          "line": 36,
+          "declaration": "var targetPaceMinPerMile: Double? = nil"
+        },
+        {
+          "name": "intensityLevel",
+          "line": 37,
+          "declaration": "var intensityLevel: String? = nil"
+        },
+        {
+          "name": "workoutTemplateID",
+          "line": 40,
+          "declaration": "var workoutTemplateID: UUID? = nil"
+        },
+        {
+          "name": "runningPlanSessionID",
+          "line": 41,
+          "declaration": "var runningPlanSessionID: UUID? = nil"
+        },
+        {
+          "name": "completedWorkoutSessionID",
+          "line": 42,
+          "declaration": "var completedWorkoutSessionID: UUID? = nil"
+        },
+        {
+          "name": "completedRunningSessionID",
+          "line": 43,
+          "declaration": "var completedRunningSessionID: UUID? = nil"
+        },
+        {
+          "name": "completedAt",
+          "line": 44,
+          "declaration": "var completedAt: Date? = nil"
+        }
+      ],
+      "additional_relationship_declarations": [
+        {
+          "field": "plan",
+          "line": 24,
+          "declaration": "var plan: TrainingPlan?"
+        }
+      ]
+    },
+    {
+      "model": "WeightEntry",
+      "source": "WorkingOut/Models/WeightEntry.swift",
+      "unchanged_main_to_pr7": true,
+      "stored_fields": [
+        {
+          "name": "id",
+          "line": 6,
+          "declaration": "var id: UUID = UUID()"
+        },
+        {
+          "name": "sourceHealthSampleID",
+          "line": 7,
+          "declaration": "var sourceHealthSampleID: String? = nil"
+        },
+        {
+          "name": "sourceName",
+          "line": 8,
+          "declaration": "var sourceName: String? = nil"
+        },
+        {
+          "name": "provenance",
+          "line": 9,
+          "declaration": "var provenance: String = \"manual_or_legacy\""
+        },
+        {
+          "name": "date",
+          "line": 10,
+          "declaration": "var date: Date = Date()"
+        },
+        {
+          "name": "weight",
+          "line": 11,
+          "declaration": "var weight: Double = 0"
+        },
+        {
+          "name": "weightUnit",
+          "line": 12,
+          "declaration": "var weightUnit: String = \"lbs\""
+        }
+      ],
+      "additional_relationship_declarations": []
+    },
+    {
+      "model": "AIConversation",
+      "source": "WorkingOut/Models/AIConversation.swift",
+      "unchanged_main_to_pr7": true,
+      "stored_fields": [
+        {
+          "name": "id",
+          "line": 6,
+          "declaration": "var id: UUID = UUID()"
+        },
+        {
+          "name": "date",
+          "line": 7,
+          "declaration": "var date: Date = Date()"
+        },
+        {
+          "name": "mode",
+          "line": 8,
+          "declaration": "var mode: String = \"plan\" // \"plan\" | \"ask\""
+        },
+        {
+          "name": "goal",
+          "line": 9,
+          "declaration": "var goal: String = \"maintain\""
+        },
+        {
+          "name": "prompt",
+          "line": 10,
+          "declaration": "var prompt: String = \"\""
+        },
+        {
+          "name": "response",
+          "line": 11,
+          "declaration": "var response: String = \"\""
+        },
+        {
+          "name": "model",
+          "line": 12,
+          "declaration": "var model: String = \"on-device\""
+        },
+        {
+          "name": "structuredPlanJSON",
+          "line": 14,
+          "declaration": "var structuredPlanJSON: String? = nil"
+        }
+      ],
+      "additional_relationship_declarations": []
+    },
+    {
+      "model": "WorkoutTemplate",
+      "source": "WorkingOut/Models/WorkoutTemplate.swift",
+      "unchanged_main_to_pr7": true,
+      "stored_fields": [
+        {
+          "name": "id",
+          "line": 6,
+          "declaration": "var id: UUID = UUID()"
+        },
+        {
+          "name": "title",
+          "line": 7,
+          "declaration": "var title: String = \"\""
+        },
+        {
+          "name": "notes",
+          "line": 8,
+          "declaration": "var notes: String?"
+        },
+        {
+          "name": "createdDate",
+          "line": 9,
+          "declaration": "var createdDate: Date = Date()"
+        },
+        {
+          "name": "sourceAIConversationId",
+          "line": 10,
+          "declaration": "var sourceAIConversationId: UUID?"
+        },
+        {
+          "name": "importSourceSessionID",
+          "line": 11,
+          "declaration": "var importSourceSessionID: UUID?"
+        },
+        {
+          "name": "exerciseCount",
+          "line": 12,
+          "declaration": "var exerciseCount: Int = 0"
+        },
+        {
+          "name": "aiPlanHash",
+          "line": 15,
+          "declaration": "var aiPlanHash: String?"
+        },
+        {
+          "name": "aiPlanTitle",
+          "line": 16,
+          "declaration": "var aiPlanTitle: String?"
+        },
+        {
+          "name": "aiWeekTitle",
+          "line": 17,
+          "declaration": "var aiWeekTitle: String?"
+        },
+        {
+          "name": "aiDayIndex",
+          "line": 18,
+          "declaration": "var aiDayIndex: Int?"
+        },
+        {
+          "name": "aiDayType",
+          "line": 19,
+          "declaration": "var aiDayType: String?"
+        },
+        {
+          "name": "aiDayTitle",
+          "line": 20,
+          "declaration": "var aiDayTitle: String?"
+        },
+        {
+          "name": "isBuiltIn",
+          "line": 25,
+          "declaration": "var isBuiltIn: Bool = false"
+        },
+        {
+          "name": "experienceLevel",
+          "line": 26,
+          "declaration": "var experienceLevel: String? = nil // \"beginner\", \"intermediate\", \"advanced\""
+        },
+        {
+          "name": "goal",
+          "line": 27,
+          "declaration": "var goal: String? = nil // \"full_body_foundation\", \"muscle_building\", etc."
+        },
+        {
+          "name": "difficulty",
+          "line": 28,
+          "declaration": "var difficulty: Int? = nil // 1-5 scale"
+        },
+        {
+          "name": "estimatedDuration",
+          "line": 29,
+          "declaration": "var estimatedDuration: Int? = nil // minutes"
+        },
+        {
+          "name": "equipment",
+          "line": 30,
+          "declaration": "var equipment: [String]? = nil // [\"barbell\", \"dumbbells\", etc.]"
+        },
+        {
+          "name": "muscleGroups",
+          "line": 31,
+          "declaration": "var muscleGroups: [String]? = nil // [\"chest\", \"back\", \"legs\", etc.]"
+        },
+        {
+          "name": "templateDescription",
+          "line": 32,
+          "declaration": "var templateDescription: String? = nil // Detailed description"
+        }
+      ],
+      "additional_relationship_declarations": [
+        {
+          "field": "exercises",
+          "line": 21,
+          "declaration": "@Relationship(deleteRule: .cascade, inverse: \\TemplateExercise.template) var exercises: [TemplateExercise]?"
+        },
+        {
+          "field": "sourceSession",
+          "line": 22,
+          "declaration": "@Relationship(deleteRule: .nullify, inverse: \\WorkoutSession.generatedTemplate) var sourceSession: WorkoutSession?"
+        }
+      ]
+    },
+    {
+      "model": "TemplateExercise",
+      "source": "WorkingOut/Models/TemplateExercise.swift",
+      "unchanged_main_to_pr7": true,
+      "stored_fields": [
+        {
+          "name": "id",
+          "line": 6,
+          "declaration": "var id: UUID = UUID()"
+        },
+        {
+          "name": "name",
+          "line": 7,
+          "declaration": "var name: String = \"\""
+        },
+        {
+          "name": "order",
+          "line": 8,
+          "declaration": "var order: Int = 0"
+        },
+        {
+          "name": "sets",
+          "line": 9,
+          "declaration": "var sets: Int = 0"
+        },
+        {
+          "name": "reps",
+          "line": 10,
+          "declaration": "var reps: Int = 0"
+        },
+        {
+          "name": "suggestedWeight",
+          "line": 11,
+          "declaration": "var suggestedWeight: Double?"
+        },
+        {
+          "name": "weightUnit",
+          "line": 12,
+          "declaration": "var weightUnit: String = \"lbs\""
+        },
+        {
+          "name": "notes",
+          "line": 13,
+          "declaration": "var notes: String?"
+        }
+      ],
+      "additional_relationship_declarations": [
+        {
+          "field": "template",
+          "line": 14,
+          "declaration": "@Relationship(deleteRule: .nullify) var template: WorkoutTemplate?"
+        }
+      ]
+    },
+    {
+      "model": "HealthWorkoutInboxItem",
+      "source": "WorkingOut/Models/HealthWorkoutInboxItem.swift",
+      "unchanged_main_to_pr7": true,
+      "stored_fields": [
+        {
+          "name": "id",
+          "line": 14,
+          "declaration": "var id: UUID = UUID()"
+        },
+        {
+          "name": "healthWorkoutUUID",
+          "line": 16,
+          "declaration": "var healthWorkoutUUID: String = \"\""
+        },
+        {
+          "name": "startDate",
+          "line": 17,
+          "declaration": "var startDate: Date = Date()"
+        },
+        {
+          "name": "endDate",
+          "line": 18,
+          "declaration": "var endDate: Date = Date()"
+        },
+        {
+          "name": "activityType",
+          "line": 20,
+          "declaration": "var activityType: String = \"traditionalStrengthTraining\""
+        },
+        {
+          "name": "duration",
+          "line": 21,
+          "declaration": "var duration: TimeInterval = 0"
+        },
+        {
+          "name": "calories",
+          "line": 22,
+          "declaration": "var calories: Double? = nil"
+        },
+        {
+          "name": "avgHeartRate",
+          "line": 23,
+          "declaration": "var avgHeartRate: Double? = nil"
+        },
+        {
+          "name": "sourceName",
+          "line": 25,
+          "declaration": "var sourceName: String? = nil"
+        },
+        {
+          "name": "sourceBundleIdentifier",
+          "line": 27,
+          "declaration": "var sourceBundleIdentifier: String? = nil"
+        },
+        {
+          "name": "healthSyncIdentifier",
+          "line": 28,
+          "declaration": "var healthSyncIdentifier: String? = nil"
+        },
+        {
+          "name": "healthSyncVersion",
+          "line": 29,
+          "declaration": "var healthSyncVersion: Int? = nil"
+        },
+        {
+          "name": "healthExternalUUID",
+          "line": 30,
+          "declaration": "var healthExternalUUID: String? = nil"
+        },
+        {
+          "name": "alternateHealthWorkoutUUIDsRaw",
+          "line": 33,
+          "declaration": "var alternateHealthWorkoutUUIDsRaw: String = \"\""
+        },
+        {
+          "name": "healthDeletionObservedAt",
+          "line": 37,
+          "declaration": "var healthDeletionObservedAt: Date? = nil"
+        },
+        {
+          "name": "statusRaw",
+          "line": 38,
+          "declaration": "var statusRaw: String = Status.pending.rawValue"
+        },
+        {
+          "name": "linkedWorkoutSessionID",
+          "line": 39,
+          "declaration": "var linkedWorkoutSessionID: UUID? = nil"
+        },
+        {
+          "name": "createdAt",
+          "line": 40,
+          "declaration": "var createdAt: Date = Date()"
+        }
+      ],
+      "additional_relationship_declarations": []
+    },
+    {
+      "model": "CardioWorkoutInboxItem",
+      "source": "WorkingOut/Models/CardioWorkoutInboxItem.swift",
+      "unchanged_main_to_pr7": true,
+      "stored_fields": [
+        {
+          "name": "id",
+          "line": 16,
+          "declaration": "var id: UUID = UUID()"
+        },
+        {
+          "name": "healthWorkoutUUID",
+          "line": 17,
+          "declaration": "var healthWorkoutUUID: String = \"\""
+        },
+        {
+          "name": "alternateHealthWorkoutUUIDsRaw",
+          "line": 19,
+          "declaration": "var alternateHealthWorkoutUUIDsRaw: String = \"\""
+        },
+        {
+          "name": "startDate",
+          "line": 20,
+          "declaration": "var startDate: Date = Date()"
+        },
+        {
+          "name": "endDate",
+          "line": 21,
+          "declaration": "var endDate: Date = Date()"
+        },
+        {
+          "name": "activityType",
+          "line": 22,
+          "declaration": "var activityType: String = \"running\""
+        },
+        {
+          "name": "distanceMeters",
+          "line": 23,
+          "declaration": "var distanceMeters: Double = 0"
+        },
+        {
+          "name": "duration",
+          "line": 24,
+          "declaration": "var duration: TimeInterval = 0"
+        },
+        {
+          "name": "calories",
+          "line": 25,
+          "declaration": "var calories: Double? = nil"
+        },
+        {
+          "name": "avgHeartRate",
+          "line": 26,
+          "declaration": "var avgHeartRate: Double? = nil"
+        },
+        {
+          "name": "maxHeartRate",
+          "line": 27,
+          "declaration": "var maxHeartRate: Double? = nil"
+        },
+        {
+          "name": "minHeartRate",
+          "line": 28,
+          "declaration": "var minHeartRate: Double? = nil"
+        },
+        {
+          "name": "sourceName",
+          "line": 29,
+          "declaration": "var sourceName: String? = nil"
+        },
+        {
+          "name": "sourceBundleIdentifier",
+          "line": 30,
+          "declaration": "var sourceBundleIdentifier: String? = nil"
+        },
+        {
+          "name": "healthSyncIdentifier",
+          "line": 31,
+          "declaration": "var healthSyncIdentifier: String? = nil"
+        },
+        {
+          "name": "healthSyncVersion",
+          "line": 32,
+          "declaration": "var healthSyncVersion: Int? = nil"
+        },
+        {
+          "name": "healthExternalUUID",
+          "line": 33,
+          "declaration": "var healthExternalUUID: String? = nil"
+        },
+        {
+          "name": "healthSyncVersionsByStableIdentityRaw",
+          "line": 36,
+          "declaration": "var healthSyncVersionsByStableIdentityRaw: String = \"\""
+        },
+        {
+          "name": "metricSourceHealthWorkoutUUID",
+          "line": 39,
+          "declaration": "var metricSourceHealthWorkoutUUID: String? = nil"
+        },
+        {
+          "name": "metricSourceName",
+          "line": 40,
+          "declaration": "var metricSourceName: String? = nil"
+        },
+        {
+          "name": "metricSourceBundleIdentifier",
+          "line": 41,
+          "declaration": "var metricSourceBundleIdentifier: String? = nil"
+        },
+        {
+          "name": "healthDeletionObservedAt",
+          "line": 44,
+          "declaration": "var healthDeletionObservedAt: Date? = nil"
+        },
+        {
+          "name": "statusRaw",
+          "line": 45,
+          "declaration": "var statusRaw: String = Status.pending.rawValue"
+        },
+        {
+          "name": "linkedRunningSessionID",
+          "line": 46,
+          "declaration": "var linkedRunningSessionID: UUID? = nil"
+        },
+        {
+          "name": "suggestedRunningSessionID",
+          "line": 47,
+          "declaration": "var suggestedRunningSessionID: UUID? = nil"
+        },
+        {
+          "name": "createdAt",
+          "line": 48,
+          "declaration": "var createdAt: Date = Date()"
+        },
+        {
+          "name": "healthDetailsLastAttemptAt",
+          "line": 50,
+          "declaration": "var healthDetailsLastAttemptAt: Date? = nil"
+        },
+        {
+          "name": "healthDistanceLastAttemptAt",
+          "line": 51,
+          "declaration": "var healthDistanceLastAttemptAt: Date? = nil"
+        }
+      ],
+      "additional_relationship_declarations": []
+    }
+  ]
+}

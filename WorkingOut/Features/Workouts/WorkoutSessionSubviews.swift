@@ -269,7 +269,7 @@ struct WorkoutSessionExerciseRow: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                if session.sourceTemplateID != nil {
+                if session.sourceTemplateID != nil || session.executionStatusRaw == "in_progress" {
                     Button {
                         log.isCompleted.toggle()
                         if PersistenceSave.commit(modelContext, action: "save changes") {

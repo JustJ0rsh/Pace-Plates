@@ -36,6 +36,8 @@ struct RunLogView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Query private var chartSessions: [RunningSession]
+    @Query private var plannedSessions: [PlannedSession]
+    @Query private var trainingPlans: [TrainingPlan]
     @State private var historyPage: [RunningSession] = []
     @State private var historyResultCount = 0
     @State private var totalRunCount = 0
@@ -130,8 +132,10 @@ struct RunLogView: View {
     }
 
     var body: some View {
+        let _ = trainingPlans.map(\.updatedAt)
         let visibleHistoryRuns = historyPage
         let canLoadMoreHistoryRuns = historyResultCount > visibleHistoryRuns.count
+        let planned = CoachPlannedActivities(plannedSessions, kind: .runs)
 
         ScrollView {
             VStack(spacing: 16) {
@@ -139,6 +143,7 @@ struct RunLogView: View {
                 ActiveRunBanner(activityName: activityName, activityIcon: activityIcon) { type in
                     presentRunTracking(for: type)
                 }
+                CoachPlannedActivityCard(kind: .runs, projection: planned)
 
                 // Unified Runs tile (header + chart or placeholder)
                 let calendar = Calendar.current
@@ -218,7 +223,10 @@ struct RunLogView: View {
                             .font(.subheadline)
                             .foregroundStyle(AppTheme.secondaryTextColor)
 
-                        if daily.isEmpty {
+                        if daily.isEmpty && !planned.sessions.isEmpty {
+                            Text("No completed activities in this date range. Open a planned session above to begin.")
+                                .font(.subheadline).foregroundStyle(.secondary)
+                        } else if daily.isEmpty {
                             VStack(spacing: 10) {
                                 ContentUnavailableView(
                                     "No Runs Logged",
@@ -1048,6 +1056,10 @@ struct RunLogView: View {
     // MARK: - HealthKit import
     private func importHealthRuns(limit: Int? = nil, force: Bool = false) {
         guard shouldImportHealthRuns(force: force) else { return }
+        let expectedPurgeGeneration = WearableWorkoutInboxService.localDataPurgeGeneration
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(
+            expectedPurgeGeneration, context: modelContext
+        ) else { return }
         let effectiveLimit = max(1, limit ?? defaultHealthImportLimit)
 
         Task { @MainActor in
@@ -1056,6 +1068,9 @@ struct RunLogView: View {
                 pageLimit: effectiveLimit,
                 requestAuthorization: force
             )
+            guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(
+                expectedPurgeGeneration, context: modelContext
+            ) else { return }
             if let errorMessage = result.errorMessage {
                 saveErrorMessage = "Cardio inbox refresh failed: \(errorMessage)"
             } else {
@@ -1466,6 +1481,10 @@ struct RunLogView: View {
         for uuids: [String],
         forcing forcedUUIDs: Set<String> = []
     ) {
+        let expectedPurgeGeneration = WearableWorkoutInboxService.localDataPurgeGeneration
+        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(
+            expectedPurgeGeneration, context: modelContext
+        ) else { return }
         let schedulableForcedUUIDs = forcedUUIDs
             .subtracting(activeForcedEnrichmentUUIDs)
         for uuid in uuids where
@@ -1489,6 +1508,9 @@ struct RunLogView: View {
                 if Task.isCancelled { break }
 
                 let next = await MainActor.run { () -> (String, Bool)? in
+                    guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(
+                        expectedPurgeGeneration, context: modelContext
+                    ) else { return nil }
                     guard let uuid = pendingEnrichmentUUIDs.first else {
                         return nil
                     }
@@ -1509,6 +1531,9 @@ struct RunLogView: View {
                 if forceRefresh {
                     await MainActor.run {
                         activeForcedEnrichmentUUIDs.remove(nextUUID)
+                        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(
+                            expectedPurgeGeneration, context: modelContext
+                        ) else { return }
                         switch outcome {
                         case .completed, .noLongerNeeded:
                             removePersistedForcedEnrichmentUUID(nextUUID)
@@ -1527,6 +1552,9 @@ struct RunLogView: View {
 
             await MainActor.run {
                 enrichmentTask = nil
+                guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(
+                    expectedPurgeGeneration, context: modelContext
+                ) else { return }
                 if !pendingEnrichmentUUIDs.isEmpty {
                     scheduleDeferredEnrichment(for: [])
                 }
@@ -1538,8 +1566,14 @@ struct RunLogView: View {
         forWorkoutUUID uuid: String,
         forceHealthMetrics: Bool
     ) async -> EnrichmentOutcome {
-        let needs = await MainActor.run {
-            enrichmentNeeds(
+        let expectedPurgeGeneration = await MainActor.run {
+            WearableWorkoutInboxService.localDataPurgeGeneration
+        }
+        let needs = await MainActor.run { () -> RunEnrichmentNeeds? in
+            guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(
+                expectedPurgeGeneration, context: modelContext
+            ) else { return nil }
+            return enrichmentNeeds(
                 forWorkoutUUID: uuid,
                 forceHealthMetrics: forceHealthMetrics
             )
@@ -1654,6 +1688,9 @@ struct RunLogView: View {
         }
 
         let didCommit: Bool? = await MainActor.run {
+            guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(
+                expectedPurgeGeneration, context: modelContext
+            ) else { return false }
             guard let session = sessionForHealthUUID(uuid) else {
                 return nil
             }
@@ -2575,8 +2612,15 @@ struct RunSessionDetailView: View {
             DispatchQueue.main.async { showMap = true }
             // If we have a Health UUID but no stored route yet, fetch on-demand
             if (session.locations.isEmpty), let uuid = session.healthWorkoutUUID, !uuid.isEmpty {
+                let expectedPurgeGeneration = WearableWorkoutInboxService.localDataPurgeGeneration
                 Task { @MainActor in
+                    guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(
+                        expectedPurgeGeneration, context: modelContext
+                    ) else { return }
                     if let locs = try? await HealthKitManager.shared.routeLocationsForUUID(uuid), !locs.isEmpty {
+                        guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(
+                            expectedPurgeGeneration, context: modelContext
+                        ) else { return }
                         let reduced = downsampleLocations(locs)
                         let coords = reduced.map { RunCoordinate(latitude: $0.coordinate.latitude, longitude: $0.coordinate.longitude) }
                         if let data = try? JSONEncoder().encode(coords) {

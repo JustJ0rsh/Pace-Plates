@@ -88,10 +88,13 @@ enum StreakService {
 
 private extension StreakService {
     static func reportAchievements(dailyStreak: Int, weeklyStreak: Int) {
-        guard GameCenterService.shared.isCommunityAccessEnabled else { return }
-
         // Load existing player achievement states so we only report improvements
-        GKAchievement.loadAchievements { existing, error in
+        GameCenterService.shared.performWithCommunityConsent(prepare: { ready in
+            GKAchievement.loadAchievements { existing, error in
+                ready((existing, error))
+            }
+        }, submit: { (result: ([GKAchievement]?, Error?)) in
+            let (existing, error) = result
             if let error { print("GameCenter: Load achievements failed: \(error)") }
             let map: [String: GKAchievement] = Dictionary(uniqueKeysWithValues: (existing ?? []).map { ach in
                 (ach.identifier, ach)
@@ -128,6 +131,6 @@ private extension StreakService {
                     if let error { print("GameCenter: Failed to report streak achievements: \(error)") }
                 }
             }
-        }
+        })
     }
 }

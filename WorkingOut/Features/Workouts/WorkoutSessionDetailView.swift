@@ -13,9 +13,7 @@ struct WorkoutSessionDetailView: View {
     let session: WorkoutSession
     let allowDateEdit: Bool
     let isNewSession: Bool
-    @State private var showingFinishOptions = false
-    @State private var showingFinishExplanation = false
-    @State private var finishExplanation = ""
+    @State private var closeSave = WorkoutSaveBoundary()
     @State private var finishError: String?
     @State private var coachExecution: CoachSessionExecution?
     @State private var coachPrescription: CoachStrengthSession?
@@ -59,7 +57,6 @@ struct WorkoutSessionDetailView: View {
             if let coachExecution, let coachPrescription {
                 CoachStrengthExecutionView(execution: coachExecution, prescription: coachPrescription)
                     .navigationTitle(session.title)
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Close") { dismiss() } } }
             } else if session.coachExecutionID != nil {
                 ContentUnavailableView("Loading Coach workout", systemImage: "dumbbell", description: Text("Opening the saved prescription and actual results."))
             } else { legacyBody }
@@ -165,35 +162,16 @@ struct WorkoutSessionDetailView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 8) {
                     shareMenu
-                    if session.executionStatusRaw == "in_progress" {
-                        Button("Finish") {
-                            let logs = session.exerciseLogs ?? []
-                            if !logs.isEmpty && logs.allSatisfy(\.isCompleted) { finishUnplanned(.completed) }
-                            else { showingFinishOptions = true }
-                        }.accessibilityIdentifier("workout.finish")
+                    Button("Finish") {
+                        saveAndClose(.finish)
                     }
-
-                    Button("Done") {
-                        dismissKeyboard()
-                        dismiss()
-                    }
+                    .accessibilityIdentifier("workout.finish")
                     .fontWeight(.semibold)
                 }
                 .padding(.leading, 12)
             }
         }
-        .confirmationDialog("Finish Workout", isPresented: $showingFinishOptions, titleVisibility: .visible) {
-            Button("Save Partial") { finishUnplanned(.partial) }
-            Button("Record completion with explanation") { showingFinishExplanation = true }
-            Button("Continue", role: .cancel) {}
-        } message: { Text("Some sets are unrecorded. Finishing does not mark those sets performed or invent results.") }
-        .alert("Completion explanation", isPresented: $showingFinishExplanation) {
-            TextField("What did you complete?", text: $finishExplanation)
-            Button("Cancel", role: .cancel) {}
-            Button("Record Completion") { finishUnplanned(.completed, explanation: finishExplanation) }
-                .disabled(finishExplanation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        }
-        .alert("Unable to Finish", isPresented: Binding(get: { finishError != nil }, set: { if !$0 { finishError = nil } })) {
+        .alert("Unable to Save", isPresented: Binding(get: { finishError != nil }, set: { if !$0 { finishError = nil } })) {
             Button("OK") {}
         } message: { Text(finishError ?? "") }
         .fullScreenCover(isPresented: $showingAddExercise) {
@@ -205,6 +183,7 @@ struct WorkoutSessionDetailView: View {
             EditExerciseLogView(log: log, isNew: editingLogIsNew)
         }
         .onAppear {
+            closeSave.beginPresentation()
             if editingLog == nil || !((session.exerciseLogs ?? []).contains { $0.id == editingLog?.id }) {
                 editingLog = nil
             }
@@ -223,32 +202,17 @@ struct WorkoutSessionDetailView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: work)
         }
         .onDisappear {
-            persistDetailChangesBeforeDismiss()
-            schedulePostDismissMaintenance()
+            if persistDetailChangesBeforeDismiss(.dismissal) {
+                schedulePostDismissMaintenance()
+            }
         }
     }
     
     // MARK: Actions
 
-    private func finishUnplanned(_ status: CoachExecutionStatus, explanation: String? = nil) {
-        let oldStatus = session.executionStatusRaw
-        let oldEnd = session.endedAt
-        let oldProvenance = session.completionProvenance
-        session.executionStatusRaw = status.rawValue
-        session.endedAt = Date()
-        session.completionProvenance = explanation == nil ? "recorded" : "manual_attestation"
-        if let explanation {
-            notesBuffer = [notesBuffer, "Completion explanation: " + explanation].filter { !$0.isEmpty }.joined(separator: "\n")
-            session.notes = notesBuffer
-        }
-        do {
-            try modelContext.save()
-            StreakService.refreshAndReport(using: modelContext)
-            GameCenterService.shared.reportStrengthForSession(exerciseLogs: session.exerciseLogs, preferredWeightUnit: weightUnit)
-        } catch {
-            session.executionStatusRaw = oldStatus; session.endedAt = oldEnd; session.completionProvenance = oldProvenance
-            finishError = error.localizedDescription
-        }
+    private func saveAndClose(_ trigger: WorkoutSaveBoundary.Trigger) {
+        dismissKeyboard()
+        if persistDetailChangesBeforeDismiss(trigger) { dismiss() }
     }
 
     private func scheduleTitleSave(_ newValue: String) {
@@ -263,7 +227,8 @@ struct WorkoutSessionDetailView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
     }
 
-    private func persistDetailChangesBeforeDismiss() {
+    @discardableResult
+    private func persistDetailChangesBeforeDismiss(_ trigger: WorkoutSaveBoundary.Trigger) -> Bool {
         saveWorkItem?.cancel()
         titleSaveWorkItem?.cancel()
         titleSaveWorkItem = nil
@@ -274,10 +239,27 @@ struct WorkoutSessionDetailView: View {
         if didEditTitle, session.title != titleText {
             session.title = titleText
         }
-        _ = PersistenceSave.commit(modelContext, action: "save changes")
+        let saved = closeSave.save(trigger, persist: {
+            try modelContext.save()
+        }, onFailure: { error in
+            finishError = error.localizedDescription
+            if case .dismissal = trigger {
+                let recovery = WorkoutSaveRecovery(id: session.id, title: titleText, message: error.localizedDescription) {
+                    if persistDetailChangesBeforeDismiss(.dismissal) {
+                        schedulePostDismissMaintenance()
+                        return true
+                    }
+                    return false
+                }
+                recovery.publish()
+            }
+        })
+        if saved { WorkoutSaveRecoveryStore.shared.didSave(id: session.id) }
+        return saved
     }
 
     private func schedulePostDismissMaintenance() {
+        guard closeSave.claimMaintenance() else { return }
         let shouldDeleteEmptyNewSession = isNewSession && isEffectivelyEmptyNewSession
 
         Task { @MainActor in
