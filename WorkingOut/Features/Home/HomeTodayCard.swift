@@ -621,6 +621,8 @@ struct HomeTodayCard: View {
             title: source.title,
             sourceTemplateID: source.sourceTemplateID
         )
+        // Repeating starts from copied targets, rather than newly entered work.
+        session.completionProvenance = "planned_workout"
         modelContext.insert(session)
 
         let sourceLogs = (source.exerciseLogs ?? []).sorted {

@@ -151,6 +151,7 @@ struct WorkoutExercisesTile: View {
     @Binding var showingAddExercise: Bool
     @Binding var editingLog: ExerciseLog?
     @Binding var editingLogIsNew: Bool
+    let onStartPlan: () -> Void
     
     let onDeleteLog: (ExerciseLog) -> Void
     let onDuplicateLog: (ExerciseLog) -> Void
@@ -161,12 +162,23 @@ struct WorkoutExercisesTile: View {
                 Text("Exercises")
                     .font(.headline)
                 Spacer()
+                if WorkoutStatistics.isPlanned(session) {
+                    Label("Plan", systemImage: "checklist")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Button(action: onStartPlan) {
+                        Label("Plan", systemImage: "plus")
+                    }
+                    .accessibilityIdentifier("workout.addPlan")
+                }
                 Button {
                     showingAddExercise = true
                 } label: {
-                    Label("Add Exercise", systemImage: "plus.circle.fill")
+                    Label("Exercise", systemImage: "plus.circle.fill")
                         .foregroundStyle(AppTheme.accentColor)
                 }
+                .accessibilityLabel("Add Exercise")
+                .accessibilityIdentifier("workout.addExercise")
             }
 
             // Group logs by exercise name
@@ -269,7 +281,7 @@ struct WorkoutSessionExerciseRow: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                if session.sourceTemplateID != nil || session.executionStatusRaw == "in_progress" {
+                if WorkoutStatistics.isPlanned(session) {
                     Button {
                         log.isCompleted.toggle()
                         if PersistenceSave.commit(modelContext, action: "save changes") {
