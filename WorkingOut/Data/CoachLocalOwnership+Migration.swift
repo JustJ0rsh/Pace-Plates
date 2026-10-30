@@ -117,6 +117,20 @@ extension CoachLocalOwnership {
         }
     }
 
+    /// Existing restoration journals may contain the old /var-to-/private/var
+    /// relative-path artifact. Accept only that exact asset spelling difference;
+    /// the database and every asset byte must still match the saved checkpoint.
+    static func matchesCheckpoint(_ expected: String, at url: URL) throws -> Bool {
+        let parts = expected.split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 2 else { return false }
+        let actual = try rawCheckpoint(url)
+        guard actual.digest == String(parts[0]) else { return false }
+        if actual.assetDigest == String(parts[1]) { return true }
+        let legacy = try assetFingerprints(url).map { "_SUPPORT" + $0.key + ":" + $0.value }
+            .sorted().joined(separator: "\n")
+        return hash(Data(legacy.utf8)) == String(parts[1])
+    }
+
     private static func rawCheckpoint(_ url: URL, database db: OpaquePointer, phase: String) throws -> RawCheckpoint {
         var statement: OpaquePointer?
         let prepared = sqlite3_prepare_v2(db, "SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name", -1, &statement, nil)
@@ -447,12 +461,16 @@ extension CoachLocalOwnership {
 
     private static func assetFingerprints(_ store: URL) throws -> [String: String] {
         let manager = FileManager.default
-        let support = store.deletingLastPathComponent().appendingPathComponent(".\(store.deletingPathExtension().lastPathComponent)_SUPPORT", isDirectory: true)
-        guard manager.fileExists(atPath: support.path) else { return [:] }
-        let info = try support.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+        let sourceSupport = store.deletingLastPathComponent().appendingPathComponent(".\(store.deletingPathExtension().lastPathComponent)_SUPPORT", isDirectory: true)
+        guard manager.fileExists(atPath: sourceSupport.path) else { return [:] }
+        let info = try sourceSupport.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+        guard info.isDirectory == true, info.isSymbolicLink != true else {
+            throw migrationError("The original data assets could not be inspected safely.")
+        }
+        let support = sourceSupport.resolvingSymlinksInPath().standardizedFileURL
+        let supportPrefix = support.path + "/"
         var enumerationError: Error?
-        guard info.isDirectory == true, info.isSymbolicLink != true,
-              let enumerator = manager.enumerator(at: support, includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey],
+        guard let enumerator = manager.enumerator(at: support, includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey],
                   errorHandler: { _, error in enumerationError = error; return false }) else {
             throw migrationError("The original data assets could not be inspected safely.")
         }
@@ -462,8 +480,12 @@ extension CoachLocalOwnership {
             guard values.isSymbolicLink != true else { throw migrationError("A linked data asset needs manual recovery.") }
             if values.isDirectory == true { continue }
             guard values.isRegularFile == true else { throw migrationError("An unsupported data asset needs manual recovery.") }
-            let relative = String(file.path.dropFirst(support.path.count))
-            let handle = try FileHandle(forReadingFrom: file); defer { try? handle.close() }
+            let canonicalFile = file.resolvingSymlinksInPath().standardizedFileURL
+            guard canonicalFile.path.hasPrefix(supportPrefix) else {
+                throw migrationError("A data asset was outside its storage directory.")
+            }
+            let relative = String(canonicalFile.path.dropFirst(support.path.count))
+            let handle = try FileHandle(forReadingFrom: canonicalFile); defer { try? handle.close() }
             var digest = SHA256()
             while true {
                 try Task.checkCancellation()

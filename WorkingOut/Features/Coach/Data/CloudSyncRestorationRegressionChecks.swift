@@ -2,6 +2,7 @@
 import Foundation
 import SwiftData
 import CoreData
+import CryptoKit
 
 @MainActor
 enum CloudSyncRestorationRegressionChecks {
@@ -30,6 +31,25 @@ enum CloudSyncRestorationRegressionChecks {
                 phase: "verified", checkpoint: checkpoint)
             try CoachLocalOwnership.writeJournal(journal, root: ownership)
             try CoachLocalOwnership.select(selected, legacy: legacy, root: ownership, journal: journal)
+        }
+        func legacyAliasedCheckpoint(_ url: URL) throws -> String {
+            let current = try CoachLocalOwnership.rawCheckpoint(url)
+            let support = url.deletingLastPathComponent()
+                .appendingPathComponent(".\(url.deletingPathExtension().lastPathComponent)_SUPPORT", isDirectory: true)
+                .resolvingSymlinksInPath().standardizedFileURL
+            var rows: [String] = []
+            if let files = FileManager.default.enumerator(at: support, includingPropertiesForKeys: [.isRegularFileKey]) {
+                for case let file as URL in files {
+                    guard try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else { continue }
+                    let relative = "/" + file.resolvingSymlinksInPath().pathComponents
+                        .dropFirst(support.pathComponents.count).joined(separator: "/")
+                    let digest = SHA256.hash(data: try Data(contentsOf: file)).map { String(format: "%02x", $0) }.joined()
+                    rows.append("_SUPPORT" + relative + ":" + digest)
+                }
+            }
+            let assetDigest = SHA256.hash(data: Data(rows.sorted().joined(separator: "\n").utf8))
+                .map { String(format: "%02x", $0) }.joined()
+            return current.digest + ":" + assetDigest
         }
         func checkConfigurations(_ container: ModelContainer, legacy: URL, coach: URL) throws {
             try require(container.configurations.count == 2, "legacy and Coach have distinct configurations")
@@ -138,12 +158,61 @@ enum CloudSyncRestorationRegressionChecks {
             }
             try selectVerified(selected, legacy: legacy, ownership: ownership, checkpoint: originalCheckpoint)
             let selectedCheckpoint = try CoachLocalOwnership.rawCheckpoint(selected).identity
+            if interruption == nil {
+                let alias = root.appendingPathComponent("selected-parent-alias", isDirectory: true)
+                try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: selected.deletingLastPathComponent())
+                let aliased = alias.appendingPathComponent(selected.lastPathComponent)
+                let support = selected.deletingLastPathComponent().appendingPathComponent(".default_SUPPORT", isDirectory: true)
+                try require(FileManager.default.fileExists(atPath: support.path), "alias fixture contains external route assets")
+                try require(try CoachLocalOwnership.rawCheckpoint(aliased).identity == selectedCheckpoint,
+                            "parent aliases preserve the same database and asset checkpoint")
+            }
             if let interruption {
                 var interrupted = false
                 do {
                     _ = try CloudSyncRestoration.prepare(legacyURL: legacy, ownershipRoot: ownership, interruptAfter: interruption)
                 } catch { interrupted = error.localizedDescription.contains("Synthetic interruption") }
                 try require(interrupted, "the \(interruption) restart fixture reaches its injected interruption")
+                if interruption == "installed" {
+                    let journalURL = ownership.appendingPathComponent("iCloudRestoration/restoration.json")
+                    guard var journal = try JSONSerialization.jsonObject(with: Data(contentsOf: journalURL)) as? [String: Any],
+                          let directory = journal["directory"] as? String else {
+                        throw CoachRepositoryError.invalidValue("installed legacy journal fixture unavailable")
+                    }
+                    let coach = ownership.appendingPathComponent("iCloudRestoration/\(directory)/coach/coach.store")
+                    journal["sourceCheckpoint"] = try legacyAliasedCheckpoint(selected)
+                    journal["coachCheckpoint"] = try legacyAliasedCheckpoint(coach)
+                    let legacyHistoryCheckpoint = try legacyAliasedCheckpoint(legacy)
+                    journal["historyCheckpoint"] = legacyHistoryCheckpoint
+                    try JSONSerialization.data(withJSONObject: journal).write(to: journalURL, options: .atomic)
+                    try require(try CoachLocalOwnership.matchesCheckpoint(legacyHistoryCheckpoint, at: legacy),
+                                "the exact legacy alias artifact matches unchanged installed assets")
+                    let forgedDatabase = String(repeating: "0", count: 64) + ":"
+                        + String(legacyHistoryCheckpoint.split(separator: ":", maxSplits: 1)[1])
+                    let forgedMatches = try CoachLocalOwnership.matchesCheckpoint(forgedDatabase, at: legacy)
+                    try require(!forgedMatches,
+                                "legacy asset compatibility never accepts a changed database digest")
+                    let support = legacy.deletingLastPathComponent().appendingPathComponent(".default_SUPPORT", isDirectory: true)
+                    var firstAsset: URL?
+                    if let files = FileManager.default.enumerator(at: support, includingPropertiesForKeys: [.isRegularFileKey]) {
+                        for case let file as URL in files where try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true {
+                            firstAsset = file; break
+                        }
+                    }
+                    guard let firstAsset else { throw CoachRepositoryError.invalidValue("legacy alias asset fixture unavailable") }
+                    let originalBytes = try Data(contentsOf: firstAsset)
+                    var changedBytes = originalBytes; changedBytes.append(0xff)
+                    let changedMatches: Bool
+                    do {
+                        try changedBytes.write(to: firstAsset, options: .atomic)
+                        changedMatches = try CoachLocalOwnership.matchesCheckpoint(legacyHistoryCheckpoint, at: legacy)
+                        try originalBytes.write(to: firstAsset, options: .atomic)
+                    } catch {
+                        try? originalBytes.write(to: firstAsset, options: .atomic)
+                        throw error
+                    }
+                    try require(!changedMatches, "legacy asset compatibility rejects changed asset bytes")
+                }
             }
             let coach = try CloudSyncRestoration.prepare(legacyURL: legacy, ownershipRoot: ownership)
             let historyMetadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: legacy)
@@ -266,6 +335,70 @@ enum CloudSyncRestorationRegressionChecks {
                         "changed \(changedFile) rejection leaves the original legacy store untouched")
             try require(FileManager.default.fileExists(atPath: selected.path),
                         "changed \(changedFile) rejection retains the selected source")
+        }
+
+        // The app sandbox path can change after an update while its selected
+        // UUID directory remains the same. A different selection is not a retry.
+        for replaceSelection in [false, true] {
+            let (legacy, ownership) = try paths("relocated-ownership-" + String(replaceSelection))
+            let weightID = UUID()
+            let legacySchema = Schema(PersistenceController.legacyModelTypes)
+            try autoreleasepool {
+                let original = try ModelContainer(for: legacySchema, configurations: [
+                    ModelConfiguration(schema: legacySchema, url: legacy, cloudKitDatabase: .none)
+                ])
+                original.mainContext.insert(WeightEntry(id: weightID, weight: 80, weightUnit: "kg"))
+                try original.mainContext.save()
+            }
+            let originalCheckpoint = try CoachLocalOwnership.rawCheckpoint(legacy).identity
+            let selected = try CoachLocalOwnership.newStagingStore(root: ownership)
+            try CoachLocalOwnership.copyStore(from: legacy, to: selected)
+            try CoachLocalOwnership.copyAuxiliaryFiles(from: legacy, to: selected)
+            try autoreleasepool {
+                let schema = PersistenceController.coachSchema
+                let local = try ModelContainer(for: schema, configurations: [
+                    ModelConfiguration(CoachPersistence.configurationName, schema: schema, url: selected, cloudKitDatabase: .none)
+                ])
+                let weight = try local.mainContext.fetch(FetchDescriptor<WeightEntry>()).first
+                weight?.weight = 82
+                try local.mainContext.save()
+            }
+            try selectVerified(selected, legacy: legacy, ownership: ownership, checkpoint: originalCheckpoint)
+            let selectedCheckpoint = try CoachLocalOwnership.rawCheckpoint(selected).identity
+            var interrupted = false
+            do {
+                _ = try CloudSyncRestoration.prepare(legacyURL: legacy, ownershipRoot: ownership, interruptAfter: "prepared")
+            } catch { interrupted = error.localizedDescription.contains("Synthetic interruption") }
+            try require(interrupted, "relocation fixture reaches a verified prepared journal")
+            let relocated = ownership.deletingLastPathComponent().appendingPathComponent("updated-sandbox/ownership", isDirectory: true)
+            try CoachLocalOwnership.prepareDirectory(relocated.deletingLastPathComponent())
+            // Model a replacement app container without moving fixture files
+            // that a framework may still retain in this test process.
+            try FileManager.default.copyItem(at: ownership, to: relocated)
+            let retainedSelection = relocated.appendingPathComponent(selected.deletingLastPathComponent().lastPathComponent)
+                .appendingPathComponent("default.store")
+            if replaceSelection {
+                let replacement = try CoachLocalOwnership.newStagingStore(root: relocated)
+                try CoachLocalOwnership.copyStore(from: retainedSelection, to: replacement)
+                try CoachLocalOwnership.copyAuxiliaryFiles(from: retainedSelection, to: replacement)
+                try selectVerified(replacement, legacy: legacy, ownership: relocated, checkpoint: originalCheckpoint)
+                var rejected = false
+                do { _ = try CloudSyncRestoration.prepare(legacyURL: legacy, ownershipRoot: relocated) }
+                catch { rejected = error.localizedDescription.contains("History changed during iCloud recovery") }
+                try require(rejected, "a different selected UUID is rejected even when its copied content matches")
+                try require(try CoachLocalOwnership.rawCheckpoint(legacy).identity == originalCheckpoint,
+                            "rejecting a changed selection leaves the original iCloud store untouched")
+            } else {
+                let coach = try CloudSyncRestoration.prepare(legacyURL: legacy, ownershipRoot: relocated)
+                try require(try CoachLocalOwnership.rawCheckpoint(retainedSelection).identity == selectedCheckpoint,
+                            "resuming under a new sandbox path retains the selected source unchanged")
+                try autoreleasepool {
+                    let restored = try CloudSyncRestoration.makeContainer(legacyURL: legacy, coachURL: coach, cloudKitMode: .none)
+                    let weight = try restored.mainContext.fetch(FetchDescriptor<WeightEntry>()).first
+                    try require(weight?.id == weightID && weight?.weight == 82,
+                                "the same selected UUID resumes after an app-data container relocation")
+                }
+            }
         }
 
         // Replay must create exportable persistent history, while keeping the

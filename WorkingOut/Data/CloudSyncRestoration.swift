@@ -123,22 +123,31 @@ enum CloudSyncRestoration {
             return coachURL
         }
         guard let selected = try CoachLocalOwnership.selectedStoreURL(root: ownershipRoot),
-              selected.standardizedFileURL.path == journal.sourcePath,
-              try CoachLocalOwnership.rawCheckpoint(selected).identity == journal.sourceCheckpoint,
-              try CoachLocalOwnership.rawCheckpoint(coachURL).identity == journal.coachCheckpoint else {
+              sameSelectedStore(selected, recordedPath: journal.sourcePath),
+              try CoachLocalOwnership.matchesCheckpoint(journal.sourceCheckpoint, at: selected),
+              try CoachLocalOwnership.matchesCheckpoint(journal.coachCheckpoint, at: coachURL) else {
             throw failure("History changed during iCloud recovery. The retained copies need review before continuing.")
         }
         if journal.phase != "installing" {
-            guard try CoachLocalOwnership.rawCheckpoint(historyURL).identity == journal.historyCheckpoint else {
+            guard try CoachLocalOwnership.matchesCheckpoint(journal.historyCheckpoint, at: historyURL) else {
                 throw failure("The staged history changed during iCloud recovery.")
             }
         }
         if interruptAfter == "prepared", journal.phase == "prepared" { throw failure("Synthetic interruption after preparation.") }
 
         if journal.phase == "prepared" {
-            let currentLegacy = manager.fileExists(atPath: legacyURL.path)
-                ? try CoachLocalOwnership.rawCheckpoint(legacyURL).identity : nil
-            guard currentLegacy == journal.legacyCheckpoint else {
+            let legacyExists = manager.fileExists(atPath: legacyURL.path)
+            let legacyMatches: Bool
+            if let checkpoint = journal.legacyCheckpoint {
+                if legacyExists {
+                    legacyMatches = try CoachLocalOwnership.matchesCheckpoint(checkpoint, at: legacyURL)
+                } else {
+                    legacyMatches = false
+                }
+            } else {
+                legacyMatches = !legacyExists
+            }
+            guard legacyMatches else {
                 throw failure("The original iCloud history changed while recovery was being prepared.")
             }
             journal.phase = "backingUp"
@@ -159,7 +168,7 @@ enum CloudSyncRestoration {
             guard manager.fileExists(atPath: legacyURL.path), manager.fileExists(atPath: coachURL.path) else {
                 throw failure("The restored history files could not be installed.")
             }
-            guard try CoachLocalOwnership.rawCheckpoint(legacyURL).identity == journal.historyCheckpoint else {
+            guard try CoachLocalOwnership.matchesCheckpoint(journal.historyCheckpoint, at: legacyURL) else {
                 throw failure("The installed history did not match the verified copy.")
             }
             if interruptAfter == "installed" { throw failure("Synthetic interruption after installation.") }
@@ -167,6 +176,20 @@ enum CloudSyncRestoration {
             try write(journal, to: journalURL)
         }
         return coachURL
+    }
+
+    /// iOS can replace the app-data container directory during an update. The
+    /// app-owned selection UUID and file name persist; checkpoints below still
+    /// verify the complete database and assets before resuming installation.
+    private static func sameSelectedStore(_ selected: URL, recordedPath: String) -> Bool {
+        guard recordedPath.hasPrefix("/") else { return false }
+        let recorded = URL(fileURLWithPath: recordedPath).standardizedFileURL
+        guard selected.lastPathComponent == "default.store", recorded.lastPathComponent == "default.store",
+              let selectedID = UUID(uuidString: selected.deletingLastPathComponent().lastPathComponent),
+              let recordedID = UUID(uuidString: recorded.deletingLastPathComponent().lastPathComponent) else {
+            return false
+        }
+        return selectedID == recordedID
     }
 
     /// Schema creation/reduction must finish with an explicitly detached store
