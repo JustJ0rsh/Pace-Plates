@@ -350,6 +350,7 @@ enum CloudSyncRestorationRegressionChecks {
                         && (!allowDeletions || types.contains(.delete)),
                         "replay records insert/update/deletion transactions for CloudKit export")
         }
+        count += try CloudHistoryReplayDuplicateRegressionChecks.run()
         return count
     }
 }

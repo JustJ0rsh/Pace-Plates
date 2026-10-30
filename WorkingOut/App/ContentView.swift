@@ -33,6 +33,8 @@ struct ContentView: View {
             #if DEBUG
             if let runID = launchConfiguration.liveCloudRunID {
                 LiveCloudSyncVerificationView(runID: runID, phase: launchConfiguration.liveCloudPhase)
+            } else if launchConfiguration.isUITest && launchConfiguration.fixtureName == "user_history_restore_checks" {
+                UserHistoryRestorationVerificationView()
             } else if launchConfiguration.usesIsolatedStore && ["storage_integration_checks", "icloud_restoration_checks"].contains(launchConfiguration.fixtureName ?? "") {
                 StorageIntegrationAcceptanceView()
             } else if let error = persistenceController.storageError {

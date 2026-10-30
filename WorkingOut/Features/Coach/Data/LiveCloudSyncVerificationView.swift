@@ -44,6 +44,7 @@ private final class LiveCloudSyncVerificationRunner {
         let exerciseB: UUID
         let exerciseC: UUID
         let nutrition: UUID
+        var remoteExercise: UUID { Self.identifier(runID, "remote-d") }
 
         init(runID: UUID) {
             self.runID = runID
@@ -62,6 +63,7 @@ private final class LiveCloudSyncVerificationRunner {
     }
 
     private struct CloudEvent: Codable {
+        let sequence: Int
         let type: String
         let completed: Bool
         let succeeded: Bool
@@ -72,12 +74,18 @@ private final class LiveCloudSyncVerificationRunner {
     private struct Receipt: Codable {
         let runID: UUID
         let phase: String
+        var harnessRevision = "20261030-r7"
         var status: String
         var error: String?
         var checks: [String: Bool]
         var syntheticServerRecordCount: Int?
+        var syntheticLocalRecordCount: Int?
+        var syntheticLocalLabels: [String]?
+        var waitedImportSequence: Int?
+        var currentSuccessfulImportSequence: Int?
         var updatedAt = Date()
         var action = "starting"
+        var evidence: String?
         var cloudEvents: [CloudEvent] = []
     }
 
@@ -92,6 +100,9 @@ private final class LiveCloudSyncVerificationRunner {
         case schemaRequiresDevelopmentProfile
         case schemaModelUnavailable
         case schemaModelMismatch
+        case syncEventFailed
+        case localSeedRequiresFreshStore
+        case remoteSeedNotImported
         case timedOut
     }
 
@@ -102,6 +113,10 @@ private final class LiveCloudSyncVerificationRunner {
     private var activeContainer: ModelContainer?
     private var schemaContainer: NSPersistentCloudKitContainer?
     private var cloudEventObserver: NSObjectProtocol?
+    private var cloudEventSequence = 0
+    private var successfulExportSequence = 0
+    private var successfulImportSequence = 0
+    private var failedEventSequence = 0
     private var receipt: Receipt
     private(set) var status = "Preparing live iCloud verification…"
 
@@ -112,6 +127,7 @@ private final class LiveCloudSyncVerificationRunner {
     private var originalB: String { prefix + "-B" }
     private var editedA: String { prefix + "-A-edited" }
     private var newC: String { prefix + "-C-new" }
+    private var remoteD: String { prefix + "-D-remote" }
     private var manifestURL: URL { root.appendingPathComponent("manifest.json") }
     private var receiptURL: URL { root.appendingPathComponent("result-" + phase + ".json") }
 
@@ -126,7 +142,7 @@ private final class LiveCloudSyncVerificationRunner {
 
     func run() async {
         do {
-            guard ["schema", "seed", "offline", "restore", "download", "cleanup"].contains(phase) else {
+            guard ["schema", "seed", "local-seed", "seed-download", "offline", "remote-insert", "restore", "download", "cleanup", "cleanup-download"].contains(phase) else {
                 throw VerificationError.invalidPhase
             }
             try CoachLocalOwnership.prepareDirectory(root)
@@ -142,15 +158,19 @@ private final class LiveCloudSyncVerificationRunner {
             switch phase {
             case "schema": try await initializeSchema()
             case "seed": try await seed(manifest)
+            case "local-seed": try await localSeed(manifest)
+            case "seed-download": try await download(manifest, original: true)
             case "offline": try offline(manifest)
+            case "remote-insert": try await remoteInsert(manifest)
             case "restore": try await restore(manifest)
             case "download": try await download(manifest)
             case "cleanup": try await cleanup()
+            case "cleanup-download": try await cleanupDownload()
             default: throw VerificationError.invalidPhase
             }
             receipt.status = "passed"
             receipt.action = "completed"
-            status = "PASS: \(phase)"
+            status = "PASS: \(phase)" + (["seed", "local-seed", "remote-insert", "restore", "cleanup"].contains(phase) ? " (export event only)" : "")
         } catch {
             receipt.status = "failed"
             // External errors can contain record values or identifiers. Persist
@@ -175,7 +195,7 @@ private final class LiveCloudSyncVerificationRunner {
             guard manifest.runID == runID else { throw VerificationError.mismatchedManifest }
             return manifest
         }
-        guard phase == "seed" || phase == "schema" else { throw VerificationError.missingManifest }
+        guard ["seed", "local-seed", "schema"].contains(phase) else { throw VerificationError.missingManifest }
         let manifest = Manifest(runID: runID)
         try JSONEncoder().encode(manifest).write(to: manifestURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         return manifest
@@ -183,6 +203,9 @@ private final class LiveCloudSyncVerificationRunner {
 
     private func writeReceipt() throws {
         receipt.updatedAt = Date()
+        if receipt.waitedImportSequence != nil {
+            receipt.currentSuccessfulImportSequence = successfulImportSequence
+        }
         try JSONEncoder().encode(receipt).write(to: receiptURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
 
@@ -203,6 +226,7 @@ private final class LiveCloudSyncVerificationRunner {
     }
 
     private func record(_ event: NSPersistentCloudKitContainer.Event) {
+        cloudEventSequence += 1
         let type: String
         switch event.type {
         case .setup: type = "Setup"
@@ -212,14 +236,20 @@ private final class LiveCloudSyncVerificationRunner {
         }
         let completed = event.endDate != nil
         let error = event.error.map { "\(($0 as NSError).domain):\(($0 as NSError).code)" }
-        receipt.cloudEvents.append(CloudEvent(type: type.lowercased(), completed: completed,
+        receipt.cloudEvents.append(CloudEvent(sequence: cloudEventSequence, type: type.lowercased(), completed: completed,
                                               succeeded: completed && event.succeeded,
                                               error: error, observedAt: Date()))
         if receipt.cloudEvents.count > 40 { receipt.cloudEvents.removeFirst(receipt.cloudEvents.count - 40) }
         if completed {
             receipt.checks["cloud\(type)Completed"] = true
-            if event.succeeded { receipt.checks["cloud\(type)Succeeded"] = true }
-            else { receipt.checks["cloud\(type)Failed"] = true }
+            if event.succeeded {
+                receipt.checks["cloud\(type)Succeeded"] = true
+                if event.type == .export { successfulExportSequence = cloudEventSequence }
+                if event.type == .import { successfulImportSequence = cloudEventSequence }
+            } else {
+                receipt.checks["cloud\(type)Failed"] = true
+                failedEventSequence = cloudEventSequence
+            }
         }
         try? writeReceipt()
     }
@@ -287,12 +317,13 @@ private final class LiveCloudSyncVerificationRunner {
 
     private func seed(_ manifest: Manifest) async throws {
         receipt.action = "openingSeedStore"
+        let eventSequence = cloudEventSequence
         let container = try CloudSyncRestoration.makeContainer(
             legacyURL: legacyURL, coachURL: root.appendingPathComponent("coach.store"), cloudKitMode: .automatic)
         activeContainer = container
         try recordCloudConfiguration(container, historyURL: legacyURL)
         let context = container.mainContext
-        let existing = Set(try context.fetch(FetchDescriptor<ExerciseDefinition>()).map(\.id))
+        let existing = Set(try context.fetch(FetchDescriptor<ExerciseDefinition>()).filter { $0.name.hasPrefix(prefix) }.map(\.id))
         if !existing.contains(manifest.exerciseA) {
             context.insert(ExerciseDefinition(id: manifest.exerciseA, name: originalA, muscleGroup: "Synthetic", isUserDefined: true))
         }
@@ -303,8 +334,33 @@ private final class LiveCloudSyncVerificationRunner {
         receipt.checks["seedSavedLocally"] = true
         receipt.action = "waitingForSeedExport"
         try writeReceipt()
-        try await waitForServer(expected: [originalA, originalB])
-        receipt.checks["seedReadBackFromServer"] = true
+        try await waitForExport(after: eventSequence)
+        receipt.checks["seedExportEventSucceeded"] = true
+        receipt.evidence = "Successful export event only; seed-download must verify a fresh store."
+    }
+
+    private func localSeed(_ manifest: Manifest) async throws {
+        guard !FileManager.default.fileExists(atPath: legacyURL.path) else {
+            throw VerificationError.localSeedRequiresFreshStore
+        }
+        receipt.action = "savingNeverSyncedLocalSeed"
+        let coachURL = root.appendingPathComponent("coach.store")
+        try autoreleasepool {
+            let local = try CloudSyncRestoration.makeContainer(legacyURL: legacyURL, coachURL: coachURL, cloudKitMode: .none)
+            local.mainContext.insert(ExerciseDefinition(id: manifest.exerciseA, name: originalA, muscleGroup: "Synthetic", isUserDefined: true))
+            local.mainContext.insert(ExerciseDefinition(id: manifest.exerciseB, name: originalB, muscleGroup: "Synthetic", isUserDefined: true))
+            try local.mainContext.save()
+        }
+        receipt.checks["seedSavedBeforeCloudWasEnabled"] = true
+        try writeReceipt()
+        let eventSequence = cloudEventSequence
+        let container = try CloudSyncRestoration.makeContainer(legacyURL: legacyURL, coachURL: coachURL, cloudKitMode: .automatic)
+        activeContainer = container
+        try recordCloudConfiguration(container, historyURL: legacyURL)
+        receipt.action = "waitingForPreviouslyLocalSeedExport"
+        try await waitForExport(after: eventSequence)
+        receipt.checks["previouslyLocalSeedExportEventSucceeded"] = true
+        receipt.evidence = "Rows were saved with CloudKit disabled before enabling it. Export event succeeded; seed-download must verify a fresh store."
     }
 
     private func offline(_ manifest: Manifest) throws {
@@ -322,7 +378,7 @@ private final class LiveCloudSyncVerificationRunner {
                 let source = try ModelContainer(for: schema, configurations: [
                     ModelConfiguration(schema: schema, url: legacyURL, cloudKitDatabase: .none)
                 ])
-                let definitions = try source.mainContext.fetch(FetchDescriptor<ExerciseDefinition>())
+                let definitions = try source.mainContext.fetch(FetchDescriptor<ExerciseDefinition>()).filter { $0.name.hasPrefix(prefix) }
                 guard definitions.contains(where: { $0.id == manifest.exerciseA && $0.name == originalA }),
                       definitions.contains(where: { $0.id == manifest.exerciseB && $0.name == originalB }) else {
                     throw VerificationError.seedNotPresentLocally
@@ -344,7 +400,7 @@ private final class LiveCloudSyncVerificationRunner {
                 ModelConfiguration(CoachPersistence.configurationName, schema: schema, url: selected, cloudKitDatabase: .none)
             ])
             let context = local.mainContext
-            let definitions = try context.fetch(FetchDescriptor<ExerciseDefinition>())
+            let definitions = try context.fetch(FetchDescriptor<ExerciseDefinition>()).filter { $0.name.hasPrefix(prefix) }
             guard let a = definitions.first(where: { $0.id == manifest.exerciseA }) else {
                 throw VerificationError.seedNotPresentLocally
             }
@@ -377,6 +433,7 @@ private final class LiveCloudSyncVerificationRunner {
             throw VerificationError.missingSelectedHistory
         }
         let coachURL = try CloudSyncRestoration.prepare(legacyURL: legacyURL, ownershipRoot: ownershipRoot)
+        let eventSequence = cloudEventSequence
         let container = try CloudSyncRestoration.makeContainer(legacyURL: legacyURL, coachURL: coachURL, cloudKitMode: .automatic)
         activeContainer = container
         try recordCloudConfiguration(container, historyURL: legacyURL)
@@ -386,35 +443,131 @@ private final class LiveCloudSyncVerificationRunner {
         receipt.checks["localCoachDataPreserved"] = true
         receipt.action = "waitingForRestoredExport"
         try writeReceipt()
-        try await waitForServer(expected: [editedA, newC])
-        receipt.checks["editAndInsertionReadBackFromServer"] = true
-        receipt.checks["deletionReadBackFromServer"] = true
-        receipt.checks["noSyntheticServerDuplicates"] = true
+        try await waitForExport(after: eventSequence)
+        receipt.checks["restoredExportEventSucceeded"] = true
+        receipt.evidence = "Successful export event only; download must verify the edited and deleted records in a fresh store."
     }
 
-    private func download(_ manifest: Manifest) async throws {
-        receipt.action = "waitingForFreshImport"
-        let directory = root.appendingPathComponent("download", isDirectory: true)
+    private func remoteInsert(_ manifest: Manifest) async throws {
+        receipt.action = "importingIndependentRemoteClient"
+        // Reuse the independent client that already downloaded the seed.
+        let directory = root.appendingPathComponent("seed-download", isDirectory: true)
         try CoachLocalOwnership.prepareDirectory(directory)
+        let importSequence = cloudEventSequence
+        guard let model = NSManagedObjectModel.makeManagedObjectModel(for: PersistenceController.legacyModelTypes) else {
+            throw VerificationError.schemaModelUnavailable
+        }
+        let container = NSPersistentCloudKitContainer(name: "PaceIndependentPeer", managedObjectModel: model)
+        let description = NSPersistentStoreDescription(url: directory.appendingPathComponent("default.store"))
+        let options = NSPersistentCloudKitContainerOptions(containerIdentifier: "iCloud.com.workingout.jorsh")
+        options.databaseScope = .private
+        description.cloudKitContainerOptions = options
+        description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+        description.shouldAddStoreAsynchronously = true
+        container.persistentStoreDescriptions = [description]
+        schemaContainer = container
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            container.loadPersistentStores { _, error in
+                if let error { continuation.resume(throwing: error) }
+                else { continuation.resume(returning: ()) }
+            }
+        }
+        receipt.checks["independentCoreDataPeer"] = true
+        receipt.checks["historyCloudContainerMatches"] = options.containerIdentifier == "iCloud.com.workingout.jorsh"
+        receipt.waitedImportSequence = importSequence
+        receipt.currentSuccessfulImportSequence = successfulImportSequence
+        receipt.action = "waitingForRemoteImport"
+        try writeReceipt()
+        try await waitForImport(after: importSequence)
+        receipt.action = "remoteImportWaitComplete"
+        try writeReceipt()
+        receipt.action = "creatingRemoteModelContext"
+        try writeReceipt()
+        let context = container.newBackgroundContext()
+        receipt.action = "fetchingRemoteDefinitions"
+        try writeReceipt()
+        let runPrefix = prefix
+        let names: [String] = try await context.perform {
+            let request = NSFetchRequest<NSManagedObject>(entityName: "ExerciseDefinition")
+            request.predicate = NSPredicate(format: "name BEGINSWITH %@", runPrefix)
+            request.returnsObjectsAsFaults = false
+            return try context.fetch(request).compactMap { $0.value(forKey: "name") as? String }
+        }
+        receipt.syntheticLocalRecordCount = names.count
+        receipt.syntheticLocalLabels = names.map { name in
+            if name == originalA { return "A" }
+            if name == originalB { return "B" }
+            if name == editedA { return "A-edited" }
+            if name == newC { return "C" }
+            if name == remoteD { return "D" }
+            return "other-run-record"
+        }.sorted()
+        receipt.action = "remoteDefinitionsFetched"
+        try writeReceipt()
+        guard names.contains(originalA), names.contains(originalB) else {
+            throw VerificationError.remoteSeedNotImported
+        }
+        receipt.checks["remoteClientImportedSeed"] = true
+        if names.contains(remoteD) {
+            receipt.checks["remoteInsertionAlreadyImported"] = true
+            receipt.evidence = "Independent client imported A, B, and the previously exported D. Final download must verify D survives restoration."
+            return
+        }
+        receipt.action = "waitingForRemoteInsertionExport"
+        try writeReceipt()
+        let exportSequence = cloudEventSequence
+        let remoteName = remoteD
+        let remoteID = manifest.remoteExercise
+        try await context.perform {
+            if !names.contains(remoteName) {
+                let definition = NSEntityDescription.insertNewObject(forEntityName: "ExerciseDefinition", into: context)
+                definition.setValue(remoteID as NSUUID, forKey: "id")
+                definition.setValue(remoteName as NSString, forKey: "name")
+                definition.setValue("Synthetic" as NSString, forKey: "muscleGroup")
+                definition.setValue(true as NSNumber, forKey: "isUserDefined")
+            }
+            if context.hasChanges { try context.save() }
+        }
+        receipt.checks["remoteClientSavedIndependentRecord"] = true
+        try await waitForExport(after: exportSequence)
+        receipt.checks["remoteInsertionExportEventSucceeded"] = true
+        receipt.evidence = "Independent client imported the seed and exported D. Final download must verify D survives restoration."
+    }
+
+    private func download(_ manifest: Manifest, original: Bool = false) async throws {
+        receipt.action = "waitingForFreshImport"
+        let directory = root.appendingPathComponent(original ? "seed-download" : "download", isDirectory: true)
+        try CoachLocalOwnership.prepareDirectory(directory)
+        let eventSequence = cloudEventSequence
         let container = try CloudSyncRestoration.makeContainer(
             legacyURL: directory.appendingPathComponent("default.store"),
             coachURL: directory.appendingPathComponent("coach.store"), cloudKitMode: .automatic)
         activeContainer = container
         try recordCloudConfiguration(container, historyURL: directory.appendingPathComponent("default.store"))
         let deadline = Date().addingTimeInterval(180)
+        var expectedNames = original ? Set([originalA, originalB]) : Set([editedA, newC])
+        var expectedIDs = original ? Set([manifest.exerciseA, manifest.exerciseB]) : Set([manifest.exerciseA, manifest.exerciseC])
+        let expectsRemoteInsertion = !original && remoteInsertionPassed()
+        if expectsRemoteInsertion {
+            expectedNames.insert(remoteD)
+            expectedIDs.insert(manifest.remoteExercise)
+        }
         while Date() < deadline {
             try Task.checkCancellation()
+            if failedEventSequence > eventSequence { throw VerificationError.syncEventFailed }
             let context = ModelContext(container)
-            let definitions = try context.fetch(FetchDescriptor<ExerciseDefinition>())
+            let definitions = try context.fetch(FetchDescriptor<ExerciseDefinition>()).filter { $0.name.hasPrefix(prefix) }
                 .filter { $0.name.hasPrefix(prefix) }
             let names = definitions.map(\.name)
             try writeReceipt()
-            if names.count == 2 && Set(names) == Set([editedA, newC])
-                && Set(definitions.map(\.id)) == Set([manifest.exerciseA, manifest.exerciseC]) {
-                receipt.checks["freshStoreDownloadedEditAndInsertion"] = true
-                receipt.checks["freshStoreHasNoDeletedRecord"] = true
+            if successfulImportSequence > eventSequence, names.count == expectedNames.count, Set(names) == expectedNames,
+               Set(definitions.map(\.id)) == expectedIDs {
+                receipt.checks[original ? "freshStoreDownloadedSeedRecords" : "freshStoreDownloadedEditAndInsertion"] = true
+                if !original { receipt.checks["freshStoreHasNoDeletedRecord"] = true }
                 receipt.checks["freshStoreHasNoSyntheticDuplicates"] = true
                 receipt.checks["freshStorePreservesSyntheticIDs"] = true
+                if expectsRemoteInsertion { receipt.checks["independentRemoteRecordPreserved"] = true }
+                receipt.evidence = "Fresh independent store imported the exact expected synthetic names and UUIDs after a successful import event."
                 return
             }
             try await Task.sleep(for: .seconds(2))
@@ -425,25 +578,79 @@ private final class LiveCloudSyncVerificationRunner {
     private func cleanup() async throws {
         receipt.action = "waitingForCleanupExport"
         let coachURL = try CloudSyncRestoration.prepare(legacyURL: legacyURL, ownershipRoot: ownershipRoot)
+        let eventSequence = cloudEventSequence
         let container = try CloudSyncRestoration.makeContainer(legacyURL: legacyURL, coachURL: coachURL, cloudKitMode: .automatic)
         activeContainer = container
+        let context = ModelContext(container)
+        let synthetic = try context.fetch(FetchDescriptor<ExerciseDefinition>()).filter { $0.name.hasPrefix(prefix) }
+        for definition in synthetic { context.delete(definition) }
+        if context.hasChanges { try context.save() }
+        try await waitForExport(after: eventSequence)
+        receipt.checks["cleanupExportEventSucceeded"] = true
+        receipt.checks["onlyRunPrefixedDefinitionsDeleted"] = true
+        receipt.evidence = "Successful export event only; cleanup-download must verify deletion from a fresh store."
+    }
+
+    private func cleanupDownload() async throws {
+        receipt.action = "waitingForFreshCleanupImport"
+        let directory = root.appendingPathComponent("cleanup-download", isDirectory: true)
+        try CoachLocalOwnership.prepareDirectory(directory)
+        let eventSequence = cloudEventSequence
+        let container = try CloudSyncRestoration.makeContainer(
+            legacyURL: directory.appendingPathComponent("default.store"),
+            coachURL: directory.appendingPathComponent("coach.store"), cloudKitMode: .automatic)
+        activeContainer = container
+        try recordCloudConfiguration(container, historyURL: directory.appendingPathComponent("default.store"))
         let deadline = Date().addingTimeInterval(180)
         while Date() < deadline {
             try Task.checkCancellation()
+            if failedEventSequence > eventSequence { throw VerificationError.syncEventFailed }
             let context = ModelContext(container)
-            let synthetic = try context.fetch(FetchDescriptor<ExerciseDefinition>()).filter { $0.name.hasPrefix(prefix) }
-            for definition in synthetic { context.delete(definition) }
-            if context.hasChanges { try context.save() }
-            let names = try await serverNames(deadline: deadline)
-            receipt.syntheticServerRecordCount = names.count
-            if names.isEmpty {
-                receipt.checks["syntheticServerRecordsRemoved"] = true
-                receipt.checks["onlyRunPrefixedDefinitionsDeleted"] = true
+            let remains = try context.fetch(FetchDescriptor<ExerciseDefinition>()).contains { $0.name.hasPrefix(prefix) }
+            try writeReceipt()
+            if successfulImportSequence > eventSequence && !remains {
+                receipt.checks["freshImportCompletedBeforeAbsenceCheck"] = true
+                receipt.checks["freshStoreHasNoSyntheticRecords"] = true
+                receipt.evidence = "Fresh independent store completed import and contains no records from this synthetic run."
                 return
             }
             try await Task.sleep(for: .seconds(2))
         }
         throw VerificationError.timedOut
+    }
+
+    private func waitForExport(after eventSequence: Int) async throws {
+        let deadline = Date().addingTimeInterval(180)
+        while Date() < deadline {
+            try Task.checkCancellation()
+            if failedEventSequence > eventSequence { throw VerificationError.syncEventFailed }
+            if successfulExportSequence > eventSequence { return }
+            try await Task.sleep(for: .seconds(2))
+        }
+        throw VerificationError.timedOut
+    }
+
+    private func waitForImport(after eventSequence: Int) async throws {
+        let deadline = Date().addingTimeInterval(180)
+        while Date() < deadline {
+            try Task.checkCancellation()
+            if failedEventSequence > eventSequence { throw VerificationError.syncEventFailed }
+            if successfulImportSequence > eventSequence { return }
+            try await Task.sleep(for: .seconds(2))
+        }
+        throw VerificationError.timedOut
+    }
+
+    private func remoteInsertionPassed() -> Bool {
+        struct PhaseStatus: Decodable {
+            let runID: UUID
+            let phase: String
+            let status: String
+        }
+        let url = root.appendingPathComponent("result-remote-insert.json")
+        guard let data = try? Data(contentsOf: url),
+              let saved = try? JSONDecoder().decode(PhaseStatus.self, from: data) else { return false }
+        return saved.runID == runID && saved.phase == "remote-insert" && saved.status == "passed"
     }
 
     private func waitForServer(expected: Set<String>) async throws {

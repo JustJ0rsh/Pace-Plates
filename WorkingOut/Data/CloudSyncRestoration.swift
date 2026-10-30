@@ -75,13 +75,7 @@ enum CloudSyncRestoration {
                 try CoachLocalOwnership.copyStore(from: legacyURL, to: baselineURL)
                 try CoachLocalOwnership.copyAuxiliaryFiles(from: legacyURL, to: baselineURL)
             } else {
-                try autoreleasepool {
-                    let schema = Schema(PersistenceController.legacyModelTypes)
-                    let empty = try ModelContainer(for: schema, configurations: [
-                        ModelConfiguration(schema: schema, url: baselineURL, cloudKitDatabase: .none)
-                    ])
-                    try empty.mainContext.save()
-                }
+                try prepareClosedLocalStore(at: baselineURL, modelTypes: PersistenceController.legacyModelTypes)
             }
             try CoachLocalOwnership.copyStore(from: baselineURL, to: historyURL)
             try CoachLocalOwnership.copyAuxiliaryFiles(from: baselineURL, to: historyURL)
@@ -92,14 +86,7 @@ enum CloudSyncRestoration {
             let allowDeletions = selection.version == 2 && selection.checkpoint == legacyCheckpoint
             try CloudHistoryReplay.replay(baselineURL: baselineURL, localSnapshotURL: fullURL,
                                           destinationURL: historyURL, allowDeletions: allowDeletions)
-            try autoreleasepool {
-                let schema = Schema(CoachPersistence.modelTypes)
-                let coach = try ModelContainer(for: schema, configurations: [
-                    ModelConfiguration(CoachPersistence.configurationName, schema: schema,
-                                       url: coachURL, cloudKitDatabase: .none)
-                ])
-                try coach.mainContext.save()
-            }
+            try prepareClosedLocalStore(at: coachURL, modelTypes: CoachPersistence.modelTypes)
             // The two snapshots initially share a Core Data store UUID. Give the
             // Coach copy its own identity so faults resolve to the correct store.
             var metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(
@@ -107,10 +94,11 @@ enum CloudSyncRestoration {
             metadata[NSStoreUUIDKey] = UUID().uuidString
             try NSPersistentStoreCoordinator.setMetadata(metadata, forPersistentStoreOfType: NSSQLiteStoreType, at: coachURL)
             try CloudHistoryReplay.verifyCoachCopy(sourceURL: fullURL, destinationURL: coachURL)
-            try autoreleasepool {
-                let combined = try makeContainer(legacyURL: historyURL, coachURL: coachURL, cloudKitMode: .none)
-                _ = try CoachLocalOwnership.snapshotDigest(combined.mainContext)
-            }
+            // Replay validates every legacy value, relationship and export
+            // transaction; verifyCoachCopy validates the separate Coach graph.
+            // The groups have no cross-store relationships. A SwiftData probe
+            // here can retain open SQLite handles past an autoreleasepool, so
+            // the combined container is opened only after installation.
             guard try CoachLocalOwnership.rawCheckpoint(selected).identity == sourceCheckpoint.identity else {
                 throw failure("The history changed while iCloud recovery was being prepared.")
             }
@@ -179,6 +167,21 @@ enum CloudSyncRestoration {
             try write(journal, to: journalURL)
         }
         return coachURL
+    }
+
+    /// Schema creation/reduction must finish with an explicitly detached store
+    /// before its metadata is changed or its files are moved into place.
+    private static func prepareClosedLocalStore(at url: URL, modelTypes: [any PersistentModel.Type]) throws {
+        guard let model = NSManagedObjectModel.makeManagedObjectModel(for: modelTypes) else {
+            throw failure("The local recovery model could not be prepared.")
+        }
+        let coordinator = NSPersistentStoreCoordinator(managedObjectModel: model)
+        let store = try coordinator.addPersistentStore(
+            ofType: NSSQLiteStoreType, configurationName: nil, at: url,
+            options: [NSPersistentHistoryTrackingKey: true,
+                      NSMigratePersistentStoresAutomaticallyOption: true,
+                      NSInferMappingModelAutomaticallyOption: true])
+        try coordinator.remove(store)
     }
 
     private static func bundleFiles(_ url: URL) -> [URL] {
