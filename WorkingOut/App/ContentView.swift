@@ -23,7 +23,6 @@ struct ContentView: View {
     @State private var presentedWorkoutRecoveryID: UUID?
     @State private var showWorkoutRecoveries = false
     @State private var restoreError: String?
-    @State private var migrationError: String?
     
     // Error handling moved to App level
     // @State private var showImportError: Bool = false
@@ -32,7 +31,9 @@ struct ContentView: View {
     var body: some View {
         Group {
             #if DEBUG
-            if launchConfiguration.usesIsolatedStore && launchConfiguration.fixtureName == "storage_integration_checks" {
+            if let runID = launchConfiguration.liveCloudRunID {
+                LiveCloudSyncVerificationView(runID: runID, phase: launchConfiguration.liveCloudPhase)
+            } else if launchConfiguration.usesIsolatedStore && ["storage_integration_checks", "icloud_restoration_checks"].contains(launchConfiguration.fixtureName ?? "") {
                 StorageIntegrationAcceptanceView()
             } else if let error = persistenceController.storageError {
                 storageRecovery(error)
@@ -55,30 +56,7 @@ struct ContentView: View {
                 .font(.largeTitle)
             Text("Your history needs attention").font(.title.bold())
             Text(error)
-            if persistenceController.needsLegacyMigration {
-                Text("Continue by making and verifying a protected local copy. Your original history is retained. New edits on this device will stay local and will not sync to other devices through the legacy iCloud store.")
-                Text("Existing cloud copies are not removed. Use a deliberate history backup to transfer or recover future local edits. Apple Health and your Photos library remain separate.")
-                    .foregroundStyle(.secondary)
-                if let migrationError { Text(migrationError).foregroundStyle(.red) }
-                Button {
-                    migrationError = nil
-                    Task { @MainActor in
-                        do { try await persistenceController.migrateLegacyHistory() }
-                        catch { migrationError = error.localizedDescription }
-                    }
-                } label: {
-                    HStack {
-                        if persistenceController.isMigratingHistory { ProgressView() }
-                        Text(persistenceController.isMigratingHistory
-                             ? "Verifying your local copy…" : "Copy History and Continue Locally")
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(persistenceController.isMigratingHistory)
-                .accessibilityIdentifier("storage.migrate")
-            } else {
-                Text("Close and reopen the app to retry. Your retained history has not been replaced or deleted.")
-            }
+            Text("Close and reopen the app to retry. Your retained history has not been replaced or deleted.")
         }
         .padding(24)
         .frame(maxWidth: 640)

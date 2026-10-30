@@ -573,7 +573,7 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) {}
             Button("Import") { showImporter = true }
         } message: {
-            Text("Records from the backup are added to this device. Items that already exist here are kept and not overwritten.")
+            Text("Records from the backup are added to your history. Items that already exist here are kept and not overwritten. Workouts, runs, weight, and plans can sync through iCloud when enabled; additional Coach records and photos stay on this device.")
         }
         .alert("Remove Duplicates?", isPresented: $confirmDedup) {
             Button("Cancel", role: .cancel) {}
@@ -588,10 +588,10 @@ struct SettingsView: View {
             let cloud = PersistenceController.shared.isCloudBacked
             let coachLocal = PersistenceController.shared.isCoachLocal
             Text(
-                coachLocal
-                    ? "This removes the current app history and app-owned photos on this device. Any retained pre-Coach history and legacy iCloud records are kept. Apple Health is not changed. This action cannot be undone."
-                    : cloud
-                    ? "This removes Pace & Plates data from this device and the app's iCloud store. It does not delete workouts or measurements from Apple Health. This action cannot be undone."
+                cloud
+                    ? "This removes current app history from this device and syncs its deletion through iCloud when available. Additional Coach records and app-owned photos are removed from this device. Retained recovery copies, Apple Health data, original library photos, and exported backups are kept. This action cannot be undone."
+                    : coachLocal
+                    ? "This removes current app history and app-owned photos from this device. Retained recovery copies, existing iCloud records, Apple Health data, original library photos, and exported backups are kept. This action cannot be undone."
                     : "This removes Pace & Plates data from this device. It does not delete workouts or measurements from Apple Health. This action cannot be undone."
             )
         }
@@ -1177,9 +1177,9 @@ struct SettingsView: View {
     private func deleteAllLocal() {
         do {
             try deleteAllEntities()
-            alertMessage = PersistenceController.shared.isCoachLocal
-                ? "Current app history has been removed. Any retained pre-Coach history and legacy iCloud records are kept. Apple Health was not changed."
-                : "All Pace & Plates data has been removed. Apple Health data was not changed."
+            alertMessage = PersistenceController.shared.isCloudBacked
+                ? "Current app history and app-owned photos have been removed from this device. iCloud deletions will sync when available. Retained recovery copies, Apple Health data, original library photos, and exported backups were kept."
+                : "Current app history has been removed from this device. Retained recovery copies, existing iCloud records, Apple Health data, original library photos, and exported backups were kept."
             showAlert = true
         } catch {
             alertMessage = "Delete failed: \(error.localizedDescription)"

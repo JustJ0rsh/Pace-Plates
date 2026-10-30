@@ -1,0 +1,34 @@
+{
+  "date": "2026-10-30",
+  "branch": "codex/restore-icloud",
+  "base_commit": "2c33bb1f5edcfdfbf62ea303331faeec2f264025",
+  "delivery": "Version 2.5.2 candidate; production schema deployed; live sync verification and binary submission in progress",
+  "storage": {
+    "history": "Original unnamed 14-model CloudKit automatic configuration and original store URL",
+    "coach": "Separate 10-model local-only configuration",
+    "recovery": "Replay local changes into an original-store copy using persistent history; preserve CloudKit identity, retain originals, and journal installation"
+  },
+  "validation": {
+    "synthetic_simulator": {
+      "build": "1",
+      "checks": 92,
+      "coldSourceMigration": "not reached",
+      "result": "passed",
+      "runID": "785EB6C1-F850-4262-8556-84C0F66D91BA",
+      "scope": "Disposable synthetic SwiftData stores; no real integrations",
+      "startedAt": "2026-10-30T21:17:43Z",
+      "suite": "icloud_restoration_checks",
+      "version": "2.5.2"
+    },
+    "debug_build": "passed",
+    "release_simulator_build": "passed",
+    "independent_source_review": "No additional high-severity local data-safety blocker found",
+    "production_schema": "Initialized from the compiled 14-model schema, independently audited, and deployed through CloudKit Console; UI confirmed Changes Deployed"
+  },
+  "unverified": [
+    "Live private iCloud edit/insertion/deletion and fresh-store download",
+    "Production-signed live verification",
+    "TestFlight upload and App Store submission"
+  ],
+  "release_build_log": "/Users/joshua/Library/Developer/XcodeBuildMCP/workspaces/Pace-Plates-f9e8089431af/logs/build_sim_2026-10-30T21-17-52-065Z_pid14254_a8ad13ca.log"
+}

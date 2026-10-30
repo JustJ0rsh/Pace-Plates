@@ -78,7 +78,7 @@ class PersistenceController {
     static var coachSchema: Schema { Schema(legacyModelTypes + CoachPersistence.modelTypes) }
 
     static var addedLocalSchemaTables: Set<String> {
-        Set(CoachPersistence.modelTypes.map { "Z" + String(describing: $0).uppercased() })
+        Set((legacyModelTypes + CoachPersistence.modelTypes).map { "Z" + String(describing: $0).uppercased() })
     }
 
     #if DEBUG
@@ -134,13 +134,41 @@ class PersistenceController {
         return try makeLocalContainer(url: url)
     }
     
-    /// Every live model container is explicitly local. A legacy database is
-    /// detected without opening it; only the reviewed copy path may read it.
-    convenience init(inMemory: Bool = false, cloudKitMode: CloudKitMode = .none) {
+    /// Use the same legacy store and CloudKit discovery as pre-2.5 releases.
+    /// Coach's additional records stay in their own local configuration.
+    convenience init(inMemory: Bool = false, cloudKitMode: CloudKitMode = .automatic) {
         let legacy = ModelConfiguration(schema: Schema(Self.legacyModelTypes), cloudKitDatabase: .none).url
-        self.init(inMemory: inMemory, storageRoot: CoachLocalOwnership.root, legacyStore: legacy)
+        self.init(restoringCloudKit: cloudKitMode, inMemory: inMemory, legacyStore: legacy)
     }
 
+    private init(restoringCloudKit mode: CloudKitMode, inMemory: Bool, legacyStore: URL) {
+        do {
+            if inMemory {
+                container = try Self.makeLocalContainer(inMemory: true)
+                isCoachLocal = true
+                return
+            }
+            let coachURL = try CloudSyncRestoration.prepare(legacyURL: legacyStore,
+                                                          ownershipRoot: CoachLocalOwnership.root)
+            do {
+                container = try CloudSyncRestoration.makeContainer(legacyURL: legacyStore,
+                                                                   coachURL: coachURL, cloudKitMode: mode)
+                isCloudBacked = mode == .automatic
+            } catch {
+                // Match the old offline fallback, keeping the same on-disk history.
+                container = try CloudSyncRestoration.makeContainer(legacyURL: legacyStore,
+                                                                   coachURL: coachURL, cloudKitMode: .none)
+            }
+            isCoachLocal = true
+        } catch {
+            do { container = try Self.makeLocalContainer(inMemory: true) }
+            catch { fatalError("Could not initialize storage recovery screen: \(error)") }
+            storageError = error.localizedDescription
+        }
+    }
+
+    #if DEBUG
+    // Retained only for regression coverage of the 2.5 migration format.
     private init(inMemory: Bool, storageRoot: URL, legacyStore: URL) {
         self.storageRoot = storageRoot
         retainedLegacyStore = legacyStore
@@ -183,7 +211,6 @@ class PersistenceController {
         }
     }
 
-    #if DEBUG
     static func isSyntheticDescendant(_ child: URL, of parent: URL) -> Bool {
         // On iOS, resolving an entirely nonexistent tail may leave /var versus
         // /private/var aliases unresolved. Resolve its existing ancestor first.
@@ -218,7 +245,6 @@ class PersistenceController {
     func migrateForStorageRegression(interruptAfter: String?) async throws {
         try await migrateLegacyHistory(interruptAfter: interruptAfter)
     }
-    #endif
 
     func adoptLocalOwnership() async throws { try await migrateLegacyHistory() }
 
@@ -359,6 +385,8 @@ class PersistenceController {
         isCoachLocal = true
         storageGeneration = UUID()
     }
+
+    #endif
 
     /// The signature changes after imports, cloud merges, library edits, or a
     /// maintenance-version bump. Only successful maintenance advances the gate.

@@ -2139,10 +2139,8 @@ enum DataBackupService {
         try context.save()
     }
 
-    /// Every backup may contain personal history, including pre-Coach formats,
-    /// custom definitions and unknown-provenance records. Never classify a
-    /// restore as cloud-safe from its version or the contents of its Coach graph.
-    /// Explicit local fixture contexts are valid; retired contexts are not.
+    /// Coach records require a local Coach configuration. Legacy records follow
+    /// the history store's iCloud setting; retired contexts remain invalid.
     static func requireLocalRestoreDestination(_ context: ModelContext, generation: Int) throws {
         guard CoachPersistence.isLocal(context) else { throw CoachRepositoryError.localOwnershipRequired }
         guard WearableWorkoutInboxService.isCurrentLocalDataPurgeGeneration(generation, context: context), !Task.isCancelled else {

@@ -207,6 +207,64 @@ extension CoachLocalOwnership {
         }
     }
 
+    /// Verify the full persisted graph after dividing a disposable snapshot.
+    /// Each original table must have one owner; comparing raw columns also
+    /// covers persisted fields that are absent from the portable backup DTOs.
+    @MainActor
+    static func verifySplitColumns(_ checkpoint: RawCheckpoint, legacyURL: URL, coachURL: URL) throws {
+        let modelTables = Set((PersistenceController.legacyModelTypes + CoachPersistence.modelTypes)
+            .map { "Z" + String(describing: $0).uppercased() })
+        try withReadableSource(legacyURL) { legacyDB in
+            try withReadableSource(coachURL) { coachDB in
+                let stores = [
+                    (database: legacyDB, tables: try tableNames(legacyDB), names: try entityNameMap(legacyDB)),
+                    (database: coachDB, tables: try tableNames(coachDB), names: try entityNameMap(coachDB))
+                ]
+                for store in stores {
+                    for table in store.tables.subtracting(checkpoint.schemaTables) {
+                        if knownBookkeepingTables.contains(table) || table.hasPrefix("ANSCK") { continue }
+                        guard modelTables.contains(table), try diagnosticRowCount(store.database, table: table) == 0 else {
+                            throw migrationError("Splitting the history added an unknown or populated app table. The copy was not selected.")
+                        }
+                    }
+                }
+                var records = ""
+                let coachTables = Set(CoachPersistence.modelTypes.map { "Z" + String(describing: $0).uppercased() })
+                for table in checkpoint.columns.keys.sorted() {
+                    // Lightweight migration can retain an empty table for a
+                    // removed entity. Only the configured owner may retain rows.
+                    let ownerIndex = coachTables.contains(table) ? 1 : 0
+                    let owner = stores[ownerIndex]
+                    let other = stores[1 - ownerIndex]
+                    guard owner.tables.contains(table) else {
+                        throw migrationError("An original app table is missing from its split store. The copy was not selected.")
+                    }
+                    if other.tables.contains(table), try diagnosticRowCount(other.database, table: table) != 0 {
+                        throw migrationError("An original app table still has records in both split stores. The copy was not selected.")
+                    }
+                    let row = try tableDigest(owner.database, table: table, columns: nil, entityNames: owner.names)
+                    guard row.columns == checkpoint.columns[table] else {
+                        throw migrationError("Splitting the history changed an original table's columns. The copy was not selected.")
+                    }
+                    records += "\(table.utf8.count):\(table)\(row.digest)"
+                }
+                guard hash(Data(records.utf8)) == checkpoint.recordDigest else {
+                    throw migrationError("Splitting the history changed an original record or relationship. The copy was not selected.")
+                }
+            }
+        }
+        var assets = try assetFingerprints(legacyURL)
+        for (path, digest) in try assetFingerprints(coachURL) {
+            guard assets[path] == nil || assets[path] == digest else {
+                throw migrationError("The split stores contain conflicting external data assets. The copy was not selected.")
+            }
+            assets[path] = digest
+        }
+        guard assetFingerprintDigest(assets) == checkpoint.assetDigest else {
+            throw migrationError("Splitting the history changed an original external data asset. The copy was not selected.")
+        }
+    }
+
     /// Exact framework tables observed changing during the full-schema open.
     /// They remain in the literal pre-copy/source checksum above. None of the
     /// application's columns, row IDs or foreign keys are excluded here.
@@ -380,9 +438,17 @@ extension CoachLocalOwnership {
     private static func hash(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
 
     private static func assetDigest(_ store: URL) throws -> String {
+        assetFingerprintDigest(try assetFingerprints(store))
+    }
+
+    private static func assetFingerprintDigest(_ assets: [String: String]) -> String {
+        hash(Data(assets.map { $0.key + ":" + $0.value }.sorted().joined(separator: "\n").utf8))
+    }
+
+    private static func assetFingerprints(_ store: URL) throws -> [String: String] {
         let manager = FileManager.default
         let support = store.deletingLastPathComponent().appendingPathComponent(".\(store.deletingPathExtension().lastPathComponent)_SUPPORT", isDirectory: true)
-        guard manager.fileExists(atPath: support.path) else { return hash(Data()) }
+        guard manager.fileExists(atPath: support.path) else { return [:] }
         let info = try support.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
         var enumerationError: Error?
         guard info.isDirectory == true, info.isSymbolicLink != true,
@@ -390,7 +456,7 @@ extension CoachLocalOwnership {
                   errorHandler: { _, error in enumerationError = error; return false }) else {
             throw migrationError("The original data assets could not be inspected safely.")
         }
-        var rows: [String] = []
+        var rows: [String: String] = [:]
         for case let file as URL in enumerator {
             let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey])
             guard values.isSymbolicLink != true else { throw migrationError("A linked data asset needs manual recovery.") }
@@ -404,9 +470,9 @@ extension CoachLocalOwnership {
                 let part = try handle.read(upToCount: 1_048_576) ?? Data()
                 if part.isEmpty { break }; digest.update(data: part)
             }
-            rows.append(relative + ":" + digest.finalize().map { String(format: "%02x", $0) }.joined())
+            rows[relative] = digest.finalize().map { String(format: "%02x", $0) }.joined()
         }
         if let enumerationError { throw enumerationError }
-        return hash(Data(rows.sorted().joined(separator: "\n").utf8))
+        return rows
     }
 }
