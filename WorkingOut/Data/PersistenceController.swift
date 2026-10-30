@@ -62,10 +62,14 @@ class PersistenceController {
     private(set) var isCoachLocal: Bool = false
     private(set) var storageError: String?
     private(set) var storageGeneration = UUID()
+    private(set) var isPreparingStorage = false
+    private(set) var cloudRepairPending = false
     private(set) var needsLegacyMigration = false
     private(set) var isMigratingHistory = false
     private var storageRoot = CoachLocalOwnership.root
     private var retainedLegacyStore: URL?
+    private var deferredLegacyStore: URL?
+    private var startupTask: Task<Void, Never>?
 
     static var legacyModelTypes: [any PersistentModel.Type] {
         [ExerciseDefinition.self, WorkoutSession.self, ExerciseLog.self,
@@ -148,6 +152,12 @@ class PersistenceController {
                 isCoachLocal = true
                 return
             }
+            if mode == .automatic, CloudHistoryMissingRecordRepair.isEnabledForLaunch {
+                container = try Self.makeLocalContainer(inMemory: true)
+                deferredLegacyStore = legacyStore
+                isPreparingStorage = true
+                return
+            }
             let coachURL = try CloudSyncRestoration.prepare(legacyURL: legacyStore,
                                                           ownershipRoot: CoachLocalOwnership.root)
             do {
@@ -163,6 +173,52 @@ class PersistenceController {
         } catch {
             do { container = try Self.makeLocalContainer(inMemory: true) }
             catch { fatalError("Could not initialize storage recovery screen: \(error)") }
+            storageError = error.localizedDescription
+        }
+    }
+
+    /// One process-wide task owns preflight storage. View-task cancellation or
+    /// multiple windows must not open another coordinator for the same files.
+    func prepareStorageIfNeeded() async {
+        guard isPreparingStorage else { return }
+        if let startupTask { await startupTask.value; return }
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.finishDeferredStartup()
+        }
+        startupTask = task
+        await task.value
+    }
+
+    private func finishDeferredStartup() async {
+        defer {
+            deferredLegacyStore = nil
+            isPreparingStorage = false
+        }
+        guard let legacyStore = deferredLegacyStore else { return }
+        do {
+            let coachURL = try CloudSyncRestoration.prepare(legacyURL: legacyStore,
+                                                          ownershipRoot: CoachLocalOwnership.root)
+            let report = try await CloudHistoryMissingRecordRepair.preflight(legacyURL: legacyStore)
+            cloudRepairPending = report.pendingReason != nil || report.unmappedPending > 0
+                || !report.allMappedRecordsPresent
+            let restored: ModelContainer
+            do {
+                restored = try CloudSyncRestoration.makeContainer(legacyURL: legacyStore,
+                                                                  coachURL: coachURL, cloudKitMode: .automatic)
+                isCloudBacked = true
+            } catch {
+                restored = try CloudSyncRestoration.makeContainer(legacyURL: legacyStore,
+                                                                  coachURL: coachURL, cloudKitMode: .none)
+                isCloudBacked = false
+            }
+            let placeholder = container
+            container = restored
+            WearableWorkoutInboxService.retireLocalStore(placeholder)
+            isCoachLocal = true
+            storageError = nil
+            storageGeneration = UUID()
+        } catch {
             storageError = error.localizedDescription
         }
     }

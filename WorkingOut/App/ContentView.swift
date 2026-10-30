@@ -30,8 +30,19 @@ struct ContentView: View {
 
     var body: some View {
         Group {
+            if persistenceController.isPreparingStorage {
+                VStack(spacing: 16) {
+                    ProgressView()
+                    Text("Restoring iCloud history…")
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(AppTheme.backgroundColor)
+                .accessibilityIdentifier("storage.preparing")
+            } else {
             #if DEBUG
-            if ProcessInfo.processInfo.environment["PP_USER_CLOUD_VERIFY"] == "1", persistenceController.storageError == nil {
+            if launchConfiguration.isUITest && ["user_record_map_probe", "active_record_map_probe"].contains(launchConfiguration.fixtureName ?? "") {
+                ActualHistoryCloudVerificationView()
+            } else if ProcessInfo.processInfo.environment["PP_USER_CLOUD_VERIFY"] == "1", persistenceController.storageError == nil {
                 ActualHistoryCloudVerificationView()
             } else if let runID = launchConfiguration.liveCloudRunID {
                 LiveCloudSyncVerificationView(runID: runID, phase: launchConfiguration.liveCloudPhase)
@@ -51,7 +62,9 @@ struct ContentView: View {
                 mainContent
             }
             #endif
+            }
         }
+        .task { await persistenceController.prepareStorageIfNeeded() }
     }
 
     private func storageRecovery(_ error: String) -> some View {

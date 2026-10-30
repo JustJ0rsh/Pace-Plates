@@ -484,6 +484,7 @@ enum CloudSyncRestorationRegressionChecks {
                         "replay records insert/update/deletion transactions for CloudKit export")
         }
         count += try CloudHistoryReplayDuplicateRegressionChecks.run()
+        count += try CloudHistoryCloudRecordEncoderRegressionChecks.run()
         return count
     }
 }
