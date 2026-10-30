@@ -31,7 +31,9 @@ struct ContentView: View {
     var body: some View {
         Group {
             #if DEBUG
-            if let runID = launchConfiguration.liveCloudRunID {
+            if ProcessInfo.processInfo.environment["PP_USER_CLOUD_VERIFY"] == "1", persistenceController.storageError == nil {
+                ActualHistoryCloudVerificationView()
+            } else if let runID = launchConfiguration.liveCloudRunID {
                 LiveCloudSyncVerificationView(runID: runID, phase: launchConfiguration.liveCloudPhase)
             } else if launchConfiguration.isUITest && launchConfiguration.fixtureName == "user_history_restore_checks" {
                 UserHistoryRestorationVerificationView()
