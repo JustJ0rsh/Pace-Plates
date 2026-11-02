@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-02",
+  "version": "2.5.3",
+  "build": "8",
+  "source_commit": "9d93d55",
+  "source_branch": "codex/nonblocking-history-patch",
+  "pull_request": "https://github.com/JustJ0rsh/Pace-Plates/pull/11",
+  "archive": {
+    "result": "succeeded",
+    "xcode": "27.2 (27B52)",
+    "sdk": "iphoneos27.2",
+    "minimum_ios": "26.0",
+    "bundle_identifier": "Jorsh.WorkingOut",
+    "executable_sha256": "bbdd65e0f844790ab44eee48bb91f362add087f07c67c6a1f0440cf1845035fa",
+    "non_exempt_encryption": false
+  },
+  "verification": {
+    "prior_report": "Docs/Coach/nonblocking-history-validation-2026-11-02.json",
+    "source_hashes": "Verified unchanged before archiving; only project version and calendar-file whitespace changed after the recorded checks. Calendar checks reran successfully (12 assertions).",
+    "pre_update_device_backup": "Private local backup of app and shared-group Application Support; all 44 SQLite databases passed quick_check. Backup contents are excluded from Git.",
+    "physical_install": "Actual signed archive installed as an in-place update on Eagle 1.",
+    "physical_startup": "Pending: iOS refused launch because Eagle 1 was locked. No physical startup or post-update history-preservation success is claimed."
+  },
+  "delivery": {
+    "git": "Committed and pushed to release branch; PR 11 open. Main not merged.",
+    "app_store_upload": "xcodebuild export succeeded; App Store Connect shows 2.5.3 build 8 processing.",
+    "app_store_version": "2.5.3 Prepare for Submission; release and reviewer notes saved and verified after refresh.",
+    "app_review": "Not submitted; awaiting physical startup verification.",
+    "release_setting": "Automatically release after approval; all users immediately, inherited setting."
+  },
+  "limits": [
+    "Live iCloud convergence and unreadable-history recovery were not verified on the physical device.",
+    "Continued local history preserves original files but does not automatically recover or merge older history.",
+    "The successful archive used stable Xcode 27.2; simulator behavior checks in the prior report used the previously installed toolchain and iOS 26.5.",
+    "Existing compiler and SwiftUI navigation frame warnings remain."
+  ]
+}
