@@ -37,7 +37,14 @@
     "app_store_version": "2.5.3 Waiting for Review; release notes and reviewer notes saved.",
     "app_review": "Submitted successfully; App Store Connect shows 2.5.3 Waiting for Review and 1 Item Submitted. Build 8 confirmed on submitted version.",
     "release_setting": "Verified after submission: Automatically release after approval; all users immediately. Approval and public availability are not yet claimed.",
-    "submission_url": "https://appstoreconnect.apple.com/apps/6754347082/distribution/reviewsubmissions/details/fc89b2b2-3df2-4d9a-8f32-0a00b81ae764"
+    "submission_url": "https://appstoreconnect.apple.com/apps/6754347082/distribution/reviewsubmissions/details/fc89b2b2-3df2-4d9a-8f32-0a00b81ae764",
+    "expedited_review": {
+      "requested_at": "2026-11-02T16:52:00+02:00",
+      "platform": "iOS",
+      "app": "Pace & Plates",
+      "result": "Accepted. Apple confirmation: We\u2019ll expedite review for Pace & Plates.",
+      "resubmission_notice": "Apple says a rejected resubmission will automatically return to the expedited queue; another expedite request is unnecessary."
+    }
   },
   "limits": [
     "Live multi-device iCloud convergence and unreadable-history recovery were not verified on the physical device.",
