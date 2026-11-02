@@ -29,9 +29,73 @@ enum CloudHistoryMissingRecordRepair {
         var allMappedRecordsPresent = false
         // Existence readback is not a payload or relationship round-trip test.
         var payloadVerified = false
+        var awaitingInitialDownload: Bool? = nil
+        var restoreReview: CloudHistoryRestoreReview? = nil
+        var restoreAttempted: Bool? = nil
         var pendingReason: String?
         var errorDomain: String?
         var errorCode: Int?
+        /// Distinguishes an account/startup probe from a record repair that started.
+        var failureStage: String? = nil
+
+        var requiresRepair: Bool {
+            if awaitingInitialDownload == true { return false }
+            if unmappedPending > 0 || pendingReason == "unmappedLocalRecords" || pendingReason == "restoreReviewRequired" {
+                return true
+            }
+            // A failed account or startup probe has not left record recovery unfinished.
+            if failureStage == "account" || failureStage == "startup" { return false }
+            if pendingReason != nil { return true }
+            return !allMappedRecordsPresent
+        }
+
+        var userAttention: String? {
+            guard let pendingReason else { return nil }
+            switch pendingReason {
+            case "accountUnavailable", "accountChanged":
+                return "Pace & Plates could not use this iCloud account. In Settings, check the Apple Account and turn on iCloud for Pace & Plates."
+            case "setupTimedOut", "initialImportTimedOut":
+                return "iCloud did not finish opening history. Leave Pace & Plates open for a minute, then reopen it."
+            case "budgetExpired":
+                return "The iCloud check ran out of time. Leave Pace & Plates open, then reopen it to continue. Your history on this phone was kept."
+            case "storeIdentityUnavailable":
+                return "The history file on this phone could not be identified, so the iCloud check stopped. Your files were kept."
+            case "cancelled":
+                return "The iCloud check was interrupted. Reopen Pace & Plates and leave it in the foreground until it finishes."
+            case "receiptUnavailable":
+                return "The on-phone recovery receipt could not be read, so the iCloud check stopped. Your history was kept."
+            case "unmappedLocalRecords":
+                return "Some history on this phone does not have an iCloud record yet. Reopen Pace & Plates and leave it open so recovery can continue."
+            case "restoreReviewRequired":
+                return nil
+            case "operationFailed":
+                return operationAttention
+            default:
+                return "iCloud recovery did not finish (\(pendingReason)). History on this phone was kept."
+            }
+        }
+
+        private var operationAttention: String {
+            guard errorDomain == CKErrorDomain, let errorCode else {
+                return "The iCloud check failed before recovery could finish. History on this phone was kept."
+            }
+            switch errorCode {
+            case CKError.permissionFailure.rawValue, CKError.notAuthenticated.rawValue,
+                 CKError.missingEntitlement.rawValue, CKError.managedAccountRestricted.rawValue:
+                return "iCloud is signed in, but Pace & Plates cannot use it yet. Open Settings, tap your Apple Account, then iCloud, and turn on Pace & Plates."
+            case CKError.networkUnavailable.rawValue, CKError.networkFailure.rawValue,
+                 CKError.serviceUnavailable.rawValue, CKError.requestRateLimited.rawValue,
+                 CKError.zoneBusy.rawValue, CKError.serverResponseLost.rawValue:
+                return "Pace & Plates could not reach iCloud. Check the connection, then reopen the app and leave it open."
+            default:
+                return "The iCloud check failed (CloudKit error \(errorCode)). History on this phone was kept."
+            }
+        }
+
+        var accountIsUnavailable: Bool {
+            ["accountUnavailable", "accountChanged"].contains(pendingReason ?? "")
+                || (errorDomain == CKErrorDomain && errorCode == CKError.notAuthenticated.rawValue)
+        }
     }
 
     private struct Inventory: Sendable {
@@ -59,6 +123,89 @@ enum CloudHistoryMissingRecordRepair {
         let verifiedAt: Date
         let report: Report
     }
+
+    struct LocalVerification {
+        let report: Report
+        let accountFingerprint: String
+    }
+
+    private struct RepairRequest: Codable {
+        let version: Int
+        let storeIdentifier: String
+    }
+
+    /// Store identity and the saved verification are enough to skip the startup
+    /// gate. The account fingerprint is confirmed after the app is open.
+    static func verifiedLocally(legacyURL: URL, stateRoot: URL? = nil, hasPendingWork: Bool? = nil) -> LocalVerification? {
+        guard FileManager.default.fileExists(atPath: legacyURL.path) else { return nil }
+        let root = stateRoot ?? repairStateRoot
+        guard let identifier = try? readStoreIdentifier(at: legacyURL) else { return nil }
+        if let request = repairRequest(in: root), request.storeIdentifier == identifier { return nil }
+        let pending = hasPendingWork ?? ((try? CloudHistoryRestorePlanStore().hasPendingWork()) ?? true)
+        guard !pending else { return nil }
+        guard let data = try? Data(contentsOf: root.appendingPathComponent("completed.json")),
+              let completion = try? JSONDecoder().decode(Completion.self, from: data),
+              completion.version == 1, completion.storeIdentifier == identifier,
+              completion.report.allMappedRecordsPresent, completion.report.unmappedPending == 0,
+              completion.report.pendingReason == nil, completion.report.accountUnchanged else { return nil }
+        return LocalVerification(report: completion.report, accountFingerprint: completion.accountFingerprint)
+    }
+
+    static func markRepairRequired(legacyURL: URL) {
+        guard let identifier = try? readStoreIdentifier(at: legacyURL) else { return }
+        let request = RepairRequest(version: 1, storeIdentifier: identifier)
+        persistRepairRequest(request)
+    }
+
+    /// nil means the account could not be checked. The saved verification stays in force.
+    static func accountMatchesVerifiedFingerprint(_ expected: String) async -> Bool? {
+        do {
+            let account = try await accountIdentity(CKContainer(identifier: containerIdentifier),
+                                                    deadline: Date().addingTimeInterval(45))
+            return fingerprint(for: account) == expected
+        } catch {
+            return nil
+        }
+    }
+
+    private static var repairStateRoot: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("CloudHistoryRepair", isDirectory: true)
+    }
+
+    private static func fingerprint(for account: CKRecord.ID) -> String {
+        SHA256.hash(data: Data((account.zoneID.ownerName + ":" + account.recordName).utf8))
+            .map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func repairRequest(in root: URL) -> RepairRequest? {
+        guard let data = try? Data(contentsOf: root.appendingPathComponent("repair-next-launch.json")),
+              let request = try? JSONDecoder().decode(RepairRequest.self, from: data),
+              request.version == 1 else { return nil }
+        return request
+    }
+
+    private static func persistRepairRequest(_ request: RepairRequest) {
+        let root = repairStateRoot
+        do {
+            try CoachLocalOwnership.prepareDirectory(root)
+            try JSONEncoder().encode(request).write(to: root.appendingPathComponent("repair-next-launch.json"), options: .atomic)
+        } catch { }
+    }
+
+    private static func clearRepairRequest(in root: URL) {
+        try? FileManager.default.removeItem(at: root.appendingPathComponent("repair-next-launch.json"))
+    }
+
+    #if DEBUG
+    static func writeVerifiedReceiptForTesting(storeIdentifier: String, accountFingerprint: String,
+                                               report: Report, stateRoot: URL) throws {
+        let completion = Completion(version: 1, storeIdentifier: storeIdentifier,
+                                    accountFingerprint: accountFingerprint, verifiedAt: Date(), report: report)
+        try FileManager.default.createDirectory(at: stateRoot, withIntermediateDirectories: true)
+        try JSONEncoder().encode(completion).write(to: stateRoot.appendingPathComponent("completed.json"), options: .atomic)
+    }
+    #endif
 
     @MainActor
     private final class SetupObserver {
@@ -104,46 +251,52 @@ enum CloudHistoryMissingRecordRepair {
     /// every store before returning control to the normal SwiftData initializer.
     static func preflight(legacyURL: URL) async throws -> Report {
         let deadline = Date().addingTimeInterval(180)
+        guard FileManager.default.fileExists(atPath: legacyURL.path) else {
+            var report = Report()
+            report.awaitingInitialDownload = true
+            return report
+        }
         let accountContainer = CKContainer(identifier: containerIdentifier)
         var report = Report()
         let account: CKRecord.ID
         let storeIdentifier: String
         let accountFingerprint: String
-        let stateRoot = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("CloudHistoryRepair", isDirectory: true)
+        let stateRoot = repairStateRoot
         let completionURL = stateRoot.appendingPathComponent("completed.json")
+        let restoreStore = CloudHistoryRestorePlanStore()
 
         do {
             try Task.checkCancellation()
-            guard FileManager.default.fileExists(atPath: legacyURL.path) else {
-                report.allMappedRecordsPresent = true
-                return report
-            }
             account = try await accountIdentity(accountContainer, deadline: deadline)
-            let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: legacyURL)
-            guard let identifier = metadata[NSStoreUUIDKey] as? String else { throw RepairError.storeIdentityUnavailable }
+            let identifier = try readStoreIdentifier(at: legacyURL)
             storeIdentifier = identifier
-            accountFingerprint = SHA256.hash(data: Data((account.zoneID.ownerName + ":" + account.recordName).utf8))
-                .map { String(format: "%02x", $0) }.joined()
-            if let data = try? Data(contentsOf: completionURL),
+            accountFingerprint = fingerprint(for: account)
+            if try !restoreStore.hasPendingWork(), let data = try? Data(contentsOf: completionURL),
                let completion = try? JSONDecoder().decode(Completion.self, from: data),
                completion.version == 1, completion.storeIdentifier == identifier,
                completion.accountFingerprint == accountFingerprint,
                completion.report.allMappedRecordsPresent, completion.report.unmappedPending == 0,
                completion.report.pendingReason == nil {
+                clearRepairRequest(in: stateRoot)
                 return completion.report
             }
         } catch {
-            return pendingReport(report, error: error)
+            let failed = pendingReport(report, error: error, stage: "account")
+            persist(failed, to: stateRoot)
+            return failed
         }
 
         guard let model = NSManagedObjectModel.makeManagedObjectModel(for: PersistenceController.coachSchema) else {
-            return pendingReport(report, error: RepairError.modelUnavailable)
+            let failed = pendingReport(report, error: RepairError.modelUnavailable, stage: "startup")
+            persist(failed, to: stateRoot)
+            return failed
         }
         let historyNames = Set(PersistenceController.legacyModelTypes.map { String(describing: $0) })
         let historyEntities = model.entities.filter { historyNames.contains($0.name ?? "") }
         guard historyEntities.count == historyNames.count else {
-            return pendingReport(report, error: RepairError.modelUnavailable)
+            let failed = pendingReport(report, error: RepairError.modelUnavailable, stage: "startup")
+            persist(failed, to: stateRoot)
+            return failed
         }
         model.setEntities(historyEntities, forConfigurationName: "History")
         let observer = SetupObserver()
@@ -161,6 +314,7 @@ enum CloudHistoryMissingRecordRepair {
         container.persistentStoreDescriptions = [description]
         var context: NSManagedObjectContext?
         let initialImportDeadline = min(deadline, Date().addingTimeInterval(30))
+        var stage = "startup"
         do {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 container.loadPersistentStores { _, error in
@@ -175,11 +329,13 @@ enum CloudHistoryMissingRecordRepair {
             try await requireSameAccount(account, container: accountContainer, deadline: deadline)
             let repairContext = container.newBackgroundContext()
             context = repairContext
+            stage = "repair"
             report = try await repair(container: container, context: repairContext, accountContainer: accountContainer,
-                                      deadline: deadline)
+                                      deadline: deadline, restoreStore: restoreStore)
+            stage = "startup"
             try await requireSameAccount(account, container: accountContainer, deadline: deadline)
         } catch {
-            report = pendingReport(report, error: error)
+            report = pendingReport(report, error: error, stage: stage)
         }
         observer.stop()
         if let context { context.performAndWait { context.reset() } }
@@ -196,22 +352,45 @@ enum CloudHistoryMissingRecordRepair {
 
         // Receipt/marker failure does not block access to otherwise healthy local
         // history. No completion marker is written until server presence verifies.
+        persist(report, to: stateRoot)
         do {
-            try CoachLocalOwnership.prepareDirectory(stateRoot)
-            try JSONEncoder().encode(report).write(to: stateRoot.appendingPathComponent("last-result.json"), options: .atomic)
             if report.accountUnchanged, report.allMappedRecordsPresent,
                report.unmappedPending == 0, report.pendingReason == nil {
                 let completion = Completion(version: 1, storeIdentifier: storeIdentifier,
                                             accountFingerprint: accountFingerprint, verifiedAt: Date(), report: report)
+                try CoachLocalOwnership.prepareDirectory(stateRoot)
                 try JSONEncoder().encode(completion).write(to: completionURL, options: .atomic)
+                clearRepairRequest(in: stateRoot)
             }
         } catch { }
         return report
     }
 
-    private static func pendingReport(_ original: Report, error: Error) -> Report {
+    private static func persist(_ report: Report, to stateRoot: URL) {
+        do {
+            try CoachLocalOwnership.prepareDirectory(stateRoot)
+            try JSONEncoder().encode(report).write(to: stateRoot.appendingPathComponent("last-result.json"), options: .atomic)
+        } catch { }
+    }
+
+    /// Metadata can expose the store UUID as a string or as UUID. The sqlite
+    /// metadata row is the same identity the restoration journal records.
+    private static func readStoreIdentifier(at url: URL) throws -> String {
+        if let metadata = try? NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: url) {
+            if let value = metadata[NSStoreUUIDKey] as? String, let uuid = UUID(uuidString: value) {
+                return uuid.uuidString
+            }
+            if let uuid = metadata[NSStoreUUIDKey] as? UUID { return uuid.uuidString }
+        }
+        do { return try CoachLocalOwnership.persistentStoreID(at: url) }
+        catch { throw RepairError.storeIdentityUnavailable }
+    }
+
+    private static func pendingReport(_ original: Report, error: Error, stage: String) -> Report {
         var report = original
+        report.failureStage = stage
         if let failure = error as? RepairError { report.pendingReason = failure.rawValue }
+        else if let failure = error as? CloudHistoryRestoreError { report.pendingReason = failure.rawValue }
         else if error is CancellationError { report.pendingReason = "cancelled" }
         else {
             report.pendingReason = "operationFailed"
@@ -229,6 +408,7 @@ enum CloudHistoryMissingRecordRepair {
         context: NSManagedObjectContext,
         accountContainer: CKContainer = CKContainer(identifier: "iCloud.com.workingout.jorsh"),
         deadline: Date = Date().addingTimeInterval(180),
+        restoreStore: (any CloudHistoryRestorePlanStoring)? = nil,
         onProgress: (@MainActor (Report) -> Void)? = nil
     ) async throws -> Report {
         var report = Report()
@@ -277,95 +457,107 @@ enum CloudHistoryMissingRecordRepair {
             guard Set(mappedIDs).count == mappedIDs.count else { throw RepairError.ambiguousRecordMapping }
             onProgress?(report)
 
-            let initial = try await presence(of: mappedIDs, in: database, deadline: deadline) { partial in
-                report.existingServerRecords = partial.present.count
-                report.initiallyMissingRecords = partial.missing.count
-                onProgress?(report)
-            }
-            report.existingServerRecords = initial.present.count
-            report.initiallyMissingRecords = initial.missing.count
-            onProgress?(report)
             let objectsByRecord = Dictionary(uniqueKeysWithValues: inventory.recordIDs.map { ($0.value, $0.key) })
-            let missing = ordered(initial.missing)
-
-            if !missing.isEmpty {
-                let directory = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("CloudHistoryMissingRecordRepair-" + UUID().uuidString, isDirectory: true)
-                try CoachLocalOwnership.prepareDirectory(directory)
-                assetDirectory = directory
-                for batch in batches(missing) {
+            guard let storeID = container.persistentStoreCoordinator.persistentStores.first?.identifier else {
+                throw RepairError.storeIdentityUnavailable
+            }
+            let accountFingerprint = SHA256.hash(data: Data((account.zoneID.ownerName + ":" + account.recordName).utf8))
+                .map { String(format: "%02x", $0) }.joined()
+            let identity = CloudHistoryRestoreWorkflow.Identity(store: storeID, account: accountFingerprint)
+            let directory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("CloudHistoryMissingRecordRepair-" + UUID().uuidString, isDirectory: true)
+            try CoachLocalOwnership.prepareDirectory(directory)
+            assetDirectory = directory
+            let dependencies = CloudHistoryRestoreWorkflow.Dependencies(
+                identity: {
                     try checkBudget(deadline)
                     try await requireSameAccount(account, container: accountContainer, deadline: deadline)
-                    let records = try await context.perform {
-                        guard !context.hasChanges else { throw RepairError.pendingLocalChanges }
-                        let objectIDs = try batch.map { recordID -> NSManagedObjectID in
-                            guard let objectID = objectsByRecord[recordID] else { throw RepairError.sourceChanged }
-                            return objectID
-                        }
-                        let currentMapping = container.recordIDs(for: objectIDs)
-                        let missingObjects = try batch.map { recordID -> NSManagedObject in
-                            guard let objectID = objectsByRecord[recordID], currentMapping[objectID] == recordID else {
-                                throw RepairError.sourceChanged
+                    guard container.persistentStoreCoordinator.persistentStores.first?.identifier == storeID else {
+                        throw CloudHistoryRestoreError.accountOrStoreChanged
+                    }
+                    return identity
+                }, records: { requested in
+                    var payloads: [CKRecord] = []
+                    for batch in batches(requested) {
+                        try checkBudget(deadline)
+                        let records = try await context.perform {
+                            guard !context.hasChanges else { throw RepairError.pendingLocalChanges }
+                            let objectIDs = try batch.map { recordID -> NSManagedObjectID in
+                                guard let objectID = objectsByRecord[recordID] else { throw RepairError.sourceChanged }
+                                return objectID
                             }
-                            let object = try context.existingObject(with: objectID)
-                            guard !object.isDeleted else { throw RepairError.sourceChanged }
-                            return object
+                            let currentMapping = container.recordIDs(for: objectIDs)
+                            let missingObjects = try batch.map { recordID -> NSManagedObject in
+                                guard let objectID = objectsByRecord[recordID], currentMapping[objectID] == recordID else {
+                                    throw RepairError.sourceChanged
+                                }
+                                let object = try context.existingObject(with: objectID)
+                                guard !object.isDeleted else { throw RepairError.sourceChanged }
+                                return object
+                            }
+                            return try CloudHistoryCloudRecordEncoder.materializedRecords(
+                                objects: missingObjects, container: container,
+                                recordIDs: inventory.recordIDs, assetDirectory: directory)
                         }
-                        return try CloudHistoryCloudRecordEncoder.materializedRecords(
-                            objects: missingObjects, container: container,
-                            recordIDs: inventory.recordIDs, assetDirectory: directory)
+                        payloads.append(contentsOf: records)
                     }
-                    guard records.count == batch.count,
-                          Set(records.map(\.recordID)) == Set(batch),
-                          records.allSatisfy({ $0.recordChangeTag == nil }) else {
-                        throw RepairError.invalidEncodedRecords
-                    }
+                    return payloads
+                }, presence: { requested in
+                    try await presence(of: requested, in: database, deadline: deadline).present
+                }, save: { records in
                     try checkBudget(deadline)
                     try await requireSameAccount(account, container: accountContainer, deadline: deadline)
                     let configuration = try networkConfiguration(deadline: deadline)
+                    report.restoreAttempted = true
                     let result = try await database.configuredWith(configuration: configuration) { configured in
                         try await configured.modifyRecords(
                             saving: records, deleting: [], savePolicy: .ifServerRecordUnchanged, atomically: false)
                     }
                     guard result.deleteResults.isEmpty else { throw RepairError.unexpectedDeleteResult }
-                    for recordID in batch {
+                    var savedRecords: [CKRecord.ID: CloudHistoryRestoreWorkflow.Saved] = [:]
+                    for recordID in records.map(\.recordID) {
                         guard let saved = result.saveResults[recordID] else { throw RepairError.incompleteSaveResponse }
                         switch saved {
-                        case .success: report.createdRecords += 1
+                        case .success:
+                            savedRecords[recordID] = .created
+                            report.createdRecords += 1
                         case .failure(let error):
                             // Another client may create the record after the
                             // absence check. Its version is deliberately kept.
                             if let cloudError = error as? CKError, cloudError.code == .serverRecordChanged {
+                                savedRecords[recordID] = .concurrentExisting
                                 report.concurrentExistingRecords += 1
                             } else {
                                 throw error
                             }
                         }
                     }
-                    onProgress?(report)
-                }
-            }
-
-            try checkBudget(deadline)
-            try await requireSameAccount(account, container: accountContainer, deadline: deadline)
-            let verified = try await presence(of: mappedIDs, in: database, deadline: deadline) { partial in
-                report.verifiedServerRecords = partial.present.count
-                report.stillMissingRecords = partial.missing.count
-                onProgress?(report)
-            }
+                    return savedRecords
+                }, check: { try checkBudget(deadline) })
+            let outcome = try await CloudHistoryRestoreWorkflow.run(localIDs: mappedIDs, identity: identity,
+                store: restoreStore ?? CloudHistoryRestorePlanStore(), dependencies: dependencies)
             try await requireSameAccount(account, container: accountContainer, deadline: deadline)
             report.accountUnchanged = true
-            report.verifiedServerRecords = verified.present.count
-            report.stillMissingRecords = verified.missing.count
-            report.allMappedRecordsPresent = verified.missing.isEmpty
+            report.existingServerRecords = outcome.initialPresent
+            report.initiallyMissingRecords = outcome.initialMissing
+            report.createdRecords = outcome.created
+            report.concurrentExistingRecords = outcome.concurrentExisting
+            report.verifiedServerRecords = outcome.present
+            report.stillMissingRecords = outcome.missing
+            report.restoreReview = outcome.review
+            report.restoreAttempted = outcome.attempted
+            report.allMappedRecordsPresent = outcome.missing == 0
             if report.unmappedPending > 0 { report.pendingReason = "unmappedLocalRecords" }
-            else if !verified.missing.isEmpty { report.pendingReason = "serverRecordsStillMissing" }
+            else if outcome.review != nil { report.pendingReason = "restoreReviewRequired" }
         } catch is CancellationError {
             throw CancellationError()
         } catch {
             // Neither CKError descriptions nor userInfo are safe receipts: they
             // can include private record IDs, values, and access-bearing URLs.
+            report.failureStage = "repair"
             if let failure = error as? RepairError {
+                report.pendingReason = failure.rawValue
+            } else if let failure = error as? CloudHistoryRestoreError {
                 report.pendingReason = failure.rawValue
             } else {
                 report.pendingReason = "operationFailed"
@@ -378,14 +570,40 @@ enum CloudHistoryMissingRecordRepair {
     }
 
     private static func accountIdentity(_ container: CKContainer, deadline: Date) async throws -> CKRecord.ID {
-        try checkBudget(deadline)
-        let configuration = try networkConfiguration(deadline: deadline)
-        let identity = try await container.configuredWith(configuration: configuration) { configured in
-            guard try await configured.accountStatus() == .available else { throw RepairError.accountUnavailable }
-            return try await configured.userRecordID()
+        var lastError: Error = RepairError.accountUnavailable
+        for attempt in 0..<2 {
+            do {
+                try checkBudget(deadline)
+                // The first identity lookup after launch can outlive the short
+                // operation timeout while CloudKit starts. A second try uses the
+                // connection that attempt already opened.
+                let configuration = try networkConfiguration(deadline: deadline, requestTimeout: 30, resourceTimeout: 60)
+                let identity = try await container.configuredWith(configuration: configuration) { configured in
+                    guard try await configured.accountStatus() == .available else { throw RepairError.accountUnavailable }
+                    return try await configured.userRecordID()
+                }
+                try checkBudget(deadline)
+                return identity
+            } catch {
+                lastError = error
+                if attempt == 0, shouldRetryAccountProbe(error), Date() < deadline {
+                    try await Task.sleep(for: .seconds(2))
+                    continue
+                }
+                throw error
+            }
         }
-        try checkBudget(deadline)
-        return identity
+        throw lastError
+    }
+
+    private static func shouldRetryAccountProbe(_ error: Error) -> Bool {
+        guard let cloud = error as? CKError else { return false }
+        switch cloud.code {
+        case .networkUnavailable, .networkFailure, .serviceUnavailable, .requestRateLimited, .zoneBusy, .serverResponseLost:
+            return true
+        default:
+            return false
+        }
     }
 
     private static func requireSameAccount(_ expected: CKRecord.ID, container: CKContainer, deadline: Date) async throws {
@@ -426,13 +644,14 @@ enum CloudHistoryMissingRecordRepair {
         guard Date() < deadline else { throw RepairError.budgetExpired }
     }
 
-    private static func networkConfiguration(deadline: Date) throws -> CKOperation.Configuration {
+    private static func networkConfiguration(deadline: Date, requestTimeout: TimeInterval = 15,
+                                             resourceTimeout: TimeInterval = 30) throws -> CKOperation.Configuration {
         try checkBudget(deadline)
         let remaining = deadline.timeIntervalSinceNow
         let configuration = CKOperation.Configuration()
         configuration.qualityOfService = .userInitiated
-        configuration.timeoutIntervalForRequest = min(15, remaining)
-        configuration.timeoutIntervalForResource = min(30, remaining)
+        configuration.timeoutIntervalForRequest = min(requestTimeout, remaining)
+        configuration.timeoutIntervalForResource = min(resourceTimeout, remaining)
         return configuration
     }
 

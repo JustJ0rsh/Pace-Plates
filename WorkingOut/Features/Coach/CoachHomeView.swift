@@ -92,15 +92,15 @@ struct CoachTodayView: View {
                 .accessibilityIdentifier("coach.plan.current")
                 Text("Today").font(.headline)
                 if projection.today.isEmpty { Text("No workouts planned today. Your next sessions are below.").foregroundStyle(.secondary) }
-                ForEach(projection.today) { CoachSessionRow(session: $0) }
+                ForEach(projection.today, id: \.persistentModelID) { CoachSessionRow(session: $0) }
                 if !projection.overdue.isEmpty {
                     DisclosureGroup("Overdue · \(projection.overdue.count)") {
-                        ForEach(projection.overdue) { CoachSessionRow(session: $0) }
+                        ForEach(projection.overdue, id: \.persistentModelID) { CoachSessionRow(session: $0) }
                     }
                 }
                 if !compact, !projection.next.isEmpty {
                     Text("Coming up").font(.headline)
-                    ForEach(projection.next) { CoachSessionRow(session: $0, showDate: true) }
+                    ForEach(projection.next, id: \.persistentModelID) { CoachSessionRow(session: $0, showDate: true) }
                 }
             } else if let savedPlan = plans.first(where: { $0.currentRevisionID != nil && ["draft", "paused"].contains($0.status) }) {
                 VStack(alignment: .leading, spacing: 12) {

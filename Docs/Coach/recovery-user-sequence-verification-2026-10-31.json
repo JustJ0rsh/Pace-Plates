@@ -1,0 +1,232 @@
+{
+  "date": "2026-10-31",
+  "assessment": "The historical upgrade/retry and both reinstall branches are now explicitly checked offline, plus all 24 populated model types. Recovery is not fully cleared: duplicate-UUID backup restore fails, automatic repair has a remote-deletion race, profile units may be lost after reinstall, and affected-account Production cloud restoration is unverified.",
+  "target": {
+    "branch": "codex/recovery-hardening-20261031",
+    "base_commit": "fc6a0406388ccac1142d39a0618d5950cbd14acb",
+    "source_files_matching_prior_validation": 44,
+    "changed_verified_sources": [],
+    "delivery": "Earlier implementation remains local, uncommitted and unpublished. This follow-up audit changes no app code or live data."
+  },
+  "reported_user_sequence": [
+    {
+      "step": "Existing old-version history",
+      "verification": "Generated a disposable store from actual 11 historical @Model definitions at commit 9657448, including original WeightEntry columns and no TrainingPlan/PlannedSession/Cardio inbox models. This is representative schema evidence, not the affected user database."
+    },
+    {
+      "step": "Update to 2.5 and press Copy History and Continue Locally repeatedly",
+      "verification": "Actual 2c33bb1 verifier reproduced unrecognized-table rejection on the same staged copy. The source checkpoint remained unchanged, the journal remained, and no selection committed."
+    },
+    {
+      "step": "Install the follow-up 2.5.1 update and retry",
+      "verification": "Same staged copy, actual 2.5.1 table allowlist: unrecognized-column rejection reproduced. Source and failed staged state remained available."
+    },
+    {
+      "step": "Recover without deleting the installation",
+      "verification": "Current production prepare/makeContainer path on the same source/stage passed with CloudKit disabled: all original SQL columns, five IDs, values, relationship, flags and 2.5 MB route bytes preserved."
+    },
+    {
+      "step": "Delete and reinstall",
+      "verification": "Separate-process simulation removed only generated app-local data, journals and assets. Fresh current container opened with zero old local rows. This simulates loss of local installation files; it is not an OS uninstall or a live cloud restore.",
+      "additional_verification": "Also tested fresh 2.5.1 before updating to 2.5.2. New post-reinstall records survived the update, while the pre-delete record IDs stayed absent."
+    },
+    {
+      "step": "2.5.2 opens but old history is absent",
+      "verification": "Locally reproduced the open-but-empty outcome. Missing-store status correctly stays waiting for download. Existing Production records absent locally require normal CloudKit importing; that operation has not been verified for this affected account."
+    }
+  ],
+  "new_validation": {
+    "historical_same_store_chain": {
+      "result": "passed",
+      "log": "/tmp/pace-full-upgrade-chain.mr2irR/chain.log",
+      "provenance": "/tmp/pace-full-upgrade-chain.mr2irR/provenance.json",
+      "platform": "macOS 26.6.2; Xcode 27.0 (27A5218g); Swift 6.4; arm64 host processes"
+    },
+    "simulated_reinstall": {
+      "result": "passed_with_expected_local_data_absence",
+      "log": "/tmp/pace-full-upgrade-chain.mr2irR/reinstall.log"
+    },
+    "all_24_nonempty_model_restoration": {
+      "result": "passed",
+      "exit_code": 0,
+      "model_types": 24,
+      "physical_rows": 27,
+      "log": "/tmp/pace-all24-recovery-audit-20261031/results.log",
+      "receipt": "/tmp/pace-all24-recovery-audit-20261031/receipt.json",
+      "source_manifest": "/tmp/pace-all24-recovery-audit-20261031/source-manifest.json",
+      "verified": [
+        "Every persisted native attribute independent of backup DTOs",
+        "To-one and to-many physical relationship targets, including same-UUID distinct rows",
+        "Large 2.5 MB external blobs and separately retained synthetic JPEG bytes",
+        "Production prepare, actual SwiftData makeContainer, disk reopen and repeated prepare",
+        "Original source checkpoint unchanged; actual backup-exclusion flag true"
+      ],
+      "harness_isolation": "Copied sources redirect Coach directory and export temporary-directory getters into generated paths. Inert compile adapters are listed in the source manifest. Restoration/replay/model, capture/export/archive-encoding and restore-validation logic remain unchanged.",
+      "limitations": [
+        "Current compiled schema and storage-level generic synthetic payloads, not complete historical released schema fixtures or all UI actions",
+        "No real account, CloudKit, deletion/reinstallation, Keychain or OS/device backup test",
+        "Post-SwiftData native verification uses disposable copies for metadata migration; actual restored stores are not opened for mutation by native verifier",
+        "Progress photo file separately compared byte-for-byte; restore occurs within same synthetic container, not external saved-file restore"
+      ],
+      "exploratory_failures": [
+        "Generic UUID and NSArray reflection included object memory addresses; canonicalized to stable values",
+        "Readonly standalone native model mismatch after SwiftData opened combined configuration; subsequent verification uses independent SQLite+asset snapshots with native metadata migration",
+        "Optional separate backup fixture aborted due mixed SwiftData configurations in one process after all24 assertions had passed; add-on removed for clean isolated all24 run",
+        "First separate backup-only attempt safely rejected shared FileManager temp path before export; macOS ignores TMPDIR. Dedicated copied-source path getter adapters fixed isolation; prior guard receipt/log retained."
+      ],
+      "final_binary_clean_rerun_exit_code": 0
+    },
+    "reinstall_251_then_252": {
+      "result": "passed_with_expected_original_data_absence",
+      "log": "/tmp/pace-full-upgrade-chain.mr2irR/reinstall-251-before-252.log",
+      "provenance": "/tmp/pace-full-upgrade-chain.mr2irR/provenance.json",
+      "steps": [
+        "Actual historical 11-model source; reproduce 2.5 table failure and same-stage 2.5.1 column failure",
+        "Remove only generated application files between processes",
+        "Use 2.5.1 production fresh-start helpers: newStagingStore, full local 24-model container, save, select(v1); legacy file absent",
+        "Save two new synthetic entries after reinstall: 88 kg weight and 150 g protein Coach nutrition",
+        "Run current 2.5.2 prepare/makeContainer with CloudKit disabled"
+      ],
+      "verified": "Both new post-reinstall UUIDs and values survived. All five original pre-delete identities remained absent. Opens successfully does not mean old history recovered.",
+      "limit": "Generated-directory deletion and host processes, not iOS App Store install/uninstall or any cloud account."
+    },
+    "portable_duplicate_backup": {
+      "result": "reproduced_export_success_restore_rejection",
+      "harness_exit_code": 0,
+      "log": "/tmp/pace-all24-recovery-audit-20261031/backup-only-results.log",
+      "receipt": "/tmp/pace-all24-recovery-audit-20261031/backup-only-receipt.json",
+      "scope": "Actual export/capture/archive-read/restore-validation logic; host fixture, not native Files UI or completed restore. This reproduces a product failure, not a passing round-trip."
+    }
+  },
+  "findings": [
+    {
+      "severity": "P1",
+      "status": "unresolved_source_traced_race_not_live_reproduced",
+      "issue": "Automatic missing-record repair can recreate an intentionally deleted record from a stale local snapshot.",
+      "trigger": "Another device deletes after preflight initial import/local snapshot, before the presence lookup and conditional create.",
+      "evidence": [
+        "WorkingOut/Data/CloudHistoryMissingRecordRepair.swift:268 pins the local generation",
+        "WorkingOut/Data/CloudHistoryMissingRecordRepair.swift:421 treats unknownItem as missing",
+        "WorkingOut/Data/CloudHistoryMissingRecordRepair.swift:325 materializes a fresh local copy",
+        "WorkingOut/Data/CloudHistoryMissingRecordRepair.swift:339 saves it without a change tag; no server-deletion-history check distinguishes intentional deletion from failed upload"
+      ],
+      "scope": "Separate from this user reported missing history; not proven to have occurred in their account.",
+      "needed": "Resolve the distinction between a failed historical upload and intentional remote deletion, and verify with a controlled cross-client test before declaring automatic repair safe.",
+      "present_in_base_release_source": "fc6a040 has the same pinned-inventory, unknownItem classification and nil-change-tag conditional creation logic; this risk predates the local hardening changes."
+    },
+    {
+      "severity": "recovery_boundary",
+      "issue": "Deletion removes the only recoverable copy of data that never reached cloud or an external export.",
+      "evidence": [
+        "2.5 selected all-24-model history under CoachLocalOwnership.root; prepareDirectory marks root and staging directories excluded from automatic backup (CoachLocalOwnership.swift:24-35,66-70).",
+        "The retained original legacy source can be stale for later 2.5 local-only edits.",
+        "2.5.2 splits 14 legacy cloud models from 10 local-only Coach models (CloudSyncRestoration.swift:24-32).",
+        "CoachPersistence.protect excludes Coach files/photos from backup (CoachPersistence.swift:20-27)."
+      ],
+      "scope": "A surviving external .pacebackup/export or other intact installation may help. Ordinary device/iCloud Backup cannot be assumed to include these excluded files. Cloud-only recovery cannot recreate the 10 Coach models/photos."
+    },
+    {
+      "severity": "verification_gap",
+      "issue": "Affected user Production cloud inventory and complete downloaded payload have not been verified.",
+      "evidence": [
+        "Previous live cloud proof concerns the owner account on Eagle 1; it does not establish this other user records exist.",
+        "Previous actual-history download validation compared record IDs/multiplicities, not every downloaded value/relationship/asset.",
+        "Simulator fixtures and current host tests use cloudKitDatabase none."
+      ],
+      "scope": "Same iCloud account, account access, surviving server records, successful normal import, and data presentation must be checked on the affected installation or a separately authorized representative Production test."
+    },
+    {
+      "severity": "recovery_boundary",
+      "issue": "HealthKit reimport is not a full history recovery substitute.",
+      "evidence": [
+        "HealthKit anchors are independent of CloudKit download tokens.",
+        "Automatic strength/cardio inbox scans begin 30 days back; original workout details, manual history and Coach data cannot be inferred from those scans."
+      ]
+    },
+    {
+      "severity": "P2",
+      "status": "conditional_source_traced_not_device_reproduced",
+      "issue": "A profile retained in Keychain can lose its numeric units when app preferences reset on reinstall.",
+      "trigger": "Keychain profile survives deletion while UserDefaults unit preferences are removed.",
+      "evidence": [
+        "UserProfileStore.swift:15-16 keeps unit preferences in UserDefaults; Profile at22-30 stores numeric height/target weight without unit tags.",
+        "UserProfileStore.swift:94-97 loads the Keychain values unchanged.",
+        "ContentView.swift:14-17 defaults new preferences to imperial/in/lbs.",
+        "ContentView.swift:273-279 treats a retained basic profile as onboarding-complete.",
+        "TutorialView.swift:29-53 combines retained profile numbers with newly defaulted unit preferences."
+      ],
+      "example": "A retained 180 cm / 80 kg profile may be interpreted as 180 in / 80 lb.",
+      "scope": "Keychain retention across uninstall was not tested or assumed guaranteed. This profile is outside the 24-model store test and does not explain the reported database error."
+    },
+    {
+      "severity": "P1",
+      "status": "runtime_reproduced_unresolved",
+      "issue": "A portable backup can export distinct stored rows with the same UUID, then reject that backup during restore.",
+      "evidence": [
+        "DataBackupService.capture maps all physical rows into UUID-based DTOs (DataBackupService.swift:306-382).",
+        "exportAll at571-586 and CoachHistoryArchive.export encode without validateForRestore.",
+        "BackupFile.validateForRestore atCoachBackupGraph.swift:862-880 rejects duplicate exercise/workout/set/run/weight/etc UUIDs.",
+        "Relationship DTOs use UUID references (DataBackupService.swift:361-362), which cannot distinguish equal-UUID physical records."
+      ],
+      "scope": "The restored native history deliberately preserves such distinct rows, so storage recovery success does not establish export-and-restore success. This is not evidence the affected user has duplicate IDs.",
+      "needed": "Provide archive identities and relationship references that can round-trip duplicate UUID rows, with a saved-file round-trip regression.",
+      "runtime_evidence": {
+        "export": "Actual DataBackupService.exportAll succeeded with both distinct same-UUID run rows in a 1404-byte archive.",
+        "archive_read": "Actual CoachHistoryArchive.prepareImport succeeded.",
+        "restore_validation": "Actual BackupFile.validateForRestore rejected the exported file: Duplicate run identity. No records were restored.",
+        "isolation": "One full-schema generated store, separate host process, no cloud. Copied sources redirect temporary-directory getters so no unrelated export cleanup runs."
+      }
+    },
+    {
+      "severity": "recovery_flow_gap",
+      "status": "source_confirmed",
+      "issue": "Preparation failures leave a gated history screen with relaunch guidance but no export or continue-local action.",
+      "evidence": [
+        "ContentView.swift:70-85 offers only error and close/reopen guidance.",
+        "PersistenceController.finishDeferredStartup catches prepare failures and exposes storageError before normal views can open.",
+        "openCloudHistory local fallback only applies to container-opening failure after preparation."
+      ],
+      "scope": "Unknown schema, missing selected files or corrupt/tampered history should remain protected. This gap does not mean it is safe to bypass verification or that the representative historical case still fails.",
+      "needed": "A safe retained-file export/diagnostic recovery route and clear retain-the-installation guidance would help avoid another deletion-based workaround."
+    }
+  ],
+  "remaining_verification": [
+    "Signed current Release in Production with cloud records already present and no local store",
+    "Actual OS uninstall/reinstall lifecycle with disposable Production test records and a full attribute/relationship/asset manifest",
+    "Same iCloud account and the affected user surviving record inventory",
+    "Concurrent remote deletion during automatic repair, cross-client updates and conflict behavior",
+    "Affected user iOS version, original schema, exact missing data categories and any surviving export/other installation remain unknown",
+    "Keychain-retained profile with erased preferences, including metric/imperial height and target-weight units, through actual reinstall"
+  ],
+  "primary_references": [
+    {
+      "url": "https://developer.apple.com/documentation/technotes/tn3163-understanding-the-synchronization-of-nspersistentcloudkitcontainer",
+      "supports": "Core Data reads local records; cloud importing/exporting is system-scheduled and may be deferred."
+    },
+    {
+      "url": "https://developer.apple.com/library/archive/documentation/DataManagement/Conceptual/CloudKitQuickStart/TestingYourApp/TestingYourApp.html",
+      "supports": "Development and Production record environments differ; TestFlight/App Store use Production."
+    },
+    {
+      "url": "https://developer.apple.com/documentation/cloudkit/ckerror/code/unknownitem",
+      "supports": "unknownItem identifies nonexistence, not the reason the record is absent."
+    },
+    {
+      "url": "https://developer.apple.com/documentation/cloudkit/ckdatabase/recordzonechange/deletion/recordid",
+      "supports": "Record-zone changes expose deleted record identifiers."
+    }
+  ],
+  "artifact_sha256": {
+    "/tmp/pace-full-upgrade-chain.mr2irR/chain.log": "30ba40e553feacddf5eeb86be4f14292534659bb8c6bd03431a41a5a2e10b322",
+    "/tmp/pace-full-upgrade-chain.mr2irR/reinstall.log": "c25b57a5e487edb22638b2efeebad46cf4399425820edcea2e500888d598f25d",
+    "/tmp/pace-full-upgrade-chain.mr2irR/reinstall-251-before-252.log": "4ce686e47ec61eb1ab3f3481fc2f83e6205ff1ff854a99cd8e2be5814a4521cb",
+    "/tmp/pace-full-upgrade-chain.mr2irR/provenance.json": "616fb6526e5fe7329c9fa78447da3a61ccc2677175638402cba5a41cb766275a",
+    "/tmp/pace-all24-recovery-audit-20261031/results.log": "0c95aea78e979a8716393486594b166b55077976680750d1acb20358b8b4695a",
+    "/tmp/pace-all24-recovery-audit-20261031/receipt.json": "b66f5c3bb8d085ca5f09a15be82a9afea0aa02bd226fefa3f561b65d7cf2e2dc",
+    "/tmp/pace-all24-recovery-audit-20261031/source-manifest.json": "d2e365dc90feee4272a49d7061ea82f353df8b90edd63582875c3c096520dfd9",
+    "/tmp/pace-all24-recovery-audit-20261031/backup-only-results.log": "ac0b1b662157b55b8ebb7ea53c3a0b6787973e031e3981518ce9532d909fb9c1",
+    "/tmp/pace-all24-recovery-audit-20261031/backup-only-receipt.json": "a3342c7f3d42e4bac7165a7e28ecbe54683a4e0951e7dfbf7cab7acbdc4e372f"
+  },
+  "historical_report_notice": "This records the earlier investigation state. The three subsequently identified backup, remote-deletion repair, and profile-unit issues are addressed by the linked fix validation report; affected-account Production recovery remains unverified.",
+  "resolved_by": "Docs/Coach/recovery-three-fixes-validation-2026-10-31.json"
+}

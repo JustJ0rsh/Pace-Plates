@@ -16,6 +16,9 @@ enum CloudSyncRestoration {
         let historyCheckpoint: String
         let coachCheckpoint: String
         var phase: String
+        var ownershipPath: String? = nil
+        var historyStoreID: String? = nil
+        var coachStoreID: String? = nil
     }
 
     static func makeContainer(legacyURL: URL, coachURL: URL,
@@ -29,6 +32,42 @@ enum CloudSyncRestoration {
         return try ModelContainer(for: PersistenceController.coachSchema, configurations: [history, coach])
     }
 
+    /// A finished install can open immediately. Anything else still has file
+    /// work to do and should keep the startup gate up.
+    static func isReady(legacyURL: URL, ownershipRoot: URL) -> Bool {
+        let root = ownershipRoot.appendingPathComponent("iCloudRestoration", isDirectory: true)
+        let journalURL = root.appendingPathComponent("restoration.json")
+        guard let data = try? Data(contentsOf: journalURL),
+              let journal = try? JSONDecoder().decode(Journal.self, from: data),
+              journal.version == 2, journal.phase == "complete",
+              UUID(uuidString: journal.directory) != nil else { return false }
+        let stage = root.appendingPathComponent(journal.directory, isDirectory: true)
+        let coachURL = stage.appendingPathComponent("coach/coach.store")
+        guard FileManager.default.fileExists(atPath: legacyURL.path),
+              FileManager.default.fileExists(atPath: coachURL.path) else { return false }
+        guard let expectedHistoryID = try? journal.historyStoreID
+                ?? CoachLocalOwnership.persistentStoreID(at: stage.appendingPathComponent("baseline/default.store")),
+              (try? CoachLocalOwnership.persistentStoreID(at: legacyURL)) == expectedHistoryID else { return false }
+        if let expectedCoachID = journal.coachStoreID {
+            guard (try? CoachLocalOwnership.persistentStoreID(at: coachURL)) == expectedCoachID else { return false }
+        }
+        return true
+    }
+
+    static let unverifiedJournalNotice = "iCloud recovery records could not be verified. Your history on this phone is open, and the original files were kept."
+
+    /// The journal cannot be read or fails its format check, and the history file
+    /// already on this phone is a regular store. A relaunch cannot repair that
+    /// journal. In-progress installs, location mismatches, and identity mismatches
+    /// stay on the strict path.
+    static func opensDespiteUnverifiedJournal(legacyURL: URL, ownershipRoot: URL) -> Bool {
+        let journalURL = ownershipRoot
+            .appendingPathComponent("iCloudRestoration", isDirectory: true)
+            .appendingPathComponent("restoration.json")
+        guard case .untrusted = classifyJournal(at: journalURL) else { return false }
+        return readableStore(legacyURL)
+    }
+
     static func prepare(legacyURL: URL, ownershipRoot: URL,
                         interruptAfter: String? = nil) throws -> URL {
         let manager = FileManager.default
@@ -39,14 +78,24 @@ enum CloudSyncRestoration {
         defer { withExtendedLifetime(lock) {} }
 
         var journal: Journal
-        if manager.fileExists(atPath: journalURL.path) {
-            journal = try JSONDecoder().decode(Journal.self, from: Data(contentsOf: journalURL))
-            guard journal.version == 2, UUID(uuidString: journal.directory) != nil,
-                  journal.legacyPath == legacyURL.standardizedFileURL.path,
-                  ["prepared", "backingUp", "installing", "complete"].contains(journal.phase) else {
+        switch classifyJournal(at: journalURL) {
+        case .untrusted(let decoded):
+            // Reopening retries this same check, so it cannot clear the screen.
+            // Open the history file already on this phone and leave the journal as it is.
+            guard readableStore(legacyURL) else {
                 throw failure("The iCloud recovery journal could not be verified.")
             }
-        } else {
+            return try coachStoreForUnverifiedJournal(decoded, root: root)
+        case .trusted(let existing):
+            journal = existing
+            if journal.legacyPath != legacyURL.standardizedFileURL.path {
+                guard let recordedRoot = recordedOwnershipRoot(journal),
+                      CoachLocalOwnership.sameRelocatedLegacyStore(legacyURL, root: ownershipRoot,
+                          recordedPath: journal.legacyPath, recordedRoot: recordedRoot) else {
+                    throw failure("The iCloud recovery journal does not identify this history location.")
+                }
+            }
+        case .absent:
             guard let selected = try CoachLocalOwnership.selectedStoreURL(root: ownershipRoot) else {
                 // A failed/unstarted 2.5 migration must not block the old iCloud store.
                 return root.appendingPathComponent("coach.store")
@@ -109,7 +158,9 @@ enum CloudSyncRestoration {
                               legacyCheckpoint: legacyCheckpoint,
                               historyCheckpoint: try CoachLocalOwnership.rawCheckpoint(historyURL).identity,
                               coachCheckpoint: try CoachLocalOwnership.rawCheckpoint(coachURL).identity,
-                              phase: "prepared")
+                              phase: "prepared", ownershipPath: ownershipRoot.standardizedFileURL.path,
+                              historyStoreID: try CoachLocalOwnership.persistentStoreID(at: historyURL),
+                              coachStoreID: try CoachLocalOwnership.persistentStoreID(at: coachURL))
             try write(journal, to: journalURL)
         }
 
@@ -119,6 +170,24 @@ enum CloudSyncRestoration {
         if journal.phase == "complete" {
             guard manager.fileExists(atPath: legacyURL.path), manager.fileExists(atPath: coachURL.path) else {
                 throw failure("A restored history file is missing.")
+            }
+            // Records may have changed after completion, so bind later launches
+            // to stable store identities rather than a stale content checkpoint.
+            // Older journals retain the baseline from which history was copied.
+            let expectedHistoryID = try journal.historyStoreID
+                ?? CoachLocalOwnership.persistentStoreID(at: stage.appendingPathComponent("baseline/default.store"))
+            guard try CoachLocalOwnership.persistentStoreID(at: legacyURL) == expectedHistoryID else {
+                throw failure("The restored history has a different storage identity.")
+            }
+            if let expectedCoachID = journal.coachStoreID {
+                guard try CoachLocalOwnership.persistentStoreID(at: coachURL) == expectedCoachID else {
+                    throw failure("The restored Coach history has a different storage identity.")
+                }
+            }
+            if journal.historyStoreID == nil || journal.coachStoreID == nil {
+                journal.historyStoreID = expectedHistoryID
+                journal.coachStoreID = try CoachLocalOwnership.persistentStoreID(at: coachURL)
+                try write(journal, to: journalURL)
             }
             return coachURL
         }
@@ -176,6 +245,66 @@ enum CloudSyncRestoration {
             try write(journal, to: journalURL)
         }
         return coachURL
+    }
+
+    private enum JournalClassification {
+        case absent
+        case trusted(Journal)
+        case untrusted(Journal?)
+    }
+
+    private static func classifyJournal(at journalURL: URL) -> JournalClassification {
+        guard FileManager.default.fileExists(atPath: journalURL.path) else { return .absent }
+        guard let data = try? Data(contentsOf: journalURL),
+              let journal = try? JSONDecoder().decode(Journal.self, from: data) else { return .untrusted(nil) }
+        guard journal.version == 2, UUID(uuidString: journal.directory) != nil,
+              ["prepared", "backingUp", "installing", "complete"].contains(journal.phase) else {
+            return .untrusted(journal)
+        }
+        return .trusted(journal)
+    }
+
+    /// Metadata only. A link, a missing file, or an unreadable store stays closed.
+    private static func readableStore(_ url: URL) -> Bool {
+        guard FileManager.default.fileExists(atPath: url.path) else { return false }
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
+              values.isRegularFile == true, values.isSymbolicLink != true else { return false }
+        return (try? CoachLocalOwnership.persistentStoreID(at: url)) != nil
+    }
+
+    /// Prefer the staged Coach file when its directory is a real UUID and that file
+    /// opens. Otherwise create the local Coach file beside the journal. Never move
+    /// or replace the history file, and never rewrite the journal.
+    private static func coachStoreForUnverifiedJournal(_ journal: Journal?, root: URL) throws -> URL {
+        if let directory = journal?.directory, UUID(uuidString: directory) != nil,
+           !directory.contains("/"), directory != ".", directory != ".." {
+            let staged = root.appendingPathComponent(directory, isDirectory: true)
+                .appendingPathComponent("coach", isDirectory: true)
+                .appendingPathComponent("coach.store")
+            if readableStore(staged) { return staged }
+        }
+        let coachURL = root.appendingPathComponent("coach.store")
+        if readableStore(coachURL) { return coachURL }
+        if FileManager.default.fileExists(atPath: coachURL.path) {
+            let values = try coachURL.resourceValues(forKeys: [.isSymbolicLinkKey])
+            guard values.isSymbolicLink != true else { throw failure("A history file is an unsupported link.") }
+            throw failure("The iCloud recovery journal could not be verified.")
+        }
+        try prepareClosedLocalStore(at: coachURL, modelTypes: CoachPersistence.modelTypes)
+        guard readableStore(coachURL) else {
+            throw failure("The iCloud recovery journal could not be verified.")
+        }
+        return coachURL
+    }
+
+    private static func recordedOwnershipRoot(_ journal: Journal) -> String? {
+        guard journal.sourcePath.hasPrefix("/") else { return nil }
+        let selected = URL(fileURLWithPath: journal.sourcePath).standardizedFileURL
+        guard selected.lastPathComponent == "default.store",
+              UUID(uuidString: selected.deletingLastPathComponent().lastPathComponent) != nil else { return nil }
+        let inferred = selected.deletingLastPathComponent().deletingLastPathComponent().path
+        guard journal.ownershipPath == nil || journal.ownershipPath == inferred else { return nil }
+        return inferred
     }
 
     /// iOS can replace the app-data container directory during an update. The

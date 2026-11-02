@@ -13,7 +13,10 @@ enum CoachPersistence {
     }
 
     static var directory: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        if let continued = LocalHistoryContinuation.activeDirectory {
+            return continued.appendingPathComponent("CoachLocal", isDirectory: true)
+        }
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("CoachLocal", isDirectory: true)
     }
 

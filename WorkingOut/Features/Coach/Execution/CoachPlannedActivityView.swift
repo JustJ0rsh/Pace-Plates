@@ -62,7 +62,7 @@ struct CoachPlannedActivityCard: View {
                     .accessibilityIdentifier("\(kind.rawValue).planned")
                 Text("\(projection.outstanding.count) to do · \(projection.sessions.count) planned")
                     .font(.subheadline).foregroundStyle(.secondary)
-                ForEach(projection.preview) { session in
+                ForEach(projection.preview, id: \.persistentModelID) { session in
                     CoachPlannedActivityRow(session: session, kind: kind)
                 }
                 NavigationLink {
@@ -88,7 +88,7 @@ private struct CoachPlannedActivityList: View {
         let projection = CoachPlannedActivities(occurrences, kind: kind)
         List {
             Section {
-                ForEach(projection.sessions) { session in
+                ForEach(projection.sessions, id: \.persistentModelID) { session in
                     CoachPlannedActivityRow(session: session, kind: kind)
                 }
             } header: {

@@ -59,8 +59,8 @@ struct RunLogView: View {
     private var pendingCardioInboxItems: [CardioWorkoutInboxItem]
     
     @State private var isEditing: Bool = false
-    @State private var locationCache: [UUID: String] = [:]
-    @State private var pendingLocationTasks: Set<UUID> = [] // Track active location fetch tasks
+    @State private var locationCache: [PersistentIdentifier: String] = [:]
+    @State private var pendingLocationTasks: Set<PersistentIdentifier> = [] // Track active location fetch tasks
     @State private var hasPrefetchedLocations = false // Prevent duplicate prefetching
     @State private var runTrackingRequest: RunTrackingRequest? = nil
     @State private var stepsToday: Int? = nil
@@ -72,8 +72,8 @@ struct RunLogView: View {
     private let healthStore = HKHealthStore()
     @State private var pendingDeleteSession: RunningSession? = nil
     @State private var showDeleteConfirm: Bool = false
-    @State private var loadingSessionId: UUID? = nil
-    @State private var navigationSessionId: UUID? = nil
+    @State private var loadingSessionId: PersistentIdentifier? = nil
+    @State private var navigationSessionId: PersistentIdentifier? = nil
     @State private var selectedChartDate: Date? = nil
     @State private var pendingSwipeDeleteSession: RunningSession? = nil
     @State private var showSwipeDeleteConfirm: Bool = false
@@ -81,6 +81,7 @@ struct RunLogView: View {
     @State private var showRunActions: Bool = false
     @State private var showPastRunLog: Bool = false
     @State private var saveErrorMessage: String? = nil
+    @State private var healthImportNeedsReview = false
     @State private var visibleRunCount: Int = 30
     @State private var hasInitializedRunPagination: Bool = false
     @State private var healthChangeDebounceTask: Task<Void, Never>? = nil
@@ -419,13 +420,13 @@ struct RunLogView: View {
                                 )
                             } else {
                                 LazyVStack(spacing: 0) {
-                                    ForEach(visibleHistoryRuns) { session in
+                                    ForEach(visibleHistoryRuns, id: \.persistentModelID) { session in
                                         Group {
                                             if isEditing {
                                                 RunSessionRowContent(
                                                     session: session,
                                                     preferredDistanceUnit: preferredDistanceUnit,
-                                                    locationName: locationCache[session.id],
+                                                    locationName: locationCache[session.persistentModelID],
                                                     isEditing: true,
                                                     onDelete: {
                                                         pendingDeleteSession = session
@@ -434,15 +435,15 @@ struct RunLogView: View {
                                                 )
                                             } else {
                                                 Button {
-                                                    loadingSessionId = session.id
+                                                    loadingSessionId = session.persistentModelID
                                                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                                                        navigationSessionId = session.id
+                                                        navigationSessionId = session.persistentModelID
                                                     }
                                                 } label: {
                                                     RunSessionRowContent(
                                                         session: session,
                                                         preferredDistanceUnit: preferredDistanceUnit,
-                                                        locationName: locationCache[session.id],
+                                                        locationName: locationCache[session.persistentModelID],
                                                         isEditing: false,
                                                         onDelete: {
                                                             pendingDeleteSession = session
@@ -451,6 +452,7 @@ struct RunLogView: View {
                                                     )
                                                 }
                                                 .buttonStyle(.plain)
+                                                .accessibilityIdentifier("runs.history.row." + String(describing: session.persistentModelID))
                                                 .accessibilityHint("Opens activity details")
                                             }
                                         }
@@ -765,7 +767,7 @@ struct RunLogView: View {
                 RunQuickViewSheet(
                     session: session,
                     preferredDistanceUnit: preferredDistanceUnit,
-                    locationName: locationCache[session.id]
+                    locationName: locationCache[session.persistentModelID]
                 )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
@@ -779,6 +781,11 @@ struct RunLogView: View {
                 } message: {
                     Text(saveErrorMessage ?? "Couldn’t save your changes. Please try again.")
                 }
+            }
+            .alert("Review Health Matches", isPresented: $healthImportNeedsReview) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Some Health matches need review in Cardio Inbox. Conflicting matches were left unchanged.")
             }
             .id(appTheme) // Force rebuild when theme changes
     }
@@ -807,16 +814,12 @@ struct RunLogView: View {
         }
     }
 
-    private func sessionForNavigation(id: UUID) -> RunningSession? {
-        var descriptor = FetchDescriptor<RunningSession>(predicate: #Predicate { $0.id == id })
-        descriptor.fetchLimit = 1
-        return try? modelContext.fetch(descriptor).first
+    private func sessionForNavigation(id: PersistentIdentifier) -> RunningSession? {
+        try? RunHistoryStore.session(recordID: id, context: modelContext)
     }
 
     private func sessionForHealthUUID(_ uuid: String) -> RunningSession? {
-        var descriptor = FetchDescriptor<RunningSession>(predicate: #Predicate { $0.healthWorkoutUUID == uuid })
-        descriptor.fetchLimit = 1
-        return try? modelContext.fetch(descriptor).first
+        try? RunHistoryStore.session(healthUUID: uuid, context: modelContext)
     }
 
     private func matchesHistoryActivity(_ sessionType: String, selectedType: String) -> Bool {
@@ -1101,6 +1104,7 @@ struct RunLogView: View {
                     return runningSessions.map {
                         ExistingRunSnapshot(
                             id: $0.id,
+                            recordID: $0.persistentModelID,
                             date: $0.date,
                             distance: $0.distance,
                             distanceUnit: $0.distanceUnit,
@@ -1115,6 +1119,7 @@ struct RunLogView: View {
                 let workouts = changes.added
                 var existingUUIDs = Set(existingRuns.compactMap(\.healthWorkoutUUID))
                 let runLookup = existingRuns
+                let uniqueRunsByID = RecordIdentityLookup.uniqueIndex(existingRuns, by: \.id)
                 var actions: [RunImportAction] = []
                 var uuidsToEnrich: [String] = []
                 var uuidsToForceEnrich: [String] = []
@@ -1122,7 +1127,7 @@ struct RunLogView: View {
                 let replacements = SameBatchCardioReplacementReconciler.matches(
                     changes: changes,
                     addedWorkouts: workouts,
-                    existingSessions: existingRuns.compactMap {
+                    existingSessions: existingRuns.filter { uniqueRunsByID[$0.id] != nil }.compactMap {
                         run -> CardioReplacementSessionSnapshot? in
                         guard let healthWorkoutUUID = run.healthWorkoutUUID,
                               !healthWorkoutUUID.isEmpty else { return nil }
@@ -1172,9 +1177,9 @@ struct RunLogView: View {
 
                     existingUUIDs.insert(uuidStr)
 
-                    if let replacement = replacementByAddedUUID[uuidStr] {
+                    if let replacement = replacementByAddedUUID[uuidStr], let source = uniqueRunsByID[replacement.sessionID] {
                         actions.append(.update(
-                            sessionID: replacement.sessionID,
+                            recordID: source.recordID,
                             healthWorkoutUUID: uuidStr,
                             activityType: activityType,
                             date: end,
@@ -1190,7 +1195,7 @@ struct RunLogView: View {
                     }
 
                     // Attempt to match a similar local run (e.g., tracked via phone) and attach the UUID
-                    if let similarId = findSimilarRunID(
+                    if let similarId = findSimilarRunRecordID(
                         in: runLookup,
                         endDate: end,
                         duration: duration,
@@ -1199,7 +1204,7 @@ struct RunLogView: View {
                     ) {
                         let kcal: Double? = nil
                         actions.append(.update(
-                            sessionID: similarId,
+                            recordID: similarId,
                             healthWorkoutUUID: uuidStr,
                             activityType: activityType,
                             date: nil,
@@ -1324,87 +1329,35 @@ struct RunLogView: View {
     private func applyImportActions(_ actions: [RunImportAction]) -> Bool {
         guard !actions.isEmpty else { return true }
 
-        let sessionsById = Dictionary(uniqueKeysWithValues: runningSessions.map { ($0.id, $0) })
-
-        for action in actions {
-            switch action {
-            case let .update(
-                sessionID,
-                uuid,
-                activityType,
-                date,
-                distance,
-                distanceUnit,
-                duration,
-                calories,
-                locations
-            ):
-                guard let similar = sessionsById[sessionID] else { continue }
-                similar.healthWorkoutUUID = uuid
-                similar.activityType = activityType
-                if let date { similar.date = date }
-                if let distance { similar.distance = distance }
-                if let distanceUnit { similar.distanceUnit = distanceUnit }
-                if let duration { similar.duration = duration }
-                if let calories, calories > 0 { similar.calories = calories }
-                if similar.locations.isEmpty, let locations, !locations.isEmpty {
-                    similar.locations = locations
-                }
-
-            case let .unlink(healthWorkoutUUID):
-                guard let session = sessionsById.values.first(where: { $0.healthWorkoutUUID == healthWorkoutUUID }) else { continue }
-                // Health records and app logs are separate. Preserve the local
-                // run (including notes/routes) when Health reports a deletion;
-                // a later replacement can relink it by similarity.
-                session.healthWorkoutUUID = nil
-
-            case let .insert(payload):
-                let model = RunningSession(
-                    date: payload.date,
-                    distance: payload.distance,
-                    distanceUnit: payload.distanceUnit,
-                    duration: payload.duration,
-                    calories: payload.calories,
-                    notes: nil,
-                    locations: payload.locations,
-                    healthWorkoutUUID: payload.healthWorkoutUUID,
-                    activityType: payload.activityType,
-                    avgHeartRate: payload.avgHeartRate,
-                    maxHeartRate: payload.maxHeartRate,
-                    minHeartRate: payload.minHeartRate,
-                    avgCadence: payload.avgCadence,
-                    maxCadence: payload.maxCadence,
-                    totalAscent: payload.totalAscent,
-                    totalDescent: payload.totalDescent,
-                    minElevation: payload.minElevation,
-                    maxElevation: payload.maxElevation,
-                    avgPower: payload.avgPower,
-                    maxPower: payload.maxPower
-                )
-                modelContext.insert(model)
+        do {
+            let result = try RunImportStore.apply(actions, context: modelContext)
+            if result.needsReview {
+                healthImportNeedsReview = true
+                // The retained legacy importer shares the inbox's anchor. Keep
+                // that page available for explicit review instead of consuming it.
+                return false
             }
+            return true
+        } catch {
+            saveErrorMessage = "Activity changes couldn't be saved. Please try again."
+            return false
         }
-
-        return PersistenceSave.commit(
-            modelContext,
-            action: "import Health runs",
-            onFailure: { message in saveErrorMessage = message }
-        )
     }
 
-    private func findSimilarRunID(
+    private func findSimilarRunRecordID(
         in runs: [ExistingRunSnapshot],
         endDate: Date,
         duration: TimeInterval,
         distance: Double,
         unit: String
-    ) -> UUID? {
-        return runs.first {
+    ) -> PersistentIdentifier? {
+        let matches = runs.filter {
             HealthKitManager.runsAreSimilar(
                 aDate: $0.date, aDuration: $0.duration, aDistance: $0.distance, aUnit: $0.distanceUnit,
                 bDate: endDate, bDuration: duration, bDistance: distance, bUnit: unit
             )
-        }?.id
+        }
+        return matches.count == 1 ? matches[0].recordID : nil
     }
 
     @MainActor
@@ -1797,7 +1750,7 @@ struct RunLogView: View {
 
         // Only prefetch for sessions that don't already have cached names and aren't currently being fetched
         let sessionsToFetch = historyPage.filter { session in
-            locationCache[session.id] == nil && !pendingLocationTasks.contains(session.id)
+            locationCache[session.persistentModelID] == nil && !pendingLocationTasks.contains(session.persistentModelID)
         }
 
         // Limit concurrent requests to prevent overwhelming the service
@@ -1814,19 +1767,19 @@ struct RunLogView: View {
                   let coords = try? JSONDecoder().decode([RunCoordinate].self, from: session.locations),
                   let first = coords.first?.cl else { continue }
 
-            pendingLocationTasks.insert(session.id)
+            pendingLocationTasks.insert(session.persistentModelID)
             let coordinate = CLLocationCoordinate2D(latitude: first.latitude, longitude: first.longitude)
 
             Task {
                 // Throttled global search to avoid PlaceRequest throttling
                 if let name = await MapSearchService.shared.reverseAddressName(near: coordinate) {
                     _ = await MainActor.run {
-                        locationCache[session.id] = name
-                        pendingLocationTasks.remove(session.id)
+                        locationCache[session.persistentModelID] = name
+                        pendingLocationTasks.remove(session.persistentModelID)
                     }
                 } else {
                     _ = await MainActor.run {
-                        pendingLocationTasks.remove(session.id)
+                        pendingLocationTasks.remove(session.persistentModelID)
                     }
                 }
             }
@@ -2024,6 +1977,7 @@ enum SameBatchCardioReplacementReconciler {
 
 private struct ExistingRunSnapshot {
     let id: UUID
+    let recordID: PersistentIdentifier
     let date: Date
     let distance: Double
     let distanceUnit: String
@@ -2046,44 +2000,6 @@ private struct RunEnrichmentNeeds {
     var requiresAnyFetch: Bool {
         needsCalories || needsRoute || needsHeartRate || needsCadence || needsStrideLength || needsVerticalOscillation || needsGroundContactTime || needsPower || needsElevation
     }
-}
-
-private struct NewRunPayload {
-    let date: Date
-    let distance: Double
-    let distanceUnit: String
-    let duration: TimeInterval
-    let calories: Double?
-    let locations: Data?
-    let healthWorkoutUUID: String
-    let activityType: String
-    let avgHeartRate: Double?
-    let maxHeartRate: Double?
-    let minHeartRate: Double?
-    let avgCadence: Double?
-    let maxCadence: Double?
-    let totalAscent: Double?
-    let totalDescent: Double?
-    let minElevation: Double?
-    let maxElevation: Double?
-    let avgPower: Double?
-    let maxPower: Double?
-}
-
-private enum RunImportAction {
-    case update(
-        sessionID: UUID,
-        healthWorkoutUUID: String,
-        activityType: String,
-        date: Date?,
-        distance: Double?,
-        distanceUnit: String?,
-        duration: TimeInterval?,
-        calories: Double?,
-        locations: Data?
-    )
-    case unlink(healthWorkoutUUID: String)
-    case insert(NewRunPayload)
 }
 
 // MARK: - Optimized Run Session Row Content

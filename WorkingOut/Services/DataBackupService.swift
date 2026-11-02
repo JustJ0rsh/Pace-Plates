@@ -249,6 +249,7 @@ struct BackupFile: Codable, Sendable {
 
     var formatVersion: Int? = 5
     var coach: CoachBackupGraph? = nil
+    var physicalRecords: BackupPhysicalGraph? = nil
     var exportedAt: Date
     var exerciseDefinitions: [ExerciseDefinitionDTO]
     var workoutSessions: [WorkoutSessionDTO]
@@ -306,22 +307,22 @@ enum DataBackupService {
     static func capture(context: ModelContext) throws -> BackupFile {
         // A backup must be complete. Propagate fetch failures instead of silently
         // writing an apparently successful file with an empty entity collection.
-        let defs = try context.fetch(FetchDescriptor<ExerciseDefinition>())
-        let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
-        let logs = try context.fetch(FetchDescriptor<ExerciseLog>())
-        let runs = try context.fetch(FetchDescriptor<RunningSession>())
-        let weights = try context.fetch(FetchDescriptor<WeightEntry>())
-        let plans = try context.fetch(FetchDescriptor<RunningPlan>())
-        let planSessions = try context.fetch(FetchDescriptor<RunningPlanSession>())
-        let conversations = try context.fetch(FetchDescriptor<AIConversation>())
-        let templates = try context.fetch(FetchDescriptor<WorkoutTemplate>())
-        let templateExercises = try context.fetch(FetchDescriptor<TemplateExercise>())
+        let defs = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<ExerciseDefinition>()))
+        let sessions = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<WorkoutSession>()))
+        let logs = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<ExerciseLog>()))
+        let runs = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<RunningSession>()))
+        let weights = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<WeightEntry>()))
+        let plans = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<RunningPlan>()))
+        let planSessions = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<RunningPlanSession>()))
+        let conversations = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<AIConversation>()))
+        let templates = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<WorkoutTemplate>()))
+        let templateExercises = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<TemplateExercise>()))
         // Replacement tombstones are transient reconciliation state, not user
         // records. Excluding them prevents a deleted pending card from returning
         // after a backup restore.
-        let inboxItems = try context.fetch(FetchDescriptor<HealthWorkoutInboxItem>())
+        let inboxItems = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<HealthWorkoutInboxItem>()))
             .filter { $0.healthDeletionObservedAt == nil }
-        let cardioInboxItems = try context.fetch(FetchDescriptor<CardioWorkoutInboxItem>())
+        let cardioInboxItems = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<CardioWorkoutInboxItem>()))
             .filter { $0.healthDeletionObservedAt == nil }
 
         var file = BackupFile(
@@ -565,6 +566,10 @@ enum DataBackupService {
         )
 
         file.coach = try CoachBackupGraph.capture(context: context)
+        if BackupPhysicalGraph.needsPhysicalIdentities(file) {
+            file.formatVersion = 6
+            file.physicalRecords = try BackupPhysicalGraph.capture(context: context, file: file)
+        }
         return file
     }
 
@@ -573,7 +578,10 @@ enum DataBackupService {
         try RunTracker.shared.checkpointForBackup(context: context)
         let generation = WearableWorkoutInboxService.localDataPurgeGeneration
         var file = try capture(context: context)
-        if !includePhotos { file.coach?.photos = [] }
+        if !includePhotos {
+            file.coach?.photos = []
+            file.physicalRecords?.rows.removeAll { $0.collection == "coach.photos" }
+        }
         removeStaleExportFiles()
         let snapshot = file
         let exportedURL = try await Task.detached(priority: .userInitiated) {
@@ -649,10 +657,20 @@ enum DataBackupService {
 
     /// Restores stable snapshots without rebuilding schedules from today's date.
     /// The caller owns its isolated context and decides how to handle save failure.
-    static func restore(_ file: BackupFile, context: ModelContext) throws {
+    static func restore(_ source: BackupFile, context: ModelContext) throws {
+        let file = try BackupPhysicalGraph.upgradingLegacy(source)
         let generation = WearableWorkoutInboxService.localDataPurgeGeneration
-        guard (1...5).contains(file.formatVersion ?? 1) else { throw CoachHistoryArchive.ArchiveError.invalid("Unsupported backup version") }
+        guard (1...6).contains(file.formatVersion ?? 1) else { throw CoachHistoryArchive.ArchiveError.invalid("Unsupported backup version") }
         try file.validateForRestore()
+        try requireLocalRestoreDestination(context, generation: generation)
+        if let physical = file.physicalRecords { try physical.restore(file: file, context: context); return }
+        try restoreLegacy(file, context: context)
+    }
+
+    static func restoreLegacy(_ file: BackupFile, context: ModelContext, validate: Bool = true,
+                              save: Bool = true, preservePhysicalRows: Bool = false) throws {
+        let generation = WearableWorkoutInboxService.localDataPurgeGeneration
+        if validate { try file.validateForRestore() }
         try requireLocalRestoreDestination(context, generation: generation)
         try file.coach?.validateMerge(context: context)
         let existingDefs = try context.fetch(FetchDescriptor<ExerciseDefinition>())
@@ -1017,10 +1035,9 @@ enum DataBackupService {
         }
 
         let restoredPlanSessions = try context.fetch(FetchDescriptor<RunningPlanSession>())
-        let restoredPlanSessionsByID = Dictionary(
-            uniqueKeysWithValues: restoredPlanSessions.map { ($0.id, $0) }
-        )
-        for run in existingRuns {
+        let restoredPlanSessionsByID = Dictionary(grouping: restoredPlanSessions, by: \.id)
+            .compactMapValues { $0.count == 1 ? $0[0] : nil }
+        for run in existingRuns where !preservePhysicalRows {
             guard let plannedSessionID = run.plannedSessionID,
                   let plannedSession = restoredPlanSessionsByID[plannedSessionID] else { continue }
             run.plannedSession = plannedSession
@@ -2044,7 +2061,7 @@ enum DataBackupService {
             normalizeCardioLinks(canonical)
         }
 
-        for item in existingCardioInboxItems {
+        for item in existingCardioInboxItems where !preservePhysicalRows {
             normalizeCardioLinks(item)
         }
         for dto in file.cardioWorkoutInboxItems ?? [] {
@@ -2136,7 +2153,7 @@ enum DataBackupService {
 
         try file.coach?.restore(context: context)
         try requireLocalRestoreDestination(context, generation: generation)
-        try context.save()
+        if save { try context.save() }
     }
 
     /// Coach records require a local Coach configuration. Legacy records follow
@@ -2157,27 +2174,61 @@ enum DataBackupService {
         _ lhs: WorkoutSession,
         _ rhs: WorkoutSession
     ) -> Bool {
-        if lhs.id == rhs.id { return true }
         guard lhs.plannedSessionID == rhs.plannedSessionID,
               lhs.coachExecutionID == rhs.coachExecutionID,
-              lhs.executionStatusRaw == rhs.executionStatusRaw else { return false }
+              lhs.executionStatusRaw == rhs.executionStatusRaw,
+              lhs.endedAt == rhs.endedAt, lhs.completionProvenance == rhs.completionProvenance,
+              lhs.generatedTemplate?.persistentModelID == rhs.generatedTemplate?.persistentModelID else { return false }
         return sessionContent(for: lhs) == sessionContent(for: rhs)
-            && exerciseContents(for: lhs.exerciseLogs ?? [])
-                == exerciseContents(for: rhs.exerciseLogs ?? [])
+            && deduplicationSetContents(lhs.exerciseLogs ?? []) == deduplicationSetContents(rhs.exerciseLogs ?? [])
     }
 
     static func areRunningSessionsDefiniteDuplicates(
         _ lhs: RunningSession,
         _ rhs: RunningSession
     ) -> Bool {
-        lhs.id == rhs.id || (lhs.canonicalPlannedSessionID == rhs.canonicalPlannedSessionID && lhs.coachExecutionID == rhs.coachExecutionID && lhs.executionStatusRaw == rhs.executionStatusRaw && runningSessionContent(for: lhs) == runningSessionContent(for: rhs))
+        lhs.canonicalPlannedSessionID == rhs.canonicalPlannedSessionID
+            && lhs.coachExecutionID == rhs.coachExecutionID && lhs.executionStatusRaw == rhs.executionStatusRaw
+            && lhs.plannedSessionID == rhs.plannedSessionID
+            && lhs.plannedSession?.persistentModelID == rhs.plannedSession?.persistentModelID
+            && lhs.hasMeasuredDistance == rhs.hasMeasuredDistance && lhs.intervalResultsData == rhs.intervalResultsData
+            && runningSessionContent(for: lhs) == runningSessionContent(for: rhs)
     }
 
     static func areWeightEntriesDefiniteDuplicates(
         _ lhs: WeightEntry,
         _ rhs: WeightEntry
     ) -> Bool {
-        lhs.id == rhs.id || weightEntryContent(for: lhs) == weightEntryContent(for: rhs)
+        lhs.sourceName == rhs.sourceName && lhs.provenance == rhs.provenance
+            && weightEntryContent(for: lhs) == weightEntryContent(for: rhs)
+    }
+
+    /// Settings must not discard distinct actuals or physical exercise parents
+    /// merely because a recovered row shares an app UUID or legacy projection.
+    private struct DeduplicationSetContent: Hashable {
+        var legacy: ExerciseLogContent
+        var definition: PersistentIdentifier?
+        var coachSetResultID: String?
+        var actualReps: Int?
+        var actualWeight: Double?
+        var actualDurationSeconds: Double?
+        var actualEffortScale: String?
+        var actualEffort: Double?
+        var performedExerciseKey: String?
+        var prescriptionBasis: String?
+        var loadBasis: String?
+    }
+
+    private static func deduplicationSetContents(_ logs: [ExerciseLog]) -> [DeduplicationSetContent: Int] {
+        var counts: [DeduplicationSetContent: Int] = [:]
+        for log in logs {
+            let content = DeduplicationSetContent(legacy: exerciseContent(for: log), definition: log.exerciseDefinition?.persistentModelID,
+                coachSetResultID: log.coachSetResultID, actualReps: log.actualReps, actualWeight: log.actualWeight,
+                actualDurationSeconds: log.actualDurationSeconds, actualEffortScale: log.actualEffortScale, actualEffort: log.actualEffort,
+                performedExerciseKey: log.performedExerciseKey, prescriptionBasis: log.prescriptionBasis, loadBasis: log.loadBasis)
+            counts[content, default: 0] += 1
+        }
+        return counts
     }
 
     private struct WorkoutSessionContent: Hashable {
@@ -2414,26 +2465,28 @@ enum DataBackupService {
     }
 
     private static func exerciseContents(for logs: [ExerciseLog]) -> [ExerciseLogContent: Int] {
-        countedContents(logs.map {
-            ExerciseLogContent(
-                reps: $0.reps,
-                weight: $0.weight,
-                weightUnit: $0.weightUnit,
-                setNumber: $0.setNumber,
-                exerciseName: $0.exerciseName,
-                exerciseDefinitionID: $0.exerciseDefinition?.id,
-                exerciseOrder: $0.exerciseOrder,
-                exerciseType: $0.exerciseType,
-                durationSeconds: $0.durationSeconds,
-                distance: $0.distance,
-                distanceUnit: $0.distanceUnit,
-                caloriesBurned: $0.caloriesBurned,
-                avgHeartRate: $0.avgHeartRate,
-                notes: $0.notes,
-                isCompleted: $0.isCompleted,
-                isIsolated: $0.isIsolated
-            )
-        })
+        countedContents(logs.map { exerciseContent(for: $0) })
+    }
+
+    private static func exerciseContent(for log: ExerciseLog) -> ExerciseLogContent {
+    ExerciseLogContent(
+        reps: log.reps,
+        weight: log.weight,
+        weightUnit: log.weightUnit,
+        setNumber: log.setNumber,
+        exerciseName: log.exerciseName,
+        exerciseDefinitionID: log.exerciseDefinition?.id,
+        exerciseOrder: log.exerciseOrder,
+        exerciseType: log.exerciseType,
+        durationSeconds: log.durationSeconds,
+        distance: log.distance,
+        distanceUnit: log.distanceUnit,
+        caloriesBurned: log.caloriesBurned,
+        avgHeartRate: log.avgHeartRate,
+        notes: log.notes,
+        isCompleted: log.isCompleted,
+        isIsolated: log.isIsolated
+    )
     }
 
     private static func countedContents<T: Hashable>(_ values: [T]) -> [T: Int] {

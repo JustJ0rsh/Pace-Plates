@@ -90,12 +90,14 @@ struct SettingsView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(AppTheme.toolbarColorScheme, for: .navigationBar)
         .onAppear {
+            profile.retryLoadingIfUnavailable()
             if !launchConfiguration.shouldSkipAutomationSideEffects {
                 loadProfileFromHealthKit()
                 refreshLocationAuthorizationStatus()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            profile.retryLoadingIfUnavailable()
             if !launchConfiguration.shouldSkipAutomationSideEffects {
                 refreshLocationAuthorizationStatus()
             }
@@ -104,6 +106,7 @@ struct SettingsView: View {
 
     private var settingsList: some View {
         List {
+            CloudHistoryStatusSettingsSection(controller: PersistenceController.shared)
             unitsSection
             appearanceSection
             profileSection
@@ -117,14 +120,12 @@ struct SettingsView: View {
 
     private var unitsSection: some View {
         Section("Units") {
-            Picker("Measurement System", selection: $measurementSystem) {
+            Picker("Measurement System", selection: Binding(get: { measurementSystem }, set: { updateMeasurementSystem(to: $0) })) {
                 Text("Metric").tag("metric")
                 Text("Imperial").tag("imperial")
             }
             .pickerStyle(.segmented)
-            .onChange(of: measurementSystem) { _, newValue in
-                updateMeasurementSystem(to: newValue)
-            }
+            .disabled(!profile.isAvailable)
         }
     }
 
@@ -145,6 +146,13 @@ struct SettingsView: View {
 
     private var profileSection: some View {
         Section("Profile") {
+            if profile.needsUnitReview {
+                Text("The units for your saved measurements are unknown. Re-enter height and goal weight using the units shown; your original values are kept until you replace them.")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("profile.units.review_required")
+            }
+            if let error = profile.storageError { Text(error).foregroundStyle(.red).accessibilityIdentifier("profile.save.error") }
+            if !profile.isAvailable { Button("Try Loading Profile Again") { profile.retryLoadingIfUnavailable() } }
             Picker("Sex", selection: sexSelection) {
                 Text("Male").tag("male")
                 Text("Female").tag("female")
@@ -365,6 +373,8 @@ struct SettingsView: View {
     }
 
     private func updateMeasurementSystem(to newValue: String) {
+        guard profile.changeMeasurementSystem(to: newValue) else { return }
+        measurementSystem = newValue
         if newValue == "imperial" {
             weightUnit = "lbs"
             distanceUnit = "mi"
@@ -632,6 +642,7 @@ struct SettingsView: View {
     #endif
 
     private var heightDisplayValue: String {
+        guard heightValue > 0 else { return "Not set" }
         if heightUnit == "in" {
             let totalInches = Int(round(heightValue))
             let feet = max(0, totalInches / 12)
@@ -697,6 +708,7 @@ struct SettingsView: View {
     // MARK: - HealthKit Profile Loading
     private func loadProfileFromHealthKit() {
         Task { @MainActor in
+            guard profile.isAvailable, !profile.needsUnitReview else { return }
             // Only load if values are not already set
             if age == 0 {
                 if let healthAge = try? HealthKitManager.shared.getAge() {
@@ -712,6 +724,7 @@ struct SettingsView: View {
             
             if heightValue == 0 {
                 if let healthHeight = try? await HealthKitManager.shared.getHeight() {
+                    guard profile.isAvailable, !profile.needsUnitReview else { return }
                     // healthHeight is in inches
                     if heightUnit == "cm" {
                         // Convert inches to cm
@@ -1291,13 +1304,7 @@ extension SettingsView {
         // ExerciseLog weights
         if let logs: [ExerciseLog] = try? modelContext.fetch(FetchDescriptor<ExerciseLog>()) {
             for log in logs {
-                if system == "imperial", log.weightUnit == "kg" {
-                    log.weight = log.weight * 2.20462
-                    log.weightUnit = "lbs"
-                } else if system == "metric", log.weightUnit == "lbs" {
-                    log.weight = log.weight / 2.20462
-                    log.weightUnit = "kg"
-                }
+                WorkoutWeightUnitConversion.convert(log, to: system == "imperial" ? "lbs" : "kg")
             }
         }
         // WeightEntry entries
@@ -1324,18 +1331,7 @@ extension SettingsView {
                 }
             }
         }
-        // Profile height value stored in AppStorage
-        if system == "imperial" {
-            heightValue = (heightValue / 2.54).rounded() // cm -> in, nearest inch
-            heightUnit = "in"
-            // Convert goal weight kg -> lbs (1 dec)
-            targetWeight = ((targetWeight * 2.20462) * 10).rounded() / 10.0
-        } else {
-            heightValue = ((heightValue * 2.54) * 10).rounded() / 10.0 // in -> cm, 1 dec
-            heightUnit = "cm"
-            // Convert goal weight lbs -> kg (1 dec)
-            targetWeight = ((targetWeight / 2.20462) * 10).rounded() / 10.0
-        }
+        // The Keychain profile converts once from its own stored unit tags.
         _ = PersistenceSave.commit(modelContext, action: "save changes")
     }
 
@@ -1370,13 +1366,11 @@ extension SettingsView {
                 }
                 .frame(height: 220)
                 .onAppear(perform: loadValue)
-                .onChange(of: wholeValue) { _, _ in applyValue() }
-                .onChange(of: decimalValue) { _, _ in applyValue() }
                 .navigationTitle("Goal Weight")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { dismiss() }
+                        Button("Save") { applyValue(); dismiss() }
                     }
                 }
             }
@@ -1404,7 +1398,6 @@ extension SettingsView {
                 ),
                 9
             )
-            applyValue()
         }
 
         private func applyValue() {
@@ -1432,8 +1425,6 @@ extension SettingsView {
                                 .pickerStyle(.wheel)
                         }
                         .frame(height: 200)
-                        .onChange(of: feet) { _,_ in applyImperial() }
-                        .onChange(of: inches) { _,_ in applyImperial() }
                         .onAppear { loadImperial() }
                     } else {
                         HStack(spacing: 0) {
@@ -1443,15 +1434,16 @@ extension SettingsView {
                                 .pickerStyle(.wheel)
                         }
                         .frame(height: 200)
-                        .onChange(of: cmInt) { _,_ in applyMetric() }
-                        .onChange(of: cmDec) { _,_ in applyMetric() }
                         .onAppear { loadMetric() }
                     }
                     Spacer(minLength: 0)
                 }
                 .navigationTitle("Height")
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Save") {
+                    if heightUnit == "in" { applyImperial() } else { applyMetric() }
+                    dismiss()
+                } } }
             }
         }
         private func loadImperial() {

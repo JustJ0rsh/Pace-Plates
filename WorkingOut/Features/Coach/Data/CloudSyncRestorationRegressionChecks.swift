@@ -483,8 +483,200 @@ enum CloudSyncRestorationRegressionChecks {
                         && (!allowDeletions || types.contains(.delete)),
                         "replay records insert/update/deletion transactions for CloudKit export")
         }
+        // A journal that fails its format check used to block the whole app, and
+        // reopening retried the same check. Recognized installs still stop.
+        let unverifiedNotice = CloudSyncRestoration.unverifiedJournalNotice
+        func restorationJournal(_ ownership: URL) -> URL {
+            ownership.appendingPathComponent("iCloudRestoration", isDirectory: true)
+                .appendingPathComponent("restoration.json")
+        }
+        func writeRestoration(_ object: [String: Any], ownership: URL) throws -> Data {
+            let url = restorationJournal(ownership)
+            try CoachLocalOwnership.prepareDirectory(url.deletingLastPathComponent())
+            let data = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+            try data.write(to: url, options: .atomic)
+            return data
+        }
+        func restorationFields(legacy: URL, version: Int = 2, directory: String = UUID().uuidString,
+                               phase: String = "complete") -> [String: Any] {
+            ["version": version, "directory": directory, "legacyPath": legacy.standardizedFileURL.path,
+             "sourcePath": legacy.standardizedFileURL.path, "sourceCheckpoint": "synthetic",
+             "historyCheckpoint": "synthetic", "coachCheckpoint": "synthetic", "phase": phase]
+        }
+        func sameFile(_ lhs: URL, _ rhs: URL) -> Bool {
+            lhs.standardizedFileURL.path == rhs.standardizedFileURL.path
+        }
+        func localCoach(_ ownership: URL) -> URL {
+            ownership.appendingPathComponent("iCloudRestoration", isDirectory: true).appendingPathComponent("coach.store")
+        }
+        func makeHistory(_ name: String, id: UUID) throws -> (URL, URL, String) {
+            let (legacy, ownership) = try paths(name)
+            try autoreleasepool {
+                let schema = Schema(PersistenceController.legacyModelTypes)
+                let container = try ModelContainer(for: schema, configurations: [
+                    ModelConfiguration(schema: schema, url: legacy, cloudKitDatabase: .none)
+                ])
+                container.mainContext.insert(WeightEntry(id: id, weight: 70, weightUnit: "kg"))
+                try container.mainContext.save()
+            }
+            return (legacy, ownership, try CoachLocalOwnership.rawCheckpoint(legacy).identity)
+        }
+
+        let unverifiedID = UUID()
+        let (unverifiedLegacy, unverifiedOwnership, unverifiedCheckpoint) = try makeHistory("unverified-journal", id: unverifiedID)
+        let unverifiedBytes = try writeRestoration(restorationFields(legacy: unverifiedLegacy, version: 1, phase: "complete"),
+                                                   ownership: unverifiedOwnership)
+        try require(CloudSyncRestoration.opensDespiteUnverifiedJournal(legacyURL: unverifiedLegacy, ownershipRoot: unverifiedOwnership),
+                    "an unverified journal with a readable history file can open")
+        try require(!CloudSyncRestoration.isReady(legacyURL: unverifiedLegacy, ownershipRoot: unverifiedOwnership),
+                    "an unverified journal is not treated as a finished install")
+        let unverifiedGate = PersistenceController.cloudHistoryStartupGate(automatic: true, repairEnabled: true,
+            legacyURL: unverifiedLegacy, ownershipRoot: unverifiedOwnership)
+        try require(!unverifiedGate.defersPreparation && unverifiedGate.notice == unverifiedNotice
+                    && unverifiedGate.notice?.localizedCaseInsensitiveContains("close and reopen") != true,
+                    "startup opens an unverified journal instead of showing the restoring screen")
+        let requestedCheck = PersistenceController.cloudHistoryStartupGate(automatic: true, repairEnabled: true,
+            legacyURL: unverifiedLegacy, ownershipRoot: unverifiedOwnership, preflightRequested: true)
+        try require(requestedCheck.defersPreparation,
+                    "users can explicitly inspect retained history despite an unverified old journal")
+        let unverifiedCoach = try CloudSyncRestoration.prepare(legacyURL: unverifiedLegacy, ownershipRoot: unverifiedOwnership)
+        try require(sameFile(unverifiedCoach, localCoach(unverifiedOwnership)),
+                    "an unverified journal opens a local Coach file")
+        try require(Data(contentsOf: restorationJournal(unverifiedOwnership)) == unverifiedBytes,
+                    "opening despite an unverified journal leaves the journal unchanged")
+        try require(try CoachLocalOwnership.rawCheckpoint(unverifiedLegacy).identity == unverifiedCheckpoint,
+                    "opening despite an unverified journal leaves the history file unchanged")
+        try autoreleasepool {
+            let container = try CloudSyncRestoration.makeContainer(legacyURL: unverifiedLegacy, coachURL: unverifiedCoach, cloudKitMode: .none)
+            try require(try container.mainContext.fetch(FetchDescriptor<WeightEntry>()).first?.id == unverifiedID,
+                        "history stays readable when the recovery journal cannot be verified")
+        }
+        let reopenedCoach = try CloudSyncRestoration.prepare(legacyURL: unverifiedLegacy, ownershipRoot: unverifiedOwnership)
+        try require(sameFile(reopenedCoach, unverifiedCoach)
+                    && Data(contentsOf: restorationJournal(unverifiedOwnership)) == unverifiedBytes,
+                    "a later launch reuses the local Coach file and still does not rewrite the journal")
+
+        let garbageID = UUID()
+        let (garbageLegacy, garbageOwnership, garbageCheckpoint) = try makeHistory("garbage-journal", id: garbageID)
+        let garbageURL = restorationJournal(garbageOwnership)
+        try CoachLocalOwnership.prepareDirectory(garbageURL.deletingLastPathComponent())
+        let garbage = Data("not-json".utf8)
+        try garbage.write(to: garbageURL, options: .atomic)
+        let garbageCoach = try CloudSyncRestoration.prepare(legacyURL: garbageLegacy, ownershipRoot: garbageOwnership)
+        try require(sameFile(garbageCoach, localCoach(garbageOwnership))
+                    && Data(contentsOf: garbageURL) == garbage
+                    && (try CoachLocalOwnership.rawCheckpoint(garbageLegacy).identity) == garbageCheckpoint,
+                    "unreadable journal text opens history without rewriting the journal or the store")
+
+        let escapedID = UUID()
+        let (escapedLegacy, escapedOwnership, escapedCheckpoint) = try makeHistory("escaped-journal-directory", id: escapedID)
+        _ = try writeRestoration(restorationFields(legacy: escapedLegacy, directory: "../Outside", phase: "nope"),
+                                 ownership: escapedOwnership)
+        let escapedCoach = try CloudSyncRestoration.prepare(legacyURL: escapedLegacy, ownershipRoot: escapedOwnership)
+        try require(sameFile(escapedCoach, localCoach(escapedOwnership)),
+                    "a journal directory that is not a UUID cannot choose a Coach path")
+        try require(!FileManager.default.fileExists(atPath: escapedOwnership.appendingPathComponent("Outside").path)
+                    && !FileManager.default.fileExists(atPath: escapedOwnership.deletingLastPathComponent().appendingPathComponent("Outside").path),
+                    "an unverified journal directory cannot create files outside its restoration folder")
+        try require(try CoachLocalOwnership.rawCheckpoint(escapedLegacy).identity == escapedCheckpoint,
+                    "rejecting an escaped journal directory leaves history unchanged")
+
+        let stagedID = UUID()
+        let stagedDirectory = UUID().uuidString
+        let (stagedLegacy, stagedOwnership, stagedCheckpoint) = try makeHistory("staged-coach-despite-journal", id: stagedID)
+        _ = try writeRestoration(restorationFields(legacy: stagedLegacy, version: 1, directory: stagedDirectory, phase: "unknown"),
+                                 ownership: stagedOwnership)
+        let stagedCoach = stagedOwnership
+            .appendingPathComponent("iCloudRestoration", isDirectory: true)
+            .appendingPathComponent(stagedDirectory, isDirectory: true)
+            .appendingPathComponent("coach", isDirectory: true)
+            .appendingPathComponent("coach.store")
+        try CoachLocalOwnership.prepareDirectory(stagedCoach.deletingLastPathComponent())
+        try autoreleasepool {
+            let schema = Schema(CoachPersistence.modelTypes)
+            let container = try ModelContainer(for: schema, configurations: [
+                ModelConfiguration(CoachPersistence.configurationName, schema: schema, url: stagedCoach, cloudKitDatabase: .none)
+            ])
+            let nutrition = CoachNutritionLog()
+            nutrition.protein = 41
+            container.mainContext.insert(nutrition)
+            try container.mainContext.save()
+        }
+        let chosenCoach = try CloudSyncRestoration.prepare(legacyURL: stagedLegacy, ownershipRoot: stagedOwnership)
+        try require(sameFile(chosenCoach, stagedCoach),
+                    "a readable staged Coach file is kept when the journal format is unverified")
+        try require(!FileManager.default.fileExists(atPath: localCoach(stagedOwnership).path),
+                    "a readable staged Coach file is not replaced by a new empty Coach file")
+        try require(try CoachLocalOwnership.rawCheckpoint(stagedLegacy).identity == stagedCheckpoint,
+                    "using the staged Coach file leaves history unchanged")
+        try autoreleasepool {
+            let container = try CloudSyncRestoration.makeContainer(legacyURL: stagedLegacy, coachURL: chosenCoach, cloudKitMode: .none)
+            try require(try container.mainContext.fetch(FetchDescriptor<CoachNutritionLog>()).first?.protein == 41,
+                        "staged Coach records remain available when the journal cannot be verified")
+            try require(try container.mainContext.fetch(FetchDescriptor<WeightEntry>()).first?.id == stagedID,
+                        "history remains available beside a staged Coach file")
+        }
+
+        let strictID = UUID()
+        let (strictLegacy, strictOwnership, strictCheckpoint) = try makeHistory("strict-complete-journal", id: strictID)
+        _ = try writeRestoration(restorationFields(legacy: strictLegacy, phase: "complete"), ownership: strictOwnership)
+        try require(!CloudSyncRestoration.opensDespiteUnverifiedJournal(legacyURL: strictLegacy, ownershipRoot: strictOwnership),
+                    "a version 2 journal with a known phase does not take the unverified fallback")
+        let strictGate = PersistenceController.cloudHistoryStartupGate(automatic: true, repairEnabled: true,
+            legacyURL: strictLegacy, ownershipRoot: strictOwnership, preflightRequested: true)
+        try require(strictGate.defersPreparation && strictGate.notice == nil,
+                    "an explicitly requested check keeps sole-owner preparation")
+        let verifiedGate = PersistenceController.cloudHistoryStartupGate(automatic: true, repairEnabled: true,
+            legacyURL: strictLegacy, ownershipRoot: strictOwnership)
+        try require(!verifiedGate.defersPreparation && verifiedGate.notice == nil,
+                    "routine launches never wait for the network recovery check")
+        var missingRestoredFile = false
+        do { _ = try CloudSyncRestoration.prepare(legacyURL: strictLegacy, ownershipRoot: strictOwnership) }
+        catch { missingRestoredFile = error.localizedDescription.contains("A restored history file is missing.") }
+        try require(missingRestoredFile, "a completed journal with missing restored files still stops")
+        try require(try CoachLocalOwnership.rawCheckpoint(strictLegacy).identity == strictCheckpoint,
+                    "a missing restored file leaves the history file unchanged")
+
+        let preparedID = UUID()
+        let (preparedLegacy, preparedOwnership, preparedCheckpoint) = try makeHistory("strict-prepared-journal", id: preparedID)
+        _ = try writeRestoration(restorationFields(legacy: preparedLegacy, phase: "prepared"), ownership: preparedOwnership)
+        try require(!CloudSyncRestoration.opensDespiteUnverifiedJournal(legacyURL: preparedLegacy, ownershipRoot: preparedOwnership),
+                    "an in-progress recovery journal does not take the unverified fallback")
+        var reviewRequired = false
+        do { _ = try CloudSyncRestoration.prepare(legacyURL: preparedLegacy, ownershipRoot: preparedOwnership) }
+        catch { reviewRequired = error.localizedDescription.contains("History changed during iCloud recovery") }
+        try require(reviewRequired, "an in-progress journal still stops when its retained copies cannot be checked")
+        try require(try CoachLocalOwnership.rawCheckpoint(preparedLegacy).identity == preparedCheckpoint,
+                    "stopping an in-progress journal leaves the history file unchanged")
+
+        let linkedID = UUID()
+        let (linkedTarget, linkedOwnership, linkedCheckpoint) = try makeHistory("linked-history", id: linkedID)
+        try CoachLocalOwnership.prepareDirectory(linkedOwnership)
+        let linkedLegacy = linkedOwnership.appendingPathComponent("linked-default.store")
+        try FileManager.default.createSymbolicLink(at: linkedLegacy, withDestinationURL: linkedTarget)
+        _ = try writeRestoration(restorationFields(legacy: linkedLegacy, version: 1, phase: "complete"), ownership: linkedOwnership)
+        try require(!CloudSyncRestoration.opensDespiteUnverifiedJournal(legacyURL: linkedLegacy, ownershipRoot: linkedOwnership),
+                    "a linked history file is not treated as openable")
+        var rejectedLink = false
+        do { _ = try CloudSyncRestoration.prepare(legacyURL: linkedLegacy, ownershipRoot: linkedOwnership) }
+        catch { rejectedLink = error.localizedDescription.contains("The iCloud recovery journal could not be verified.") }
+        try require(rejectedLink, "a linked history file stays blocked when the journal is unverified")
+        try require(try CoachLocalOwnership.rawCheckpoint(linkedTarget).identity == linkedCheckpoint,
+                    "rejecting a linked history file leaves the real store unchanged")
+
+        var banner = CloudHistorySyncState()
+        banner.openStore(identifier: "history", cloudBacked: true, repairPending: false, attention: unverifiedNotice)
+        try require(banner.phase == .syncUnavailable && banner.message == unverifiedNotice
+                    && !banner.message.localizedCaseInsensitiveContains("close and reopen"),
+                    "an unverified journal is a status message and does not ask for a restart")
+        var offline = CloudHistorySyncState()
+        offline.openStore(identifier: "history", cloudBacked: false, repairPending: false, attention: unverifiedNotice)
+        try require(offline.phase == .offlineFallback && offline.message == unverifiedNotice,
+                    "history stays open without iCloud when the journal notice is the only problem")
+
         count += try CloudHistoryReplayDuplicateRegressionChecks.run()
         count += try CloudHistoryCloudRecordEncoderRegressionChecks.run()
+        count += try CloudSyncRestorationMigrationRegressionChecks.run()
         return count
     }
 }

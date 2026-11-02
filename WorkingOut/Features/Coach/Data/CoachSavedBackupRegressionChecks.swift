@@ -128,7 +128,7 @@ enum CoachSavedBackupRegressionChecks {
                     "rejected corruption leaves all stored history unchanged")
         try require(try Data(contentsOf: photoURL) == photoBytes, "rejected corruption preserves the restored image")
         try require(try Data(contentsOf: savedURL) == savedBytes, "repeated and rejected imports never change the saved original")
-        return count
+        return count + (try await CoachDuplicateBackupRegressionChecks.run())
     }
 }
 #endif

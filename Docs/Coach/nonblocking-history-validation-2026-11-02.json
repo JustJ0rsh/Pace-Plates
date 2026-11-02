@@ -1,0 +1,77 @@
+{
+  "date": "2026-11-02",
+  "branch": "codex/recovery-hardening-20261031",
+  "base_commit": "fc6a0406388ccac1142d39a0618d5950cbd14acb",
+  "delivery": "Local, uncommitted; not installed on Eagle 1, uploaded, or published. Existing owner edits preserved.",
+  "behavior": [
+    "Routine startup opens available on-device history without the sole-owner network preflight. Normal CloudKit synchronization remains enabled.",
+    "Retained-history inspection or explicitly authorized restoration still runs on next launch, with a Continue Without iCloud Check control. Cancellation waits for the temporary storage owner to release its stores before local opening.",
+    "An unreadable-history screen offers explicit Continue with New Local History. The new on-disk full-schema store is selected durably before app views can write. Original history files and journals remain untouched.",
+    "Subsequent launches keep the continued history; there is no automatic switch back to old files or automatic merge.",
+    "Coach photos, weight anchors, archive recovery files and active-run checkpoints/identity keys are separated for continued history.",
+    "Backup restore failures appear in a dismissible Home notice rather than an automatic blocking alert.",
+    "Unapproved restore reviews remain available after ordinary relaunch; consumed/rejected reviews do not offer a stale restore button."
+  ],
+  "continued_history_selection": "CoachLocalOwnership/ContinuedHistory/selection.json binds a UUID-relative directory to its actual persistent store identity. Missing or invalid selections do not silently choose another empty database.",
+  "verification": {
+    "target": "iPhone 17 Pro Simulator, iOS 26.5; synthetic isolated histories only",
+    "storage_assertions": 305,
+    "coach_assertions": 652,
+    "ui_flow": "Unreadable original history -> explicit continuation -> Home -> save 88 weight entry -> terminate -> relaunch -> same entry visible and searchable",
+    "cancellation": "Injected pending cloud check canceled through actual controller; existing local weight identity retained, no live CloudKit calls",
+    "backup": "New continued-history export and actual import retained the exact weight identity",
+    "bundles": [
+      {
+        "path": "/tmp/pace-nonblocking-history-final-20261102.xcresult",
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "runtime_warnings": [
+          {
+            "issueType": "Runtime Warning",
+            "message": "Invalid frame dimension (negative or non-finite)."
+          }
+        ]
+      },
+      {
+        "path": "/tmp/pace-nonblocking-history-verified-20261102.xcresult",
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0,
+        "runtime_warnings": [
+          {
+            "issueType": "Runtime Warning",
+            "message": "Invalid frame dimension (negative or non-finite)."
+          }
+        ]
+      }
+    ],
+    "release_build": "Passed: unsigned generic iOS Release, CODE_SIGNING_ALLOWED=NO",
+    "release_log": "/Users/joshua/.codex/worktrees/pace-icloud-restore/Pace-Plates/.tmp/nonblocking-history-20261102/release.log"
+  },
+  "limits": [
+    "No physical-device installation or live iCloud convergence was tested.",
+    "Continued history does not itself recover, merge, or display unreadable older history. Keep the app installed and export new entries before recovery work.",
+    "A device unable to create or save durable storage can still reject continuation; the app does not offer writable in-memory storage as if it were saved history.",
+    "Existing compiler warnings and SwiftUI invalid-frame navigation warnings remain."
+  ],
+  "earlier_attempts": [
+    "Two initial builds exposed actor-isolation errors; corrected using a synchronized immutable-path snapshot rather than weakening actor checks.",
+    "The initial continuation UI assertion failed because the parent accessibility identifier replaced the button identifier. Added container accessibility semantics; the final real UI save/relaunch flow passed.",
+    "One CLI test run finished test execution but hung while finalizing its result bundle. Its exact process was stopped; no completed bundle from that run is claimed. Later XcodeBuildMCP runs completed with readable results."
+  ],
+  "source_sha256": {
+    "WorkingOut/App/ContentView.swift": "79a8c1d5a23bb39e8a496448bff55f021e28a7fe73b3dd52219758945172c5b4",
+    "WorkingOut/App/CloudHistoryStatusView.swift": "61fdbea3f49fc45470da655ec3b37eb7262801d86c07a8f0c7928747de6f6488",
+    "WorkingOut/Data/LocalHistoryContinuation.swift": "5a0a5ebd5ee1a4c53702149e0b46190b243c69328147dc7a1e8e4053819cf6f3",
+    "WorkingOut/Data/CoachPersistence.swift": "763020c8b0be890678c6d2e64ca2ef3c363b24fde945bd59d500ab46b05497f3",
+    "WorkingOut/Data/PersistenceController.swift": "5ae2d2ba4bc1e5b38c6bd287cf61ee142a383d6f81a484514aecacb9a42c8d6f",
+    "WorkingOut/Data/CloudHistoryRestorePlan.swift": "ab4de2222d6555976447bcb49842a4adf987e2ea93a6eb8870afa27a56126114",
+    "WorkingOut/Features/Runs/RunTrackingView.swift": "53384ba7940fcda2ed0bbae2eecc7625dd44bb882f859cc1387e1fd805f31740",
+    "WorkingOut/Features/Coach/CoachRegressionChecks.swift": "39edaaf6c93549234ef112abc3d44c3563a3f222bc3b54c1e80e17809fc17cc7",
+    "WorkingOut/Features/Coach/Data/LocalHistoryContinuationRegressionChecks.swift": "3d62d0a34f95e6ebba216c7a5a314c01388fab48e48067512fc8f95d8d618915",
+    "WorkingOut/Features/Coach/Data/CloudHistoryRestoreWorkflowRegressionChecks.swift": "585401d40f3c4d7cd036086434ade3bf4947c6a01c878261a2286507c7c11811",
+    "WorkingOut/Features/Coach/Data/CloudSyncRestorationRegressionChecks.swift": "3d0017ec0b64adc299e0a5b3d6f041f39f4232972a14599a4dcb55a38968d3ac",
+    "WorkingOutUITests/NonblockingHistoryUITests.swift": "8bb4daae19c8bef877c1c0e11a0b80371798139369709f8aaf69dc38b33f5f10"
+  }
+}

@@ -173,11 +173,13 @@ enum CoachPersistenceRegressionChecks {
         try DataBackupService.restore(movedLegacyArchive, context: modernScheduleTarget.mainContext)
         try require(try modernScheduleTarget.mainContext.fetch(FetchDescriptor<PlannedSession>()).first?.localScheduleOverride == false, "reviewed revision changes do not become user schedule overrides")
         var malformed = graph
-        malformed.weightEntries.append(graph.weightEntries[0])
+        // An unlinked duplicate can now be preserved. A set referencing two
+        // same-UUID definitions still lacks enough information to choose a parent.
+        malformed.exerciseDefinitions.append(graph.exerciseDefinitions[0])
         let (_, failedRestore) = try store("invalid-backup", local: true)
         do {
             try DataBackupService.restore(malformed, context: failedRestore.mainContext)
-            throw CoachRepositoryError.invalidValue("duplicate backup should fail")
+            throw CoachRepositoryError.invalidValue("ambiguous duplicate parent should fail")
         } catch CoachHistoryArchive.ArchiveError.invalid { count += 1 }
         try require(try failedRestore.mainContext.fetchCount(FetchDescriptor<WeightEntry>()) == 0 && failedRestore.mainContext.hasChanges == false, "invalid backup fails before any model writes")
         let (zoneStoreURL, zoneStore) = try store("selected-time-zone", local: true)
@@ -196,6 +198,7 @@ enum CoachPersistenceRegressionChecks {
             "import preserves the selected time zone and civil start date across disk reopening")
         try require(savedZoneOccurrence?.originalCivilDate == "2026-09-14" && savedZoneOccurrence?.currentCivilDate == "2026-09-14" && savedZoneOccurrence.map { CoachRepository.civilDate($0.scheduledDate, timeZone: selectedZone) } == "2026-09-14",
             "imported occurrence dates use the persisted selected time zone")
+        count += try await runRevisionRestoreCases(root: root)
         count += try await runFailureCases(root: root)
         count += try await runStartupCases(root: root)
         let (_, retired) = try store("retired-restore", local: true)

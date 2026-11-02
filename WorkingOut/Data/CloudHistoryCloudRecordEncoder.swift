@@ -1,10 +1,34 @@
 import Foundation
 import CoreData
 import CloudKit
+import CryptoKit
 
 /// Creates conditional-insert payloads from current managed values. The caller
 /// owns the asset directory until CloudKit saves and verifies the records.
 enum CloudHistoryCloudRecordEncoder {
+    /// Stable payload evidence for an explicitly reviewed set. Asset paths and
+    /// server change tags are excluded; current asset bytes and links are bound.
+    static func fingerprint(_ records: [CKRecord]) throws -> String {
+        var hash = SHA256()
+        func append(_ value: String) { hash.update(data: Data("\(value.utf8.count):\(value)".utf8)) }
+        func identity(_ id: CKRecord.ID) -> String { id.zoneID.ownerName + ":" + id.zoneID.zoneName + ":" + id.recordName }
+        for record in records.sorted(by: { identity($0.recordID) < identity($1.recordID) }) {
+            append(record.recordType); append(identity(record.recordID))
+            for key in record.allKeys().sorted() {
+                append(key)
+                switch record[key] {
+                case let value as String: append("string"); append(value)
+                case let value as NSNumber: append("number"); append(String(cString: value.objCType)); append(value.stringValue)
+                case let value as Date: append("date"); append(String(value.timeIntervalSinceReferenceDate.bitPattern))
+                case let value as Data: append("data"); append(SHA256.hash(data: value).map { String(format: "%02x", $0) }.joined())
+                case let value as CKAsset: append("asset"); append(SHA256.hash(data: try readAsset(value)).map { String(format: "%02x", $0) }.joined())
+                default: throw failure("A recovery payload contains an unsupported field.")
+                }
+            }
+        }
+        return hash.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
     enum EncodingError: LocalizedError {
         case unsupported(String)
         var errorDescription: String? {

@@ -189,6 +189,7 @@ enum CoachScheduleRegressionChecks {
         try require(repeatedRevisedRows.first(where: { $0.sourceSlotID == "morning" })?.currentCivilDate == expectedRepeatedMorning,
             "repeating a revised week uses its revised authored day index")
         _ = [firstID, secondID, restID] // Original draft IDs were intentionally replaced before any execution existed.
+        checks += try await CoachPlanRecoveryRegressionChecks.run()
         return checks
     }
 }

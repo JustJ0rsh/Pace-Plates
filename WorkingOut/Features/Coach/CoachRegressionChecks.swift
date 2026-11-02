@@ -13,7 +13,12 @@ struct CoachRegressionChecksView: View {
                     let executionCount = try await CoachExecutionRegressionChecks.run()
                     let persistenceCount = try await CoachPersistenceRegressionChecks.run() + CoachSavedBackupRegressionChecks.run()
                     let scheduleCount = try await CoachScheduleRegressionChecks.run()
-                    result = "Coach checks passed: \(storageCount + executionCount + persistenceCount + scheduleCount)"
+                    let calendarCount = try WorkoutCalendarPlanRegressionChecks.run()
+                    let cloudStatusCount = try await CloudHistorySyncRegressionChecks.run()
+                    let cloudRestoreCount = try await CloudHistoryRestoreWorkflowRegressionChecks.run()
+                    let profileCount = try UserProfileUnitRegressionChecks.run()
+                    let continuationCount = try await LocalHistoryContinuationRegressionChecks.run()
+                    result = "Coach checks passed: \(storageCount + executionCount + persistenceCount + scheduleCount + calendarCount + cloudStatusCount + cloudRestoreCount + profileCount + continuationCount)"
                 } catch { result = "Coach checks failed: \(error.localizedDescription)" }
             }
     }

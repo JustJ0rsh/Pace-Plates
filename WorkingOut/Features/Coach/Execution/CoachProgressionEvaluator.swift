@@ -82,14 +82,18 @@ enum CoachProgressionEvaluator {
                     for suggestion in existing where suggestion.ruleID == value.id && suggestion.statusRaw == "pending" { suggestion.statusRaw = "stale" }
                 case let .propose(proposal):
                     for suggestion in existing where suggestion.ruleID == value.id && suggestion.statusRaw == "pending" && suggestion.evidenceFingerprint != proposal.evidenceFingerprint { suggestion.statusRaw = "stale" }
-                    if existing.contains(where: { $0.ruleID == value.id && $0.evidenceFingerprint == proposal.evidenceFingerprint }) { continue }
-                    let suggestion = CoachProgressionSuggestion()
+                    let matching = existing.filter { $0.ruleID == value.id && $0.evidenceFingerprint == proposal.evidenceFingerprint }
+                    if matching.contains(where: { $0.statusRaw != "stale" }) { continue }
+                    // A cleared hold can restore the same evidence without undoing
+                    // a user's decision or creating a new suggestion on every cycle.
+                    let suggestion = matching.first ?? CoachProgressionSuggestion()
                     suggestion.planID = plan.id; suggestion.ruleID = value.id; suggestion.exerciseID = value.exerciseId
                     suggestion.sourceTemplateID = value.sessionTemplateId; suggestion.reason = proposal.reason
                     suggestion.evidenceFingerprint = proposal.evidenceFingerprint
                     suggestion.evidenceIDsData = try JSONEncoder().encode(proposal.evidenceIDs)
                     suggestion.proposedPrescriptionData = try JSONEncoder().encode(proposal)
-                    context.insert(suggestion); existing.append(suggestion)
+                    suggestion.statusRaw = "pending"
+                    if suggestion.modelContext == nil { context.insert(suggestion); existing.append(suggestion) }
                 }
             case let .manualReview(value): holds.append("\(value.title): \(value.instructions)")
             }

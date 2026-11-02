@@ -9,6 +9,11 @@ extension CoachLocalOwnership {
     static func snapshotDigest(_ context: ModelContext) throws -> String {
         let fresh = ModelContext(context.container)
         var snapshot = try DataBackupService.capture(context: fresh)
+        // This digest compares portable values across stores. Version 6 archive
+        // keys identify physical source rows and necessarily change on restore;
+        // physical relationships are verified separately by migration/backup checks.
+        snapshot.physicalRecords = nil
+        snapshot.formatVersion = 5
         snapshot.exportedAt = Date(timeIntervalSince1970: 0)
         snapshot.exerciseDefinitions.sort { $0.id.uuidString < $1.id.uuidString }
         snapshot.workoutSessions.sort { $0.id.uuidString < $1.id.uuidString }

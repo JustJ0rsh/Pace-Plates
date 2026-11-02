@@ -24,6 +24,7 @@ struct OptimizationRegressionChecksView: View {
     }
 
     private func runChecks() async throws {
+        _ = try await RestoredRecordConsumerRegressionChecks.run()
         let source = PersistenceController(inMemory: true, cloudKitMode: .none)
         let context = source.container.mainContext
         let now = Date()
