@@ -160,6 +160,7 @@ final class HealthKitManager: ObservableObject {
         if let t = HKObjectType.quantityType(forIdentifier: .distanceSwimming) { set.insert(t) }
         if let t = HKObjectType.quantityType(forIdentifier: .distanceRowing) { set.insert(t) }
         set.insert(HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!)
+        set.insert(HKObjectType.quantityType(forIdentifier: .bodyMass)!)
         return set
     }()
 
@@ -1418,6 +1419,22 @@ final class HealthKitManager: ObservableObject {
             }
             healthStore.execute(query)
         }
+    }
+
+    /// Link the sample before saving so a concurrent import recognizes it.
+    func saveBodyWeight(_ weight: Double, unit: String, date: Date, prepare: (UUID) throws -> Void) async throws {
+        guard HKHealthStore.isHealthDataAvailable(),
+              let type = HKQuantityType.quantityType(forIdentifier: .bodyMass) else {
+            throw NSError(domain: "HealthKitManager", code: 1, userInfo: [NSLocalizedDescriptionKey: "Apple Health is not available on this device."])
+        }
+        try await requestAuthorization()
+        guard healthStore.authorizationStatus(for: type) == .sharingAuthorized else {
+            throw NSError(domain: "HealthKitManager", code: 2, userInfo: [NSLocalizedDescriptionKey: "Allow Pace & Plates to write Weight in the Health app under Sharing > Apps and Services."])
+        }
+        let healthUnit: HKUnit = UnitConverter.canonicalWeightUnit(unit) == "kg" ? .gramUnit(with: .kilo) : .pound()
+        let sample = HKQuantitySample(type: type, quantity: HKQuantity(unit: healthUnit, doubleValue: weight), start: date, end: date)
+        try prepare(sample.uuid)
+        try await healthStore.save(sample)
     }
 
     /// Get user's latest body weight from HealthKit (returns value in pounds)

@@ -9,6 +9,9 @@ struct LogWeightView: View {
     @FocusState private var weightFocused: Bool
     @AppStorage("weightUnit") private var weightUnit = "lbs" // Default unit
     @State private var saveErrorMessage: String? = nil
+    @State private var healthErrorMessage: String? = nil
+    @State private var savedEntry: WeightEntry? = nil
+    @State private var isSaving = false
     
     private var isInputValid: Bool {
         weight != nil && weight ?? 0 > 0
@@ -45,15 +48,26 @@ struct LogWeightView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .disabled(isSaving || savedEntry != nil)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         saveWeight()
                     }
-                    .disabled(!isInputValid)
+                    .disabled(!isInputValid || isSaving || savedEntry != nil)
                 }
             }
+            .interactiveDismissDisabled(isSaving || savedEntry != nil)
             .onAppear { weightFocused = true }
+            .alert("Saved in Pace & Plates", isPresented: Binding(
+                get: { healthErrorMessage != nil },
+                set: { if !$0 { healthErrorMessage = nil } }
+            )) {
+                Button("Retry") { healthErrorMessage = nil; syncWeightToHealth() }
+                Button("Done") { healthErrorMessage = nil; dismiss() }
+            } message: {
+                Text(healthErrorMessage ?? "The weight could not be saved to Apple Health.")
+            }
             .alert("Save Failed", isPresented: Binding(
                 get: { saveErrorMessage != nil },
                 set: { if !$0 { saveErrorMessage = nil } }
@@ -77,11 +91,37 @@ struct LogWeightView: View {
             action: "save weight entry",
             onFailure: { message in saveErrorMessage = message }
         ) {
-            Haptics.notify(.success)
-            dismiss()
+            savedEntry = newEntry
+            syncWeightToHealth()
         } else {
             Haptics.notify(.error)
             modelContext.delete(newEntry)
+        }
+    }
+
+    private func syncWeightToHealth() {
+        guard let entry = savedEntry, !isSaving else { return }
+        isSaving = true
+        Task {
+            do {
+                try await HealthKitManager.shared.saveBodyWeight(entry.weight, unit: entry.weightUnit, date: entry.date) { sampleID in
+                    if CoachPersistence.isLocal(modelContext) {
+                        entry.sourceHealthSampleID = sampleID.uuidString
+                        try modelContext.save()
+                    }
+                }
+                isSaving = false
+                Haptics.notify(.success)
+                dismiss()
+            } catch {
+                if CoachPersistence.isLocal(modelContext), entry.sourceHealthSampleID != nil {
+                    entry.sourceHealthSampleID = nil
+                    try? modelContext.save()
+                }
+                isSaving = false
+                Haptics.notify(.error)
+                healthErrorMessage = "Your weight was saved in Pace & Plates, but not in Apple Health. \(error.localizedDescription)"
+            }
         }
     }
 }
