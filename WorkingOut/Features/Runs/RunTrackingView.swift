@@ -32,7 +32,10 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
     private var lastCheckpointAt: Date?
     private var attemptedRecovery = false
     private var recoveryIdentityKey: String {
-        AppLaunchConfiguration.current.isUITest ? "runRecovery.uiTestIdentity" : "runRecovery.activeIdentity"
+        if let directory = LocalHistoryContinuation.activeDirectory {
+            return "runRecovery.continuedHistory." + directory.lastPathComponent
+        }
+        return AppLaunchConfiguration.current.isUITest ? "runRecovery.uiTestIdentity" : "runRecovery.activeIdentity"
     }
     private var recoveryStore: RunRecoveryStore? {
         #if DEBUG
@@ -41,7 +44,7 @@ class RunTracker: NSObject, CLLocationManagerDelegate {
             return Self.uiTestRecoveryStore
         }
         #endif
-        return AppLaunchConfiguration.current.shouldSkipAutomationSideEffects ? nil : .shared
+        return AppLaunchConfiguration.current.shouldSkipAutomationSideEffects ? nil : (LocalHistoryContinuation.runRecoveryStore ?? .shared)
     }
 
     #if DEBUG

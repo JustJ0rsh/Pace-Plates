@@ -1,0 +1,150 @@
+{
+  "date": "2026-10-31",
+  "branch": "codex/recovery-hardening-20261031",
+  "base_commit": "fc6a0406388ccac1142d39a0618d5950cbd14acb",
+  "delivery": "Local, uncommitted, unpublished; no live user records accessed",
+  "fixes": [
+    "Known compiled-schema column additions migrate while original values, IDs, relationships and assets remain verified",
+    "Migration and iCloud-restoration journals survive validated app-container relocation, including old journals and interrupted phases",
+    "Duplicate UUIDs no longer trap launch reconciliation; run navigation resolves exact stored records and ambiguous Coach actions reject before mutation",
+    "Home and Settings expose pending, offline, account, import and repair status without claiming all old data recovered",
+    "Cloud errors and timestamps are tracked independently for setup, download and upload",
+    "Raw and optional actual exercise loads convert together while immutable Coach snapshots retain their original units",
+    "Conflicting retained-legacy Health updates require review and do not overwrite an arbitrary record or consume their shared anchor",
+    "Earlier seven fixes integrated: backup revision conflicts, nutrition targets on resume, recovery suggestions, Undo Skip validation, reviewed removed-slot restoration, calendar heading parsing and civil-day scheduling"
+  ],
+  "validation": {
+    "domain_checks": {
+      "contract": 77,
+      "execution": 52,
+      "daily_numbers": 14,
+      "measurement_units": 8,
+      "result": "passed"
+    },
+    "calendar_checks": {
+      "checks": 12,
+      "result": "passed",
+      "included_in_coach_checks": true
+    },
+    "storage_and_migration": {
+      "checks": 246,
+      "result": "passed",
+      "includes_new_migration_compatibility_checks": 83
+    },
+    "coach_and_cloud_status": {
+      "checks": 457,
+      "result": "passed",
+      "includes_cloud_status_checks": 37
+    },
+    "restored_record_consumers": {
+      "focused_checks": 49,
+      "result": "passed",
+      "also_exercised_in_app_optimization_fixture": true
+    },
+    "core_ui": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "result_bundle": "/tmp/pace-hardening-storage-status-verified-20261031.xcresult"
+    },
+    "user_flow_ui": {
+      "initial_run": {
+        "passed": 2,
+        "failed": 1,
+        "result_bundle": "/tmp/pace-hardening-userflows-20261031.xcresult"
+      },
+      "passed_tests": [
+        "testCoachImportReviewTrackingAndCheckIn",
+        "testCoachReviewedRevisionRestoresRemovedSession"
+      ],
+      "nutrition_retry": {
+        "result": "passed",
+        "result_bundle": "/tmp/pace-hardening-nutrition-verified-20261031.xcresult",
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "initial_failure_analysis": "Recorded UI confirmed Save succeeded. Focus-driven scrolling moved the confirmation below the viewport while the test searched upward; the helper now searches downward and uses a semantic button tap. Assertions and product behavior are unchanged.",
+      "result": "All three target workflows verified; the initial nutrition test-navigation failure is retained above."
+    },
+    "debug_simulator_build": "passed",
+    "unsigned_generic_ios_release_build": "passed",
+    "release_log": "/tmp/pace-hardening-release-build-20261031.log",
+    "whitespace_check": "passed",
+    "targeted_simulator_tests": {
+      "passed": 9,
+      "unresolved_failures": 0,
+      "note": "Six core tests, two workflows from the initial user-flow run, and the corrected nutrition rerun. These are selected tests, not the full UI suite."
+    }
+  },
+  "limits": [
+    "All runtime tests used disposable synthetic stores and isolated Simulator fixtures",
+    "No affected-user device/account or live production CloudKit sync was tested",
+    "This patch cannot recreate records that only existed in a deleted installation without a surviving cloud/device/export/backup copy",
+    "The additional conflicting Health-import batch guard belongs to the retained legacy importer; the current normal path uses Cardio Inbox"
+  ],
+  "source_sha256": {
+    "WorkingOut/App/CloudHistoryStatusView.swift": "3a78d76151ce8dd78869a29c956805d151a4faeb20db5f645daaa61d7872c541",
+    "WorkingOut/App/ContentView.swift": "2db997038774a430d4e95ca5e11f3c2c1c1a1cb136050731d129a4ff6b1f3bd8",
+    "WorkingOut/Data/CloudHistoryEventObserver.swift": "75d9ea77ca9da26a9571829d8b91a8068cf685b494646af26cc659e4caeb5eae",
+    "WorkingOut/Data/CloudHistoryMissingRecordRepair.swift": "f1b2ee3711bd06fd3c8bc2adc832ac723a708260c3f660ef70cb5ce480436f81",
+    "WorkingOut/Data/CloudHistorySyncState.swift": "4b64dbe77f49e00d4b5205afb89330b1f113220a7f4c34f8db10e8de037ee731",
+    "WorkingOut/Data/CloudSyncRestoration.swift": "7a434f01ae29f1caa08cbbfe2403ef2b8d49e805ca605505f38a4973e54fd027",
+    "WorkingOut/Data/CoachLocalOwnership+Migration.swift": "0deca8a961eea2ae99068cec274e993840a5bc9860603d4b0c693f3a4a7ac068",
+    "WorkingOut/Data/PersistenceController.swift": "83eb062b67f63c3432eb836ee2ac1457d9c15e31869e9d0f5f09ce2719e410c4",
+    "WorkingOut/Features/Coach/CoachHomeView.swift": "bd4260c72b4362cd1604d3175cb5dc20239faa7aa46fb371d6afbec95e7a8404",
+    "WorkingOut/Features/Coach/CoachProgramViews.swift": "2815e5d9b160edba8d88e0c94cd295dfe243e23a18f79784f9e9a6a0bc96ef13",
+    "WorkingOut/Features/Coach/CoachRegressionChecks.swift": "a89b1a633d168bc11dbbff79aba07a0773ef3b2971d7401e2dca44f10aa2ada0",
+    "WorkingOut/Features/Coach/Data/CloudHistorySyncRegressionChecks.swift": "f47f80e03141be7993993da9a2d69495bb448baf9af50a0aaafdc6fa3737610e",
+    "WorkingOut/Features/Coach/Data/CloudSyncRestorationMigrationRegressionChecks.swift": "1f52e7ca2b637c9769aa12530ec85cc87c41df98a50866022b02d6fb63ce00ea",
+    "WorkingOut/Features/Coach/Data/CloudSyncRestorationRegressionChecks.swift": "abd0dc2d9119a4a983f7ec6d8e8b70a44a1758a12572706f26ae8c6f5feb96c5",
+    "WorkingOut/Features/Coach/Data/CoachBackupGraph.swift": "0a6cfff46c3b896521aac928aefd484f6191326dcbc8f1dd26c12df1e60455a1",
+    "WorkingOut/Features/Coach/Data/CoachPersistenceRegressionChecks+RevisionRestore.swift": "7f3f8b00800b15f81d08d1a8e35841938e6515f75bfc315b126e7180ec53ff9c",
+    "WorkingOut/Features/Coach/Data/CoachPersistenceRegressionChecks.swift": "6ebe8d1bbe09168581ddae75271c9bcaa40bc7b6316cf0efe981b7dcd2aa9f87",
+    "WorkingOut/Features/Coach/Data/CoachRepository+Schedule.swift": "19fa5fa3db00eb4f7d7f04416d79c29b021388872d9d06312631498b8d08fda1",
+    "WorkingOut/Features/Coach/Data/CoachRepository.swift": "90b113e388d4429eb2bed455eb2593318986309fd86e2ad8fa131533438dc6d0",
+    "WorkingOut/Features/Coach/Execution/CoachExecutionRegressionChecks.swift": "c08a9bdc2aea37c60e4dbbdc72859e741fa8abb178d4864627af304770520301",
+    "WorkingOut/Features/Coach/Execution/CoachPlanRecoveryRegressionChecks.swift": "c44b6443ab45cef14c95c6c949d63667a38bcc66827e9af5b931173e26ef0980",
+    "WorkingOut/Features/Coach/Execution/CoachPlannedActivityView.swift": "49bc961289c1e5af26f48fcdd94f8e515f232fefe9e1e5af7088be4b4ca5fae7",
+    "WorkingOut/Features/Coach/Execution/CoachProgressionEvaluator.swift": "d083589427a3a1a920a32617c53b855a0f99f89d87cf38147c17bd2033430d95",
+    "WorkingOut/Features/Coach/Execution/CoachProgressionRecoveryRegressionChecks.swift": "5cf16d6e4723c87853b555dbaa38ba8c638876149eb84778aa833215e1941e32",
+    "WorkingOut/Features/Coach/Execution/CoachScheduleRegressionChecks.swift": "549a87e780fcab91362b900d1673a55617d0f4fae38acfa6408d36dff7fb87c0",
+    "WorkingOut/Features/Runs/RunLogView.swift": "ab19b7f6050977ab447cc5c5e51f8c288ee4614162a245becfa5b7df85635579",
+    "WorkingOut/Features/Settings/SettingsView.swift": "cba663b7dad9ca8278804228be41d397a6554751a9374cc52471116358546454",
+    "WorkingOut/Services/DebugDataGenerator.swift": "a39885d257877a3bbab61b94bde04775f02915f3b9664d9cec6e40fcba9b378d",
+    "WorkingOut/Services/OptimizationRegressionChecks.swift": "82a31cf36a1bd78bd022fd074657d5c424d68aba8963c8878d885c033333c75a",
+    "WorkingOut/Services/RecordIdentityLookup.swift": "76d2399523fd5d8ee3ab3dcc20b78f94f1030d9dbde272cd3f285b2ae7bd9ed5",
+    "WorkingOut/Services/RestoredRecordConsumerRegressionChecks.swift": "bc20daef64a80075294594cd6105f253673f1b83e351e3cda3ee084c7771eaa4",
+    "WorkingOut/Services/RunHistoryStore.swift": "05924032bdabb2912079a330e5b8f85be4f77893f5e7b79950e7d4e6e00232fc",
+    "WorkingOut/Services/RunImportStore.swift": "1535055f94af09399a87687eb1920332f2c804ffcb2d79cdb91361dd726443f3",
+    "WorkingOut/Services/TrainingPlanService.swift": "c28a0b422591018d1d4aac8ff1e246cb6a55a5dbe7b022e2a0cd57ff270d53ae",
+    "WorkingOut/Services/WorkoutCalendarPlan.swift": "7c538375e8366368abfbe25524f98226caad99ff548ee806bd0849c6b31faade",
+    "WorkingOut/Services/WorkoutCalendarPlanRegressionChecks.swift": "5c16d57827dc61e5b3fea69da4811d7b1f0bb1d938fe1ed0171de8c3e225c4b0",
+    "WorkingOut/Services/WorkoutCalendarService.swift": "52dc5d87aa9aac0e124f5758a34c78e8f9e91ae67808e526aac2d77f8cae1797",
+    "WorkingOut/Services/WorkoutWeightUnitConversion.swift": "1a8e61b4cec317bffd5e414e79d43d7b93348ec47b1d6b8eabf4dcde0b2b0ca0",
+    "WorkingOutUITests/CloudHistoryStatusUITests.swift": "50ccf106cb7c9433c1bb5da08870ea12bf6b66fe5f421f3ced874504d2b81d3f",
+    "WorkingOutUITests/CoachEditingUITests.swift": "3c9b2c05ac593c45847947049d516464e469c794ed3f60f1c74d1648c71e986f",
+    "WorkingOutUITests/RestoredHistoryUITests.swift": "bc839787d1251b848bf4a7e3881477235b1c975bc2dd58bdaaf2eb008280a287",
+    "WorkingOutUITests/WorkingOutUITests.swift": "2b2c76d9e3909c236cafda397a9a753c6d13a63cf8a98738e3d7b464e90efb60",
+    "scripts/test_workout_calendar.py": "07f4fc0b28bc6338bac3d547642d12b69723434d23737849194c453f963a7886",
+    "scripts/workout_calendar_test_main.swift": "d2f17b434546eebe396624b6d93df58d580d1e9b57fdde65eb580c8acc8fb120"
+  },
+  "incident_findings": {
+    "reported_flow": "Updates 2.5 and a follow-up stayed on the history-attention screen; deleting and reinstalling opened the app but old history was missing.",
+    "observed_screen": "Your history needs attention; local schema added an unrecognized table.",
+    "reproduced_upgrade_blockers": [
+      "The migration guard rejected legitimate model additions.",
+      "Recovery journals used absolute paths that could become stale after an app-container relocation."
+    ],
+    "evidence_limit": "Synthetic migration cases reproduce these blockers; the affected user device was not available to identify every cause in that installation.",
+    "reinstall_effect": "Deleting the installation removes local-only history and migration state. Reinstallation cannot recover records that lack a surviving iCloud, device, export or backup copy.",
+    "affected_user_history": "Not recovered or verified during this work."
+  },
+  "follow_up_recovery_audit": {
+    "report": "Docs/Coach/recovery-user-sequence-verification-2026-10-31.json",
+    "assessment": "The historical upgrade/retry and both reinstall branches are now explicitly checked offline, plus all 24 populated model types. Recovery is not fully cleared: duplicate-UUID backup restore fails, automatic repair has a remote-deletion race, profile units may be lost after reinstall, and affected-account Production cloud restoration is unverified.",
+    "app_source_changes_during_audit": false
+  },
+  "historical_report_notice": "This records the earlier investigation state. The three subsequently identified backup, remote-deletion repair, and profile-unit issues are addressed by the linked fix validation report; affected-account Production recovery remains unverified.",
+  "resolved_by": "Docs/Coach/recovery-three-fixes-validation-2026-10-31.json"
+}

@@ -32,6 +32,82 @@ final class WorkingOutUITests: XCTestCase {
         XCTAssertTrue(result.label.hasPrefix("Coach checks passed:"), result.label)
     }
 
+    func testCloudHistoryRestorationRegressions() {
+        let app = launchApp(startTab: "home", fixture: "icloud_restoration_checks")
+        defer { app.terminate() }
+        let result = app.staticTexts["storage.acceptance.result"]
+        XCTAssertTrue(result.waitForExistence(timeout: 20))
+        let finished = NSPredicate(format: "label BEGINSWITH %@ OR label BEGINSWITH %@", "PASS:", "FAIL:")
+        expectation(for: finished, evaluatedWith: result)
+        waitForExpectations(timeout: 120)
+        print(result.label)
+        XCTAssertTrue(result.label.hasPrefix("PASS:"), result.label)
+    }
+
+    func testCoachReviewedRevisionRestoresRemovedSession() throws {
+        let app = launchApp(startTab: "ai", fixture: nil)
+        defer { app.terminate() }
+        var document = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(Self.coachRecoveryFixture.utf8)) as? [String: Any])
+        document["programId"] = "ui-restored-slot"
+        document["title"] = "Restore UI Program"
+        let slots: [[String: Any]] = [
+            ["id": "first", "dayOffset": 1, "sessionTemplateId": "recover"],
+            ["id": "second", "dayOffset": 2, "sessionTemplateId": "recover"],
+        ]
+        func json(revision: Int, includeFirst: Bool) throws -> String {
+            var value = document
+            value["revision"] = revision
+            value["weekPatterns"] = [["id": "pattern", "title": "Week", "slots": includeFirst ? slots : [slots[1]]]]
+            return String(decoding: try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]), as: UTF8.self)
+        }
+        func compare(revision: Int, currentRevision: Int, includeFirst: Bool) throws {
+            returnToCoachRoot(app)
+            let plans = app.buttons["coach.plans.open"]
+            revealCoach(plans, in: app); plans.tap()
+            openCoachReview(try json(revision: revision, includeFirst: includeFirst), in: app)
+            let link = app.buttons["Compare with Restore UI Program · revision \(currentRevision)"]
+            revealCoach(link, in: app, attempts: 10); link.tap()
+            XCTAssertTrue(app.navigationBars["Review Revision"].waitForExistence(timeout: 5), app.debugDescription)
+        }
+        func saveRevision() {
+            let save = app.buttons["Save Reviewed Revision"]
+            revealCoach(save, in: app, attempts: 10); save.tap()
+            XCTAssertTrue(app.staticTexts["Reviewed revision saved. Previous results were preserved."].waitForExistence(timeout: 10))
+        }
+
+        openCoachReview(try json(revision: 1, includeFirst: true), in: app)
+        let activate = app.buttons["coach.plan.activate"]
+        revealCoach(activate, in: app); activate.tap()
+        let open = app.buttons["coach.plan.open_saved"]
+        revealCoach(open, in: app); open.tap()
+        let first = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "coach.today.session.")).firstMatch
+        revealCoach(first, in: app, attempts: 10)
+        let occurrenceID = String(first.identifier.dropFirst("coach.today.session.".count))
+        XCTAssertFalse(occurrenceID.isEmpty)
+
+        try compare(revision: 2, currentRevision: 1, includeFirst: false)
+        let remove = app.switches.matching(NSPredicate(format: "label BEGINSWITH %@", "Remove future prescription:")).firstMatch
+        revealCoach(remove, in: app, attempts: 10)
+        remove.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        saveRevision()
+
+        try compare(revision: 3, currentRevision: 2, includeFirst: true)
+        let restore = app.switches["coach.revision.restore." + occurrenceID]
+        revealCoach(restore, in: app, attempts: 10)
+        XCTAssertEqual(restore.value as? String, "0", "Returning sessions require explicit review")
+        restore.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        XCTAssertEqual(restore.value as? String, "1")
+        saveRevision()
+
+        returnToCoachRoot(app)
+        let current = app.buttons["coach.plan.current"]
+        revealCoach(current, in: app); current.tap()
+        let restored = app.buttons["coach.today.session." + occurrenceID]
+        revealCoach(restored, in: app, attempts: 10)
+        XCTAssertTrue(restored.label.contains("Planned"), "The selected removed session returns as pending")
+        XCTAssertEqual(app.buttons.matching(identifier: restored.identifier).count, 1, "Restoring keeps one occurrence with the original identity")
+    }
+
     func testCoachCalendarExportRetryAndRemoval() {
         let app = launchApp(startTab: "ai", fixture: "coach_calendar_checks")
         defer { app.terminate() }
@@ -1207,13 +1283,15 @@ final class WorkingOutUITests: XCTestCase {
 
     private func revealCoach(_ element: XCUIElement, in app: XCUIApplication, attempts: Int = 6) {
         if !element.exists { _ = element.waitForExistence(timeout: 2) }
+        let pinnedIDs = ["coach.plan.activate", "coach.plan.save_draft", "coach.plan.next_step", "coach.import.review", "coach.prompt.paste_reply", "coach.prompt.copy"]
         for attempt in 0...attempts {
-            let footerTop = app.descendants(matching: .any).matching(NSPredicate(format: "identifier IN %@", ["coach.plan.activate", "coach.plan.save_draft", "coach.plan.next_step", "coach.import.review", "coach.prompt.paste_reply", "coach.prompt.copy"])).allElementsBoundByIndex
+            let footerTop = app.descendants(matching: .any).matching(NSPredicate(format: "identifier IN %@", pinnedIDs)).allElementsBoundByIndex
                 .filter { $0.frame.minY > app.frame.midY && $0.frame.intersects(app.frame) }.map { $0.frame.minY }.min() ?? app.frame.maxY
             let navigationBottom = app.navigationBars.firstMatch.exists ? app.navigationBars.firstMatch.frame.maxY : app.frame.minY
             // A visible row label does not guarantee that the switch thumb clears the pinned footer.
             let switchVisible = !element.exists || element.elementType != .switch || (element.frame.midY > navigationBottom + 12 && element.frame.midY < footerTop - 12)
-            if element.exists && element.isHittable && switchVisible { return }
+            let clearsFooter = !element.exists || pinnedIDs.contains(element.identifier) || element.frame.midY < footerTop - 12
+            if element.exists && element.isHittable && switchVisible && clearsFooter { return }
             guard attempt < attempts else { break }
             if let scroller = (app.collectionViews.allElementsBoundByIndex + app.scrollViews.allElementsBoundByIndex)
                 .last(where: { $0.frame.width > 0 && $0.frame.height > 0 && $0.frame.intersects(app.frame) }) {
@@ -1221,7 +1299,7 @@ final class WorkingOutUITests: XCTestCase {
                 let keyboard = app.keyboards.firstMatch
                 let keyboardTop = keyboard.exists && keyboard.frame.height > 0 ? keyboard.frame.minY : app.frame.maxY
                 let tabTop = app.tabBars.allElementsBoundByIndex.filter { $0.frame.minY > app.frame.midY && $0.frame.height > 0 }.map { $0.frame.minY }.min() ?? app.frame.maxY
-                let pinnedTop = app.descendants(matching: .any).matching(NSPredicate(format: "identifier IN %@", ["coach.plan.activate", "coach.plan.save_draft", "coach.plan.next_step", "coach.import.review", "coach.prompt.paste_reply", "coach.prompt.copy"])).allElementsBoundByIndex
+                let pinnedTop = app.descendants(matching: .any).matching(NSPredicate(format: "identifier IN %@", pinnedIDs)).allElementsBoundByIndex
                     .filter { $0.frame.minY > app.frame.midY && $0.frame.intersects(app.frame) }.map { $0.frame.minY }.min() ?? app.frame.maxY
                 let bottom = min(frame.maxY, keyboardTop, tabTop, pinnedTop, app.frame.maxY) - 24
                 let top = max(frame.minY, app.frame.minY) + 40

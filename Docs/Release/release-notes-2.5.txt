@@ -1,0 +1,5 @@
+Manual workout entries now count toward volume and streaks without checking off each set. Use the new + Plan button for workouts you want to plan in advance; planned sets keep their completion circles. Finish saves directly, and swipe dismissal continues to save.
+
+App history now uses local storage with CloudKit synchronization disabled. Keep a deliberate backup in Settings > Backup for recovery or transfer. Older cloud copies are retained; new edits do not sync through them.
+
+Includes improvements to local-history recovery, backup restoration, and workout navigation.

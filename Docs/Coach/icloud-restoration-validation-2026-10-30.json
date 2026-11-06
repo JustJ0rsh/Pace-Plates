@@ -1,0 +1,124 @@
+{
+  "date": "2026-10-30",
+  "branch": "codex/restore-icloud",
+  "base_commit": "2c33bb1f5edcfdfbf62ea303331faeec2f264025",
+  "delivery": "2.5.2 (2) available in TestFlight and submitted to App Store review; Waiting for Review; automatic release after approval",
+  "storage": {
+    "history": "Original unnamed 14-model CloudKit automatic configuration and original store URL",
+    "coach": "Separate 10-model local-only configuration",
+    "recovery": "Replay local changes into an original-store copy using persistent history; preserve CloudKit identity, retain originals, and journal installation"
+  },
+  "validation": {
+    "synthetic_simulator": {
+      "build": "2",
+      "checks": 163,
+      "coldSourceMigration": "not reached",
+      "result": "passed",
+      "runID": "53F456A3-1EC9-47A7-A9C9-B08341B5BBAC",
+      "scope": "Disposable synthetic SwiftData stores; no real integrations",
+      "startedAt": "2026-10-30T22:36:56Z",
+      "suite": "icloud_restoration_checks",
+      "version": "2.5.2"
+    },
+    "debug_build": "passed",
+    "release_simulator_build": "passed",
+    "independent_source_review": "No additional high-severity local data-safety blocker found",
+    "production_schema": "Initialized from the compiled 14-model schema, independently audited, and deployed through CloudKit Console; UI confirmed Changes Deployed",
+    "production_schema_sha256": "729e8f61f88ffb1b5e72cbf5889f51eed02e85968497d46174217da9060301be",
+    "saved_history_first_launch": {
+      "result": "passed",
+      "rows_before": 5824,
+      "rows_after": 5824,
+      "model_types": 24,
+      "scope": "Disposable copy of Eagle 1 history; no cloud connection; every per-model count equal; full values and relationships checked by production replay before installation"
+    },
+    "live_icloud": {
+      "device": "Eagle 1",
+      "environments": [
+        "Development",
+        "Production"
+      ],
+      "result": "passed",
+      "method": "Independent persistent stores in the same signed app on one physical device",
+      "verified": [
+        "Rows saved before CloudKit was enabled uploaded and downloaded into a fresh store",
+        "Offline edit and new record downloaded with matching UUIDs",
+        "Offline deletion absent after successful fresh import",
+        "Record created by independent client survived recovery",
+        "No duplicate synthetic records",
+        "Local Coach nutrition preserved",
+        "Synthetic test records removed and fresh-store absence confirmed"
+      ]
+    },
+    "archive": {
+      "version": "2.5.2",
+      "build": "2",
+      "source_commit": "d13d6b2",
+      "strict_deep_signature": "passed",
+      "cloud_environment": "Production",
+      "original_container": "verified",
+      "debug_harnesses": "excluded",
+      "personal_stores": "excluded"
+    },
+    "normal_device_recovery": {
+      "result": "passed",
+      "device": "Eagle 1",
+      "build": "2.5.2 (2) Release",
+      "observed": "Home with retained history after normal cold launch; automatic preflight verified all 5824 server records and completion marker persisted"
+    },
+    "superseded_build": {
+      "version": "2.5.2",
+      "build": "1",
+      "status": "Expired in TestFlight; never submitted to App Store review",
+      "reason": "Final normal-device test exposed canonical asset and relocated app-container path checks"
+    },
+    "actual_history_cloud": {
+      "result": "passed",
+      "sourceTotal": 5824,
+      "downloadedTotal": 5824,
+      "missingTotal": 0,
+      "sourceIDMultiplicitiesPresent": true,
+      "sourceIDMultisetDigestMatches": true,
+      "successfulImports": 1,
+      "failedImports": 0
+    },
+    "offline_launch": "Passed normal Simulator cold launch with repair enabled and no iCloud account; Home appeared and remained responsive",
+    "missing_cloud_repair": {
+      "accountUnchanged": true,
+      "allMappedRecordsPresent": true,
+      "concurrentExistingRecords": 0,
+      "createdRecords": 4961,
+      "existingServerRecords": 863,
+      "initiallyMissingRecords": 4961,
+      "inspectedObjects": 5824,
+      "mappedRecords": 5824,
+      "payloadVerified": false,
+      "sourceSnapshotPinned": true,
+      "stillMissingRecords": 0,
+      "unmappedPending": 0,
+      "verifiedServerRecords": 5824
+    },
+    "native_payload_validation": {
+      "result": "passed",
+      "records": 5824,
+      "scope": "Every local attribute, to-one relationship, and used native asset validated before conditional creation"
+    }
+  },
+  "unverified": [
+    "Two separate physical devices: only Eagle 1 was available",
+    "App Store review outcome"
+  ],
+  "source_commit": "d13d6b2",
+  "release": {
+    "version": "2.5.2",
+    "build": "2",
+    "upload": "succeeded",
+    "testflight": "Available to existing P&P internal group, 3 testers",
+    "app_store": "Waiting for Review",
+    "source_commit": "d13d6b2",
+    "automatic_release": true,
+    "upload_completed_at_utc": "2026-10-30T22:43:26Z",
+    "submitted_at_utc": "2026-10-30T22:48:24.531527+00:00",
+    "review_url": "https://appstoreconnect.apple.com/apps/6754347082/distribution/reviewsubmissions/details/2b5be11b-da41-44f5-ac56-785aaa676ef5"
+  }
+}

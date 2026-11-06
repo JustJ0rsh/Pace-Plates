@@ -20,13 +20,21 @@ struct StorageIntegrationAcceptanceView: View {
             let startedAt = ISO8601DateFormatter().string(from: Date())
             let result: [String: Any]
             do {
-                var count = try await CoachPersistenceRegressionChecks.run()
-                count += try await CoachPlannedActivityRegressionChecks.run()
-                let coldUnavailable = CoachPersistenceRegressionChecks.coldSourceMigrationStatus.hasPrefix("unsupported")
+                let isCloudRestoration = AppLaunchConfiguration.current.fixtureName == "icloud_restoration_checks"
+                var count: Int
+                if isCloudRestoration {
+                    count = try CloudSyncRestorationRegressionChecks.run()
+                } else {
+                    count = try await CoachPersistenceRegressionChecks.run()
+                    count += try await CoachPlannedActivityRegressionChecks.run()
+                }
+                let coldUnavailable = !isCloudRestoration
+                    && CoachPersistenceRegressionChecks.coldSourceMigrationStatus.hasPrefix("unsupported")
                 status = "PASS: \(count) synthetic storage checks"
                     + (coldUnavailable ? "\nCold-source migration is unavailable; recovery safely retains its history." : "")
                 result = ["result": coldUnavailable ? "passed_with_limitations" : "passed", "checks": count,
                           "scope": "Disposable synthetic SwiftData stores; no real integrations",
+                          "suite": isCloudRestoration ? "icloud_restoration_checks" : "storage_integration_checks",
                           "runID": runID, "startedAt": startedAt,
                           "coldSourceMigration": CoachPersistenceRegressionChecks.coldSourceMigrationStatus,
                           "version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",

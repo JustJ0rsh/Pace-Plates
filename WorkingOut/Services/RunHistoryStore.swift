@@ -9,6 +9,19 @@ enum RunHistoryStore {
         let totalCount: Int
     }
 
+    static func session(recordID: PersistentIdentifier, context: ModelContext) throws -> RunningSession? {
+        var descriptor = FetchDescriptor<RunningSession>(predicate: #Predicate { $0.persistentModelID == recordID })
+        descriptor.fetchLimit = 1
+        return try context.fetch(descriptor).first
+    }
+
+    static func session(healthUUID: String, context: ModelContext) throws -> RunningSession? {
+        var descriptor = FetchDescriptor<RunningSession>(predicate: #Predicate { $0.healthWorkoutUUID == healthUUID })
+        descriptor.fetchLimit = 2
+        let matches = try context.fetch(descriptor)
+        return matches.count == 1 ? matches[0] : nil
+    }
+
     static func fetch(context: ModelContext, search: String, range: HistoryRange,
                       activity: String?, limit: Int, now: Date = Date()) throws -> Page {
         let calendar = Calendar.current

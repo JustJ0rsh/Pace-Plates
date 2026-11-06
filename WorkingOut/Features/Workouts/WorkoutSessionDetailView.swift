@@ -15,6 +15,7 @@ struct WorkoutSessionDetailView: View {
     let isNewSession: Bool
     @State private var closeSave = WorkoutSaveBoundary()
     @State private var finishError: String?
+    @State private var plannedSessionToOpen: WorkoutSession?
     @State private var coachExecution: CoachSessionExecution?
     @State private var coachPrescription: CoachStrengthSession?
     @State private var notes: String
@@ -75,7 +76,7 @@ struct WorkoutSessionDetailView: View {
         ScrollView {
             VStack(spacing: 16) {
                 if session.executionStatusRaw != "legacy_recorded" {
-                    Text(session.executionStatusRaw.replacingOccurrences(of: "_", with: " ").capitalized)
+                    Text(WorkoutStatistics.isPlanned(session) ? "Planned workout" : "Manual workout")
                         .font(.headline).frame(maxWidth: .infinity, alignment: .leading)
                 }
                 // Details Tile
@@ -100,6 +101,7 @@ struct WorkoutSessionDetailView: View {
                     showingAddExercise: $showingAddExercise,
                     editingLog: $editingLog,
                     editingLogIsNew: $editingLogIsNew,
+                    onStartPlan: startPlannedWorkout,
                     onDeleteLog: deleteExerciseLog,
                     onDuplicateLog: duplicateExerciseLog
                 )
@@ -182,6 +184,11 @@ struct WorkoutSessionDetailView: View {
         .fullScreenCover(item: $editingLog) { log in
             EditExerciseLogView(log: log, isNew: editingLogIsNew)
         }
+        .fullScreenCover(item: $plannedSessionToOpen) { planned in
+            NavigationStack {
+                WorkoutSessionDetailView(session: planned, allowDateEdit: true, isNewSession: true)
+            }
+        }
         .onAppear {
             closeSave.beginPresentation()
             if editingLog == nil || !((session.exerciseLogs ?? []).contains { $0.id == editingLog?.id }) {
@@ -209,6 +216,34 @@ struct WorkoutSessionDetailView: View {
     }
     
     // MARK: Actions
+
+    private func startPlannedWorkout() {
+        // Choosing Plan on a new, empty editor can reuse that draft. Starting a
+        // plan from recorded history must never reclassify the recorded workout.
+        if isNewSession, (session.exerciseLogs ?? []).isEmpty,
+           !WorkoutStatistics.isPlanned(session) {
+            let previous = session.completionProvenance
+            session.completionProvenance = "planned_workout"
+            do {
+                try modelContext.save()
+                showingAddExercise = true
+            } catch {
+                session.completionProvenance = previous
+                finishError = error.localizedDescription
+            }
+            return
+        }
+        let planned = WorkoutSession(date: Date(), title: "Planned Workout")
+        planned.completionProvenance = "planned_workout"
+        modelContext.insert(planned)
+        do {
+            try modelContext.save()
+            plannedSessionToOpen = planned
+        } catch {
+            modelContext.delete(planned)
+            finishError = error.localizedDescription
+        }
+    }
 
     private func saveAndClose(_ trigger: WorkoutSaveBoundary.Trigger) {
         dismissKeyboard()

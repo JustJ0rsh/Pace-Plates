@@ -1,0 +1,55 @@
+{
+  "date": "2026-11-02",
+  "version": "2.5.3",
+  "build": "8",
+  "source_commit": "9d93d55",
+  "source_branch": "codex/nonblocking-history-patch",
+  "pull_request": "https://github.com/JustJ0rsh/Pace-Plates/pull/11",
+  "archive": {
+    "result": "succeeded",
+    "xcode": "27.2 (27B52)",
+    "sdk": "iphoneos27.2",
+    "minimum_ios": "26.0",
+    "bundle_identifier": "Jorsh.WorkingOut",
+    "executable_sha256": "bbdd65e0f844790ab44eee48bb91f362add087f07c67c6a1f0440cf1845035fa",
+    "non_exempt_encryption": false
+  },
+  "verification": {
+    "prior_report": "Docs/Coach/nonblocking-history-validation-2026-11-02.json",
+    "source_hashes": "Verified unchanged before archiving; only project version and calendar-file whitespace changed after the recorded checks. Calendar checks reran successfully (12 assertions).",
+    "pre_update_device_backup": "Private local backup of app and shared-group Application Support; all 44 SQLite databases passed quick_check. Backup contents are excluded from Git.",
+    "physical_install": "Actual signed archive installed as an in-place update on Eagle 1.",
+    "physical_startup": "Passed on Eagle 1: direct Home startup with no blocking recovery popup, workout/activity/weight history visible, then graceful termination and direct Home relaunch.",
+    "post_update_storage": {
+      "databases_checked": 44,
+      "all_integrity_ok": true,
+      "model_tables_checked": 966,
+      "missing_record_identities": 0,
+      "missing_files": 0,
+      "added_record_identities": 1,
+      "addition": "Cardio Health inbox item; no test health records were inserted."
+    },
+    "physical_device_ui": "Home, Workouts, Runs and Weight opened with existing history; no new test health entries were created on the physical device."
+  },
+  "delivery": {
+    "git": "Committed and pushed to release branch; PR 11 open. Main not merged.",
+    "app_store_upload": "Succeeded; App Store Connect processed build 8 and shows Ready to Submit.",
+    "app_store_version": "2.5.3 Waiting for Review; release notes and reviewer notes saved.",
+    "app_review": "Submitted successfully; App Store Connect shows 2.5.3 Waiting for Review and 1 Item Submitted. Build 8 confirmed on submitted version.",
+    "release_setting": "Verified after submission: Automatically release after approval; all users immediately. Approval and public availability are not yet claimed.",
+    "submission_url": "https://appstoreconnect.apple.com/apps/6754347082/distribution/reviewsubmissions/details/fc89b2b2-3df2-4d9a-8f32-0a00b81ae764",
+    "expedited_review": {
+      "requested_at": "2026-11-02T16:52:00+02:00",
+      "platform": "iOS",
+      "app": "Pace & Plates",
+      "result": "Accepted. Apple confirmation: We\u2019ll expedite review for Pace & Plates.",
+      "resubmission_notice": "Apple says a rejected resubmission will automatically return to the expedited queue; another expedite request is unnecessary."
+    }
+  },
+  "limits": [
+    "Live multi-device iCloud convergence and unreadable-history recovery were not verified on the physical device.",
+    "Continued local history preserves original files but does not automatically recover or merge older history.",
+    "The successful archive used stable Xcode 27.2; simulator behavior checks in the prior report used the previously installed toolchain and iOS 26.5.",
+    "Existing compiler and SwiftUI navigation frame warnings remain."
+  ]
+}

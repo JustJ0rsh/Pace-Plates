@@ -21,7 +21,11 @@ final class TrainingPlanService {
         activate: Bool = true
     ) -> TrainingPlan? {
         let allPlans = (try? context.fetch(FetchDescriptor<TrainingPlan>())) ?? []
-        let existing = allPlans.first { $0.sourceAIConversationID == conversation.id }
+        let matches = allPlans.filter { $0.sourceAIConversationID == conversation.id }
+        let sources = (try? context.fetch(FetchDescriptor<AIConversation>())) ?? []
+        guard matches.count <= 1, sources.filter({ $0.id == conversation.id }).count <= 1,
+              Set(templates.map(\.id)).count == templates.count else { return nil }
+        let existing = matches.first
         // Authored revisions and stored schedules are canonical once adopted by Coach.
         if let existing, existing.currentRevisionID != nil { return existing }
         let startDate = calendar.startOfDay(for: Date())
@@ -30,6 +34,11 @@ final class TrainingPlanService {
         if let json = conversation.structuredPlanJSON,
            let data = json.data(using: .utf8),
            let structured = try? JSONDecoder().decode(WorkoutPlan.self, from: data) {
+            let existingSessions = existing?.sessions ?? []
+            let dayTemplates = templates.compactMap { $0.aiDayIndex }
+            guard Set(dayTemplates).count == dayTemplates.count,
+                  Set(existingSessions.map(\.id)).count == existingSessions.count,
+                  Set(existingSessions.map(\.dayIndex)).count == existingSessions.count else { return nil }
             let plan = existing ?? TrainingPlan(
                 title: structured.title,
                 goal: conversation.goal,
@@ -100,7 +109,10 @@ final class TrainingPlanService {
         }
         #endif
 
-        guard !templates.isEmpty else { return nil }
+        let existingSessions = existing?.sessions ?? []
+        let templateIDs = existingSessions.compactMap(\.workoutTemplateID)
+        guard !templates.isEmpty, Set(existingSessions.map(\.id)).count == existingSessions.count,
+              Set(templateIDs).count == templateIDs.count else { return nil }
         let ordered = templates.sorted { ($0.aiDayIndex ?? 0) < ($1.aiDayIndex ?? 0) }
         let plan = existing ?? TrainingPlan(
             title: ordered.first?.aiPlanTitle ?? "Coach Training Plan",
@@ -154,10 +166,19 @@ final class TrainingPlanService {
     }
 
     @discardableResult
-    func syncRunningPlan(_ runningPlan: RunningPlan, context: ModelContext) -> TrainingPlan {
+    func syncRunningPlan(_ runningPlan: RunningPlan, context: ModelContext) -> TrainingPlan? {
         let allPlans = (try? context.fetch(FetchDescriptor<TrainingPlan>())) ?? []
-        let existing = allPlans.first { $0.sourceRunningPlanID == runningPlan.id }
+        let matches = allPlans.filter { $0.sourceRunningPlanID == runningPlan.id }
+        let sources = (try? context.fetch(FetchDescriptor<RunningPlan>())) ?? []
+        guard matches.count <= 1, sources.filter({ $0.id == runningPlan.id }).count <= 1 else { return nil }
+        let existing = matches.first
         if let existing, existing.currentRevisionID != nil { return existing }
+        let sourceSessions = runningPlan.sessions ?? []
+        let existingSessions = existing?.sessions ?? []
+        let sourceIDs = existingSessions.compactMap(\.runningPlanSessionID)
+        guard Set(sourceSessions.map(\.id)).count == sourceSessions.count,
+              Set(existingSessions.map(\.id)).count == existingSessions.count,
+              Set(sourceIDs).count == sourceIDs.count else { return nil }
         let plan = existing ?? TrainingPlan(
             title: runningPlan.name,
             goal: runningPlan.primaryGoal,
@@ -273,12 +294,15 @@ final class TrainingPlanService {
 
     func reconcileTrackedRuns(context: ModelContext) {
         let planned = (try? context.fetch(FetchDescriptor<PlannedSession>())) ?? []
-        let byID = Dictionary(uniqueKeysWithValues: planned.map { ($0.id, $0) })
+        let byID = RecordIdentityLookup.uniqueIndex(planned, by: \.id)
         let runs = (try? context.fetch(FetchDescriptor<RunningSession>())) ?? []
+        let uniqueRuns = RecordIdentityLookup.uniqueIndex(runs, by: \.id)
+        let uniqueLinks = RecordIdentityLookup.uniqueIndex(runs.filter { $0.canonicalPlannedSessionID == nil && $0.plannedSessionID != nil }, by: \.plannedSessionID)
         var changed = false
 
         for run in runs {
             guard run.canonicalPlannedSessionID == nil, let plannedID = run.plannedSessionID,
+                  uniqueRuns[run.id] != nil, uniqueLinks[plannedID] != nil,
                   let session = byID[plannedID],
                   session.activityType == "run",
                   session.revisionID == nil,
@@ -360,7 +384,7 @@ final class TrainingPlanService {
 
     private func fetchRunningSession(id: UUID, context: ModelContext) -> RunningPlanSession? {
         let sessions = (try? context.fetch(FetchDescriptor<RunningPlanSession>())) ?? []
-        return sessions.first { $0.id == id }
+        return RecordIdentityLookup.uniqueIndex(sessions, by: \.id)[id]
     }
 
     private func runningTitle(for type: String) -> String {

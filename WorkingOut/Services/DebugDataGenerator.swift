@@ -21,6 +21,16 @@ enum DebugDataGenerator {
 
         didSeedUITestFixture = true
         switch fixtureName {
+        case "restored_duplicate_runs":
+            let sharedID = UUID()
+            for index in 0..<2 {
+                let run = RunningSession(id: sharedID,
+                    date: Calendar.current.date(byAdding: .day, value: -index - 1, to: Date())!,
+                    distance: Double(index + 3), distanceUnit: "km", duration: 1200,
+                    notes: "Synthetic restored run \(index + 1)")
+                context.insert(run)
+            }
+            _ = PersistenceSave.commit(context, action: "seed duplicate-run verification")
         case "core_tabs":
             generateCoreTabsFixture(context: context)
         case "app_store_month":

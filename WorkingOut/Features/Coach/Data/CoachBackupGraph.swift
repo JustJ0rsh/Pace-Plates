@@ -628,41 +628,45 @@ struct CoachBackupGraph: Codable, Sendable {
 
     @MainActor static func capture(context: ModelContext) throws -> CoachBackupGraph {
         var graph = CoachBackupGraph()
-        graph.trainingPlans = try context.fetch(FetchDescriptor<TrainingPlan>()).map(TrainingPlanSnapshot.init)
-        graph.plannedSessions = try context.fetch(FetchDescriptor<PlannedSession>()).map(PlannedSessionSnapshot.init)
+        graph.trainingPlans = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<TrainingPlan>())).map(TrainingPlanSnapshot.init)
+        graph.plannedSessions = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<PlannedSession>())).map(PlannedSessionSnapshot.init)
         if CoachPersistence.isLocal(context) {
-            graph.revisions = try context.fetch(FetchDescriptor<CoachPlanRevision>()).map(CoachPlanRevisionSnapshot.init)
-            graph.executions = try context.fetch(FetchDescriptor<CoachSessionExecution>()).map(CoachSessionExecutionSnapshot.init)
-            graph.suggestions = try context.fetch(FetchDescriptor<CoachProgressionSuggestion>()).map(CoachProgressionSuggestionSnapshot.init)
-            graph.targets = try context.fetch(FetchDescriptor<CoachNutritionTargetPeriod>()).map(CoachNutritionTargetPeriodSnapshot.init)
-            graph.nutrition = try context.fetch(FetchDescriptor<CoachNutritionLog>()).map(CoachNutritionLogSnapshot.init)
-            graph.recovery = try context.fetch(FetchDescriptor<CoachRecoveryCheckIn>()).map(CoachRecoveryCheckInSnapshot.init)
-            graph.waist = try context.fetch(FetchDescriptor<CoachWaistMeasurement>()).map(CoachWaistMeasurementSnapshot.init)
-            graph.photos = try context.fetch(FetchDescriptor<CoachProgressPhoto>()).map(CoachProgressPhotoSnapshot.init)
-            graph.phaseReviews = try context.fetch(FetchDescriptor<CoachPhaseReview>()).map(CoachPhaseReviewSnapshot.init)
-            graph.calendarMappings = try context.fetch(FetchDescriptor<CoachCalendarMapping>()).map(CoachCalendarMappingSnapshot.init)
+            graph.revisions = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<CoachPlanRevision>())).map(CoachPlanRevisionSnapshot.init)
+            graph.executions = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<CoachSessionExecution>())).map(CoachSessionExecutionSnapshot.init)
+            graph.suggestions = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<CoachProgressionSuggestion>())).map(CoachProgressionSuggestionSnapshot.init)
+            graph.targets = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<CoachNutritionTargetPeriod>())).map(CoachNutritionTargetPeriodSnapshot.init)
+            graph.nutrition = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<CoachNutritionLog>())).map(CoachNutritionLogSnapshot.init)
+            graph.recovery = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<CoachRecoveryCheckIn>())).map(CoachRecoveryCheckInSnapshot.init)
+            graph.waist = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<CoachWaistMeasurement>())).map(CoachWaistMeasurementSnapshot.init)
+            graph.photos = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<CoachProgressPhoto>())).map(CoachProgressPhotoSnapshot.init)
+            graph.phaseReviews = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<CoachPhaseReview>())).map(CoachPhaseReviewSnapshot.init)
+            graph.calendarMappings = BackupPhysicalGraph.sorted(try context.fetch(FetchDescriptor<CoachCalendarMapping>())).map(CoachCalendarMappingSnapshot.init)
         }
         return graph
     }
 
-    func validate() throws {
-        guard Set(trainingPlans.map(\.id)).count == trainingPlans.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate trainingPlans identity") }
-        guard Set(plannedSessions.map(\.id)).count == plannedSessions.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate plannedSessions identity") }
-        guard Set(revisions.map(\.id)).count == revisions.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate revisions identity") }
-        guard Set(executions.map(\.id)).count == executions.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate executions identity") }
-        guard Set(suggestions.map(\.id)).count == suggestions.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate suggestions identity") }
-        guard Set(targets.map(\.id)).count == targets.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate targets identity") }
-        guard Set(nutrition.map(\.id)).count == nutrition.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate nutrition identity") }
-        guard Set(recovery.map(\.id)).count == recovery.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate recovery identity") }
-        guard Set(waist.map(\.id)).count == waist.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate waist identity") }
-        guard Set(photos.map(\.id)).count == photos.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate photos identity") }
-        guard Set(phaseReviews.map(\.id)).count == phaseReviews.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate phaseReviews identity") }
-        guard Set(calendarMappings.map(\.id)).count == calendarMappings.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate calendarMappings identity") }
-        guard Set(nutrition.map(\.civilDate)).count == nutrition.count,
-              Set(recovery.map(\.civilDate)).count == recovery.count else { throw CoachHistoryArchive.ArchiveError.invalid("More than one daily record has the same civil date") }
+    func validate(allowDuplicateIdentities: Bool = false) throws {
+        if !allowDuplicateIdentities {
+            guard Set(trainingPlans.map(\.id)).count == trainingPlans.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate trainingPlans identity") }
+            guard Set(plannedSessions.map(\.id)).count == plannedSessions.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate plannedSessions identity") }
+            guard Set(revisions.map(\.id)).count == revisions.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate revisions identity") }
+            guard Set(executions.map(\.id)).count == executions.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate executions identity") }
+            guard Set(suggestions.map(\.id)).count == suggestions.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate suggestions identity") }
+            guard Set(targets.map(\.id)).count == targets.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate targets identity") }
+            guard Set(nutrition.map(\.id)).count == nutrition.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate nutrition identity") }
+            guard Set(recovery.map(\.id)).count == recovery.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate recovery identity") }
+            guard Set(waist.map(\.id)).count == waist.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate waist identity") }
+            guard Set(photos.map(\.id)).count == photos.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate photos identity") }
+            guard Set(phaseReviews.map(\.id)).count == phaseReviews.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate phaseReviews identity") }
+            guard Set(calendarMappings.map(\.id)).count == calendarMappings.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate calendarMappings identity") }
+            guard Set(nutrition.map(\.civilDate)).count == nutrition.count,
+                  Set(recovery.map(\.civilDate)).count == recovery.count else { throw CoachHistoryArchive.ArchiveError.invalid("More than one daily record has the same civil date") }
+        }
         let planIDs = Set(trainingPlans.map(\.id))
         guard plannedSessions.allSatisfy({ $0.planID == nil || planIDs.contains($0.planID!) }) else { throw CoachHistoryArchive.ArchiveError.invalid("Missing parent plan") }
-        guard Set(photos.map(\.assetKey)).count == photos.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate photo asset path") }
+        if !allowDuplicateIdentities {
+            guard Set(photos.map(\.assetKey)).count == photos.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate photo asset path") }
+        }
         for photo in photos {
             guard CoachPhotoStore.isSafeAssetKey(photo.assetKey), UUID(uuidString: String(photo.assetKey.dropLast(4))) == photo.id,
                   photo.byteCount > 0, photo.byteCount <= CoachPhotoStore.maxSourceBytes,
@@ -715,9 +719,22 @@ struct CoachBackupGraph: Codable, Sendable {
 
     /// Check conflicts before any restore mutation. A backup cannot choose a
     /// field-by-field daily merge or overwrite immutable prescription/photo data.
-    @MainActor func validateMerge(context: ModelContext) throws {
-        guard CoachPersistence.isLocal(context) else { return }
+    @MainActor func validateMerge(context: ModelContext, ignoreAmbiguousIdentities: Bool = false) throws {
+        func unique<Row>(_ rows: [Row], id: (Row) -> UUID) -> [Row] {
+            guard ignoreAmbiguousIdentities else { return rows }
+            let groups = Dictionary(grouping: rows, by: id)
+            return rows.filter { groups[id($0)]?.count == 1 }
+        }
         let existingPlans = try context.fetch(FetchDescriptor<TrainingPlan>())
+        // A different current revision may have replaced occurrence identities.
+        // Historical occurrences can still retain earlier prescription revisions.
+        for incoming in unique(trainingPlans, id: \.id) {
+            if let existing = unique(existingPlans, id: \.id).first(where: { $0.id == incoming.id }),
+               existing.currentRevisionID != incoming.currentRevisionID {
+                throw CoachHistoryArchive.ArchiveError.invalid("An existing program has a different current revision; its saved schedule cannot be merged with this backup")
+            }
+        }
+        guard CoachPersistence.isLocal(context) else { return }
         let existingPlanIDs = Set(existingPlans.map(\.id))
         if existingPlans.contains(where: { $0.status == "active" }),
            trainingPlans.contains(where: { $0.status == "active" && !existingPlanIDs.contains($0.id) }) {
@@ -738,14 +755,14 @@ struct CoachBackupGraph: Codable, Sendable {
             }
         }
         let localRevisions = try context.fetch(FetchDescriptor<CoachPlanRevision>())
-        for row in revisions {
-            if let existing = localRevisions.first(where: { $0.id == row.id }), row != CoachPlanRevisionSnapshot(existing) {
+        for row in unique(revisions, id: \.id) {
+            if let existing = unique(localRevisions, id: \.id).first(where: { $0.id == row.id }), row != CoachPlanRevisionSnapshot(existing) {
                 throw CoachHistoryArchive.ArchiveError.invalid("An existing immutable plan revision has different content")
             }
         }
         let localPhotos = try context.fetch(FetchDescriptor<CoachProgressPhoto>())
-        for row in photos {
-            if let existing = localPhotos.first(where: { $0.id == row.id }),
+        for row in unique(photos, id: \.id) {
+            if let existing = unique(localPhotos, id: \.id).first(where: { $0.id == row.id }),
                existing.assetKey != row.assetKey || existing.digest != row.digest || existing.byteCount != row.byteCount {
                 throw CoachHistoryArchive.ArchiveError.invalid("An existing photo identity has different image content")
             }
@@ -753,6 +770,7 @@ struct CoachBackupGraph: Codable, Sendable {
     }
 
     @MainActor func restore(context: ModelContext) throws {
+        try validateMerge(context: context)
         let existingTrainingPlan = try context.fetch(FetchDescriptor<TrainingPlan>())
         let idsTrainingPlan = Set(existingTrainingPlan.map(\.id))
         for snapshot in trainingPlans where !idsTrainingPlan.contains(snapshot.id) {
@@ -851,6 +869,18 @@ struct CoachBackupGraph: Codable, Sendable {
 
 extension BackupFile {
     func validateForRestore() throws {
+        guard (1...6).contains(formatVersion ?? 1) else { throw CoachHistoryArchive.ArchiveError.invalid("Unsupported backup version") }
+        if (formatVersion ?? 1) == 6 {
+            guard let physicalRecords else { throw CoachHistoryArchive.ArchiveError.invalid("Missing physical record graph") }
+            try physicalRecords.validate(in: self)
+            try coach?.validate(allowDuplicateIdentities: true)
+            return
+        }
+        guard physicalRecords == nil else { throw CoachHistoryArchive.ArchiveError.invalid("Physical identities require backup version 6") }
+        if BackupPhysicalGraph.needsPhysicalIdentities(self) {
+            try BackupPhysicalGraph.upgradingLegacy(self).validateForRestore()
+            return
+        }
         func unique(_ ids: [UUID], _ label: String) throws {
             guard Set(ids).count == ids.count else { throw CoachHistoryArchive.ArchiveError.invalid("Duplicate \(label) identity") }
         }

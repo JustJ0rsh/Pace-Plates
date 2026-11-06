@@ -6,6 +6,7 @@ import CryptoKit
 /// There are no directory, link, or executable entries in this format.
 enum CoachHistoryArchive {
     static let magic = Data("PACECOACH5\n".utf8)
+    static let physicalMagic = Data("PACECOACH6\n".utf8)
     static let maxRecords = 64 * 1_024 * 1_024
     static let maxAsset = 25 * 1_024 * 1_024
     static let maxEntries = 10_000
@@ -41,11 +42,23 @@ enum CoachHistoryArchive {
         }
     }
 
-    static func export(_ file: BackupFile, includePhotos: Bool) throws -> URL {
+    static func export(_ snapshot: BackupFile, includePhotos: Bool) throws -> URL {
+        let file = try BackupPhysicalGraph.upgradingLegacy(snapshot)
+        try file.validateForRestore()
+        let archiveMagic = file.formatVersion == 6 ? physicalMagic : magic
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         let records = try encoder.encode(file)
         guard records.count <= maxRecords else { throw ArchiveError.exceedsLimit("64 MiB record JSON") }
-        let photos = file.coach?.photos ?? []
+        let photoGroups = Dictionary(grouping: file.coach?.photos ?? [], by: \.assetKey)
+        var photos: [CoachBackupGraph.CoachProgressPhotoSnapshot] = []
+        for key in photoGroups.keys.sorted() {
+            let group = photoGroups[key]!, photo = group[0]
+            guard group.allSatisfy({ $0.digest == photo.digest && $0.byteCount == photo.byteCount
+                && $0.pixelWidth == photo.pixelWidth && $0.pixelHeight == photo.pixelHeight
+                && $0.contentType == photo.contentType }) else { throw ArchiveError.invalid("A photo asset has conflicting metadata") }
+            photos.append(photo)
+        }
+        guard includePhotos || photos.isEmpty else { throw ArchiveError.invalid("Photo records require included image assets") }
         guard photos.count + 1 <= maxEntries else { throw ArchiveError.exceedsLimit("10,000 entries") }
         var entries: [Entry] = []
         var total = Int64(records.count)
@@ -60,7 +73,7 @@ enum CoachHistoryArchive {
             total += Int64(count)
             guard total <= maxTotal else { throw ArchiveError.exceedsLimit("2 GiB archive") }
         }
-        let manifest = Manifest(format: "pace-and-plates.history", version: 5, photosIncluded: includePhotos,
+        let manifest = Manifest(format: "pace-and-plates.history", version: file.formatVersion == 6 ? 6 : 5, photosIncluded: includePhotos,
                                 records: Entry(path: "records.json", bytes: records.count, digest: CoachPhotoStore.digest(records)), assets: entries)
         let manifestData = try encoder.encode(manifest)
         guard manifestData.count <= maxManifest else { throw ArchiveError.exceedsLimit("manifest size") }
@@ -69,7 +82,7 @@ enum CoachHistoryArchive {
         FileManager.default.createFile(atPath: url.path, contents: nil)
         let output = try FileHandle(forWritingTo: url)
         do {
-            try output.write(contentsOf: magic)
+            try output.write(contentsOf: archiveMagic)
             var length = UInt64(manifestData.count).bigEndian
             try withUnsafeBytes(of: &length) { try output.write(contentsOf: Data($0)) }
             try output.write(contentsOf: manifestData); try output.write(contentsOf: records)
@@ -90,10 +103,12 @@ enum CoachHistoryArchive {
         if let count = values.fileSize, Int64(count) > maxTotal { throw ArchiveError.exceedsLimit("2 GiB input") }
         let input = try FileHandle(forReadingFrom: url); defer { try? input.close() }
         let prefix = try input.read(upToCount: magic.count) ?? Data()
-        if prefix != magic {
+        if prefix != magic && prefix != physicalMagic {
             try input.seek(toOffset: 0)
             let records = try readBounded(input, limit: maxRecords)
-            let file = try JSONDecoder().decode(BackupFile.self, from: records)
+            let original = try JSONDecoder().decode(BackupFile.self, from: records)
+            let file = try BackupPhysicalGraph.upgradingLegacy(original)
+            try file.validateForRestore()
             guard file.coach?.photos.isEmpty != false else { throw ArchiveError.invalid("Photo records require an archive with image assets") }
             return CoachPreparedRestore(file: file, directory: nil, manifest: nil)
         }
@@ -102,18 +117,21 @@ enum CoachHistoryArchive {
         guard length > 0 && length <= UInt64(maxManifest) else { throw ArchiveError.exceedsLimit("manifest size") }
         let manifest = try JSONDecoder().decode(Manifest.self, from: readExactly(input, count: Int(length)))
         try validate(manifest)
+        guard (prefix == physicalMagic) == (manifest.version == 6) else { throw ArchiveError.invalid("Archive version does not match its header") }
         let id = UUID(); let stage = restoreDirectory.appendingPathComponent(id.uuidString, isDirectory: true)
-        try CoachPersistence.protect(stage, isDirectory: true)
         do {
             let records = try readExactly(input, count: manifest.records.bytes)
             guard CoachPhotoStore.digest(records) == manifest.records.digest else { throw ArchiveError.invalid("Record digest does not match") }
-            let file = try JSONDecoder().decode(BackupFile.self, from: records)
-            try file.coach?.validate()
+            let original = try JSONDecoder().decode(BackupFile.self, from: records)
+            guard (original.formatVersion == 6) == (manifest.version == 6) else { throw ArchiveError.invalid("Record version does not match its manifest") }
+            let file = try BackupPhysicalGraph.upgradingLegacy(original)
+            try file.validateForRestore()
             let photos = file.coach?.photos ?? []
             guard Set(photos.map { "photos/\($0.assetKey)" }) == Set(manifest.assets.map(\.path)), manifest.photosIncluded || photos.isEmpty else { throw ArchiveError.invalid("Photo manifest does not match records") }
             for photo in photos {
                 guard let entry = manifest.assets.first(where: { $0.path == "photos/\(photo.assetKey)" }), entry.bytes == photo.byteCount, entry.digest == photo.digest else { throw ArchiveError.missingAsset(photo.assetKey) }
             }
+            try CoachPersistence.protect(stage, isDirectory: true)
             try records.write(to: stage.appendingPathComponent("records.json"), options: [.atomic, .completeFileProtectionUnlessOpen])
             var total = Int64(records.count) + Int64(length) + Int64(magic.count + 8)
             for entry in manifest.assets {
@@ -147,8 +165,10 @@ enum CoachHistoryArchive {
             try validate(journal.manifest)
             let records = try boundedFile(folder.appendingPathComponent("records.json"), limit: maxRecords)
             guard CoachPhotoStore.digest(records) == journal.manifest.records.digest else { throw ArchiveError.invalid("Pending restore records are damaged") }
-            let file = try JSONDecoder().decode(BackupFile.self, from: records)
-            try file.coach?.validate()
+            let original = try JSONDecoder().decode(BackupFile.self, from: records)
+            guard (original.formatVersion == 6) == (journal.manifest.version == 6) else { throw ArchiveError.invalid("Pending record version does not match its manifest") }
+            let file = try BackupPhysicalGraph.upgradingLegacy(original)
+            try file.validateForRestore()
             for entry in journal.manifest.assets {
                 let key = String(entry.path.dropFirst("photos/".count))
                 guard try digestFile(folder.appendingPathComponent(key), expectedBytes: entry.bytes) == entry.digest else { throw ArchiveError.missingAsset(key) }
@@ -160,7 +180,7 @@ enum CoachHistoryArchive {
     }
 
     private static func validate(_ manifest: Manifest) throws {
-        guard manifest.format == "pace-and-plates.history", manifest.version == 5,
+        guard manifest.format == "pace-and-plates.history", (5...6).contains(manifest.version),
               manifest.records.path == "records.json", manifest.records.bytes > 0,
               manifest.records.bytes <= maxRecords, manifest.assets.count + 1 <= maxEntries,
               Set(manifest.assets.map(\.path)).count == manifest.assets.count else { throw ArchiveError.invalid("Unsupported or duplicate manifest entries") }

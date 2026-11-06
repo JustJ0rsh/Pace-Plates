@@ -1,8 +1,7 @@
 import Foundation
 import SwiftData
 
-/// Storage utilities; activation and the reviewed legacy-store copy are owned by
-/// PersistenceController. These helpers never open or change a cloud store.
+/// Coach's additional models stay local while the legacy history uses iCloud.
 enum CoachPersistence {
     static let configurationName = "CoachLocal"
 
@@ -14,7 +13,10 @@ enum CoachPersistence {
     }
 
     static var directory: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        if let continued = LocalHistoryContinuation.activeDirectory {
+            return continued.appendingPathComponent("CoachLocal", isDirectory: true)
+        }
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("CoachLocal", isDirectory: true)
     }
 
@@ -33,7 +35,17 @@ enum CoachPersistence {
 
     @MainActor
     static func isLocal(_ context: ModelContext) -> Bool {
-        context.container.configurations.allSatisfy { $0.name == configurationName || $0.isStoredInMemoryOnly }
-            && context.container.schema.entities.contains { $0.name == "CoachNutritionLog" }
+        let coachNames = Set(modelTypes.map { String(describing: $0) })
+        let configurations = context.container.configurations
+        // An isolated full-schema fixture is also a valid Coach destination.
+        if configurations.allSatisfy(\.isStoredInMemoryOnly) {
+            return coachNames.isSubset(of: Set(context.container.schema.entities.map(\.name)))
+        }
+        return configurations.contains { configuration in
+            guard configuration.name == configurationName else { return false }
+            let names = configuration.schema?.entities.map(\.name) ?? []
+            guard coachNames.isSubset(of: Set(names)) else { return false }
+            return configuration.cloudKitContainerIdentifier == nil
+        }
     }
 }

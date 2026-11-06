@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 import CryptoKit
+import CoreData
 import SQLite3
 import Darwin
 
@@ -10,10 +11,12 @@ extension CoachLocalOwnership {
     struct MigrationJournal: Codable {
         var version = 1
         let id: UUID
-        let source: String
+        var source: String
         let directory: String
         var phase: String
         var checkpoint: String? = nil
+        var sourceRootPath: String? = nil
+        var sourceStoreID: String? = nil
     }
 
     struct RawCheckpoint {
@@ -73,17 +76,35 @@ extension CoachLocalOwnership {
     }
 
     static func beginMigration(source: URL, root: URL) throws -> MigrationJournal {
-        if let current = try readJournal(root: root) {
-            guard current.source == source.standardizedFileURL.path else {
-                throw migrationError("The retained source no longer matches the migration journal.")
-            }
+        if var current = try readJournal(root: root) {
             guard current.phase != "active" else {
                 throw migrationError("An active destination is missing its selection. Recovery is required before another copy.")
+            }
+            let identity = try persistentStoreID(at: source)
+            guard current.sourceStoreID == nil || current.sourceStoreID == identity else {
+                throw migrationError("The retained source has a different storage identity from the migration journal.")
+            }
+            if current.source != source.standardizedFileURL.path {
+                guard try selectedStoreURL(root: root) == nil,
+                      sameRelocatedLegacyStore(source, root: root, recordedPath: current.source, recordedRoot: current.sourceRootPath),
+                      try current.checkpoint.map({ try matchesCheckpoint($0, at: source) }) ?? true else {
+                    throw migrationError("The retained source no longer matches the migration journal.")
+                }
+                // Before an old allocated journal had a checkpoint it made no
+                // verified claim about source contents. Start that copy afresh.
+                if current.checkpoint == nil && current.sourceStoreID == nil {
+                    return try restartUnselectedMigration(current, source: source, root: root)
+                }
+                current.source = source.standardizedFileURL.path
+                current.sourceRootPath = root.standardizedFileURL.path
+                current.sourceStoreID = identity
+                try writeJournal(current, root: root)
             }
             return current
         }
         let journal = MigrationJournal(id: UUID(), source: source.standardizedFileURL.path,
-                                       directory: UUID().uuidString, phase: "allocated")
+                                       directory: UUID().uuidString, phase: "allocated",
+                                       sourceRootPath: root.standardizedFileURL.path, sourceStoreID: try persistentStoreID(at: source))
         try writeJournal(journal, root: root)
         return journal
     }
@@ -98,13 +119,99 @@ extension CoachLocalOwnership {
             try JSONEncoder().encode(previous).write(to: retained, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         }
         let fresh = MigrationJournal(id: UUID(), source: source.standardizedFileURL.path,
-                                     directory: UUID().uuidString, phase: "allocated")
+                                     directory: UUID().uuidString, phase: "allocated",
+                                     sourceRootPath: root.standardizedFileURL.path, sourceStoreID: try persistentStoreID(at: source))
         try writeJournal(fresh, root: root)
         return fresh
     }
 
     static func destination(for journal: MigrationJournal, root: URL) -> URL {
         root.appendingPathComponent(journal.directory, isDirectory: true).appendingPathComponent("default.store")
+    }
+
+    /// Accept the same app-owned layout after either container moves. SwiftData
+    /// can place legacy history in the app group while migration state is local.
+    /// Callers must also verify the recorded store identity or checkpoint.
+    static func sameRelocatedLegacyStore(_ source: URL, root: URL, recordedPath: String, recordedRoot: String?) -> Bool {
+        guard recordedPath.hasPrefix("/"), source.isFileURL, root.isFileURL else { return false }
+        let oldSource = URL(fileURLWithPath: recordedPath).standardizedFileURL
+        let newSource = source.standardizedFileURL, newRoot = root.standardizedFileURL
+        guard oldSource.lastPathComponent == "default.store", newSource.lastPathComponent == "default.store" else { return false }
+        let oldRoot: URL
+        if let recordedRoot {
+            guard recordedRoot.hasPrefix("/") else { return false }
+            oldRoot = URL(fileURLWithPath: recordedRoot).standardizedFileURL
+        } else {
+            // Early migration journals did not record the main-app root. The
+            // legacy app-group path and current app root still identify the
+            // container layout; the caller separately pins the actual store.
+            if let oldContainers = containerLayout(oldSource.deletingLastPathComponent(), role: ["Shared", "AppGroup"]),
+               let newContainers = containerLayout(newSource.deletingLastPathComponent(), role: ["Shared", "AppGroup"]),
+               newRoot.lastPathComponent == "CoachLocalOwnership",
+               let appContainers = containerLayout(newRoot.deletingLastPathComponent(), role: ["Data", "Application"]) {
+                return oldContainers == newContainers && newContainers == appContainers
+            }
+            oldRoot = oldSource.deletingLastPathComponent().appendingPathComponent(newRoot.lastPathComponent)
+        }
+        let siblings = oldRoot.lastPathComponent == newRoot.lastPathComponent
+            && oldSource.deletingLastPathComponent() == oldRoot.deletingLastPathComponent()
+            && newSource.deletingLastPathComponent() == newRoot.deletingLastPathComponent()
+        if siblings { return true }
+        guard oldRoot.lastPathComponent == "CoachLocalOwnership", newRoot.lastPathComponent == "CoachLocalOwnership",
+              let oldGroup = containerLayout(oldSource.deletingLastPathComponent(), role: ["Shared", "AppGroup"]),
+              let oldApp = containerLayout(oldRoot.deletingLastPathComponent(), role: ["Data", "Application"]),
+              let newGroup = containerLayout(newSource.deletingLastPathComponent(), role: ["Shared", "AppGroup"]),
+              let newApp = containerLayout(newRoot.deletingLastPathComponent(), role: ["Data", "Application"]) else { return false }
+        return oldGroup == oldApp && newGroup == newApp && oldGroup == newGroup
+    }
+
+    private static func containerLayout(_ support: URL, role: [String]) -> URL? {
+        guard support.lastPathComponent == "Application Support" else { return nil }
+        let library = support.deletingLastPathComponent()
+        guard library.lastPathComponent == "Library" else { return nil }
+        let identifier = library.deletingLastPathComponent()
+        guard UUID(uuidString: identifier.lastPathComponent) != nil else { return nil }
+        let category = identifier.deletingLastPathComponent()
+        let domain = category.deletingLastPathComponent()
+        let containers = domain.deletingLastPathComponent()
+        guard category.lastPathComponent == role[1], domain.lastPathComponent == role[0],
+              containers.lastPathComponent == "Containers" else { return nil }
+        return containers.resolvingSymlinksInPath()
+    }
+
+    /// Read stable Core Data metadata through the same guarded, read-only SQLite
+    /// path as checkpoints. This never opens a live model or changes its files.
+    static func persistentStoreID(at url: URL) throws -> String {
+        try withReadableSource(url) { db in
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(db, "SELECT Z_UUID FROM Z_METADATA", -1, &statement, nil) == SQLITE_OK, let query = statement else {
+                if let statement { sqlite3_finalize(statement) }
+                throw migrationError("The retained storage identity could not be read.")
+            }
+            defer { sqlite3_finalize(query) }
+            guard sqlite3_step(query) == SQLITE_ROW, let text = sqlite3_column_text(query, 0) else {
+                throw migrationError("The retained storage identity is missing.")
+            }
+            guard let identity = UUID(uuidString: String(cString: text)),
+                  sqlite3_step(query) == SQLITE_DONE else {
+                throw migrationError("The retained storage identity is invalid.")
+            }
+            return identity.uuidString
+        }
+    }
+
+    /// Only fields in the compiled app model may be added during lightweight
+    /// migration. To-many relationships live in their own inverse/join storage.
+    @MainActor
+    static func compiledMigrationColumns(for modelTypes: [any PersistentModel.Type]) throws -> [String: Set<String>] {
+        guard let model = NSManagedObjectModel.makeManagedObjectModel(for: modelTypes) else {
+            throw migrationError("The compiled migration model could not be prepared.")
+        }
+        return Dictionary(uniqueKeysWithValues: try model.entities.map { entity in
+            guard let name = entity.name else { throw migrationError("The compiled migration model has an unnamed entity.") }
+            let fields = Array(entity.attributesByName.keys) + entity.relationshipsByName.values.filter { !$0.isToMany }.map(\.name)
+            return ("Z" + name.uppercased(), Set(fields.map { "Z" + $0.uppercased() }))
+        })
     }
 
     /// Inspects only SQLite through a read-only connection. Comparing every
@@ -115,6 +222,20 @@ extension CoachLocalOwnership {
         try withReadableSource(url) { db in
             try rawCheckpoint(url, database: db, phase: phase)
         }
+    }
+
+    /// Existing restoration journals may contain the old /var-to-/private/var
+    /// relative-path artifact. Accept only that exact asset spelling difference;
+    /// the database and every asset byte must still match the saved checkpoint.
+    static func matchesCheckpoint(_ expected: String, at url: URL) throws -> Bool {
+        let parts = expected.split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 2 else { return false }
+        let actual = try rawCheckpoint(url)
+        guard actual.digest == String(parts[0]) else { return false }
+        if actual.assetDigest == String(parts[1]) { return true }
+        let legacy = try assetFingerprints(url).map { "_SUPPORT" + $0.key + ":" + $0.value }
+            .sorted().joined(separator: "\n")
+        return hash(Data(legacy.utf8)) == String(parts[1])
     }
 
     private static func rawCheckpoint(_ url: URL, database db: OpaquePointer, phase: String) throws -> RawCheckpoint {
@@ -161,7 +282,8 @@ extension CoachLocalOwnership {
         #endif
     }
 
-    static func verifyRetainedColumns(_ checkpoint: RawCheckpoint, at url: URL, allowedNewTables: Set<String> = []) throws {
+    static func verifyRetainedColumns(_ checkpoint: RawCheckpoint, at url: URL, allowedNewTables: Set<String> = [],
+                                      allowedNewColumns: [String: Set<String>] = [:]) throws {
         var database: OpaquePointer?
         guard sqlite3_open_v2(canonicalSQLiteURL(url).path, &database, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = database else {
             if let database { sqlite3_close(database) }
@@ -187,7 +309,10 @@ extension CoachLocalOwnership {
         #endif
         for table in checkpoint.columns.keys.sorted() {
             let full = try tableDigest(db, table: table, columns: nil, entityNames: entityNames)
-            guard full.columns == checkpoint.columns[table] else {
+            let originalColumns = Set(checkpoint.columns[table] ?? [])
+            let currentColumns = Set(full.columns)
+            guard originalColumns.isSubset(of: currentColumns),
+                  currentColumns.subtracting(originalColumns).isSubset(of: allowedNewColumns[table] ?? []) else {
                 throw migrationError("A persisted table gained or lost unrecognized columns. The copy was not selected.")
             }
             let row = try tableDigest(db, table: table, columns: checkpoint.columns[table], entityNames: entityNames)
@@ -204,6 +329,64 @@ extension CoachLocalOwnership {
             message += " " + ((try? verificationDiagnostic(checkpoint, copy: db, actual: actualTableDigests, assetsMatch: assetsMatch)) ?? "Mismatch diagnostic unavailable.")
             #endif
             throw migrationError(message)
+        }
+    }
+
+    /// Verify the full persisted graph after dividing a disposable snapshot.
+    /// Each original table must have one owner; comparing raw columns also
+    /// covers persisted fields that are absent from the portable backup DTOs.
+    @MainActor
+    static func verifySplitColumns(_ checkpoint: RawCheckpoint, legacyURL: URL, coachURL: URL) throws {
+        let modelTables = Set((PersistenceController.legacyModelTypes + CoachPersistence.modelTypes)
+            .map { "Z" + String(describing: $0).uppercased() })
+        try withReadableSource(legacyURL) { legacyDB in
+            try withReadableSource(coachURL) { coachDB in
+                let stores = [
+                    (database: legacyDB, tables: try tableNames(legacyDB), names: try entityNameMap(legacyDB)),
+                    (database: coachDB, tables: try tableNames(coachDB), names: try entityNameMap(coachDB))
+                ]
+                for store in stores {
+                    for table in store.tables.subtracting(checkpoint.schemaTables) {
+                        if knownBookkeepingTables.contains(table) || table.hasPrefix("ANSCK") { continue }
+                        guard modelTables.contains(table), try diagnosticRowCount(store.database, table: table) == 0 else {
+                            throw migrationError("Splitting the history added an unknown or populated app table. The copy was not selected.")
+                        }
+                    }
+                }
+                var records = ""
+                let coachTables = Set(CoachPersistence.modelTypes.map { "Z" + String(describing: $0).uppercased() })
+                for table in checkpoint.columns.keys.sorted() {
+                    // Lightweight migration can retain an empty table for a
+                    // removed entity. Only the configured owner may retain rows.
+                    let ownerIndex = coachTables.contains(table) ? 1 : 0
+                    let owner = stores[ownerIndex]
+                    let other = stores[1 - ownerIndex]
+                    guard owner.tables.contains(table) else {
+                        throw migrationError("An original app table is missing from its split store. The copy was not selected.")
+                    }
+                    if other.tables.contains(table), try diagnosticRowCount(other.database, table: table) != 0 {
+                        throw migrationError("An original app table still has records in both split stores. The copy was not selected.")
+                    }
+                    let row = try tableDigest(owner.database, table: table, columns: nil, entityNames: owner.names)
+                    guard row.columns == checkpoint.columns[table] else {
+                        throw migrationError("Splitting the history changed an original table's columns. The copy was not selected.")
+                    }
+                    records += "\(table.utf8.count):\(table)\(row.digest)"
+                }
+                guard hash(Data(records.utf8)) == checkpoint.recordDigest else {
+                    throw migrationError("Splitting the history changed an original record or relationship. The copy was not selected.")
+                }
+            }
+        }
+        var assets = try assetFingerprints(legacyURL)
+        for (path, digest) in try assetFingerprints(coachURL) {
+            guard assets[path] == nil || assets[path] == digest else {
+                throw migrationError("The split stores contain conflicting external data assets. The copy was not selected.")
+            }
+            assets[path] = digest
+        }
+        guard assetFingerprintDigest(assets) == checkpoint.assetDigest else {
+            throw migrationError("Splitting the history changed an original external data asset. The copy was not selected.")
         }
     }
 
@@ -380,33 +563,49 @@ extension CoachLocalOwnership {
     private static func hash(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
 
     private static func assetDigest(_ store: URL) throws -> String {
+        assetFingerprintDigest(try assetFingerprints(store))
+    }
+
+    private static func assetFingerprintDigest(_ assets: [String: String]) -> String {
+        hash(Data(assets.map { $0.key + ":" + $0.value }.sorted().joined(separator: "\n").utf8))
+    }
+
+    private static func assetFingerprints(_ store: URL) throws -> [String: String] {
         let manager = FileManager.default
-        let support = store.deletingLastPathComponent().appendingPathComponent(".\(store.deletingPathExtension().lastPathComponent)_SUPPORT", isDirectory: true)
-        guard manager.fileExists(atPath: support.path) else { return hash(Data()) }
-        let info = try support.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+        let sourceSupport = store.deletingLastPathComponent().appendingPathComponent(".\(store.deletingPathExtension().lastPathComponent)_SUPPORT", isDirectory: true)
+        guard manager.fileExists(atPath: sourceSupport.path) else { return [:] }
+        let info = try sourceSupport.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+        guard info.isDirectory == true, info.isSymbolicLink != true else {
+            throw migrationError("The original data assets could not be inspected safely.")
+        }
+        let support = sourceSupport.resolvingSymlinksInPath().standardizedFileURL
+        let supportPrefix = support.path + "/"
         var enumerationError: Error?
-        guard info.isDirectory == true, info.isSymbolicLink != true,
-              let enumerator = manager.enumerator(at: support, includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey],
+        guard let enumerator = manager.enumerator(at: support, includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey],
                   errorHandler: { _, error in enumerationError = error; return false }) else {
             throw migrationError("The original data assets could not be inspected safely.")
         }
-        var rows: [String] = []
+        var rows: [String: String] = [:]
         for case let file as URL in enumerator {
             let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey])
             guard values.isSymbolicLink != true else { throw migrationError("A linked data asset needs manual recovery.") }
             if values.isDirectory == true { continue }
             guard values.isRegularFile == true else { throw migrationError("An unsupported data asset needs manual recovery.") }
-            let relative = String(file.path.dropFirst(support.path.count))
-            let handle = try FileHandle(forReadingFrom: file); defer { try? handle.close() }
+            let canonicalFile = file.resolvingSymlinksInPath().standardizedFileURL
+            guard canonicalFile.path.hasPrefix(supportPrefix) else {
+                throw migrationError("A data asset was outside its storage directory.")
+            }
+            let relative = String(canonicalFile.path.dropFirst(support.path.count))
+            let handle = try FileHandle(forReadingFrom: canonicalFile); defer { try? handle.close() }
             var digest = SHA256()
             while true {
                 try Task.checkCancellation()
                 let part = try handle.read(upToCount: 1_048_576) ?? Data()
                 if part.isEmpty { break }; digest.update(data: part)
             }
-            rows.append(relative + ":" + digest.finalize().map { String(format: "%02x", $0) }.joined())
+            rows[relative] = digest.finalize().map { String(format: "%02x", $0) }.joined()
         }
         if let enumerationError { throw enumerationError }
-        return hash(Data(rows.sorted().joined(separator: "\n").utf8))
+        return rows
     }
 }

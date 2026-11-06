@@ -1,0 +1,1 @@
+This update makes history recovery less disruptive, so you can keep using available history while iCloud needs attention. If older history cannot open, you can choose separate local history for new entries while the original files are retained. It also improves backup restoration, handling of duplicate history, and saved measurement units.

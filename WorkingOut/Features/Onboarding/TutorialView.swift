@@ -17,6 +17,7 @@ struct TutorialView: View {
     @State private var weightUnit: String
     @State private var weightGoal: String
     @State private var showHeightPicker: Bool = false
+    @State private var saveError: String?
 
     @FocusState private var ageFocused: Bool
     @FocusState private var goalWeightFocused: Bool
@@ -135,6 +136,11 @@ struct TutorialView: View {
                     .foregroundStyle(AppTheme.secondaryTextColor)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .multilineTextAlignment(.center)
+                if UserProfileStore.shared.needsUnitReview {
+                    profileUnitReview
+                    Button("Review Profile") { step = .profile }
+                        .accessibilityIdentifier("profile.units.review")
+                }
             }
             .padding(.horizontal, 20)
             .padding(.top, 28)
@@ -167,6 +173,9 @@ struct TutorialView: View {
                     message: "Everything here is optional. Leave any field blank and add it later in Settings."
                 )
 
+                if UserProfileStore.shared.needsUnitReview { profileUnitReview }
+                if let saveError { Text(saveError).foregroundStyle(.red).accessibilityIdentifier("profile.save.error") }
+
                 unitsSection
                 trainingSection
                 personalDetailsSection
@@ -179,6 +188,12 @@ struct TutorialView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .scrollIndicators(.hidden)
+    }
+
+    private var profileUnitReview: some View {
+        Text("Your saved profile was kept, but its measurement units are unknown. Re-enter your height and goal weight in the units you choose below.")
+            .font(.subheadline).foregroundStyle(AppTheme.secondaryTextColor)
+            .accessibilityIdentifier("profile.units.review_required")
     }
 
     private var unitsSection: some View {
@@ -588,19 +603,23 @@ struct TutorialView: View {
     private func completeOnboarding(saveGoal: Bool, saveProfile: Bool) {
         dismissKeyboard()
 
+        if saveProfile, !persistProfile() { return }
+
         if saveGoal, let selectedFocus {
             UserDefaults.standard.set(selectedFocus.rawValue, forKey: "onboardingPrimaryGoal")
-        }
-
-        if saveProfile {
-            persistProfile()
         }
 
         didCompleteProfileSetup = true
         onFinish?()
     }
 
-    private func persistProfile() {
+    private func persistProfile() -> Bool {
+        let profile = UserProfileStore.shared
+        guard profile.saveProfile(age: Int(ageText) ?? 0, sex: sex, height: heightValue, heightUnit: heightUnit,
+                                  targetWeight: Double(goalWeightText) ?? 0, weightUnit: weightUnit) else {
+            saveError = profile.storageError ?? "Your profile could not be saved. Try again."
+            return false
+        }
         let defaults = UserDefaults.standard
         defaults.set(measurementSystem, forKey: "measurementSystem")
         defaults.set(heightUnit, forKey: "heightUnit")
@@ -609,12 +628,7 @@ struct TutorialView: View {
         persistOptional(experienceLevel, forKey: "experienceLevel", in: defaults)
         persistOptional(weightGoal, forKey: "weightGoal", in: defaults)
 
-        // Personal attributes go to the Keychain-backed store; 0 / "" mean unset.
-        let profile = UserProfileStore.shared
-        profile.sex = sex
-        profile.age = Int(ageText).map { max(0, $0) } ?? 0
-        profile.heightValue = max(0, heightValue)
-        profile.targetWeight = Double(goalWeightText).map { max(0, $0) } ?? 0
+        return true
     }
 
     private func persistOptional(_ value: String, forKey key: String, in defaults: UserDefaults) {

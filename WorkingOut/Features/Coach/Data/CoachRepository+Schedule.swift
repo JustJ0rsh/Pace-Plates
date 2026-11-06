@@ -12,6 +12,7 @@ struct CoachScheduleChange: Identifiable {
 
 extension CoachRepository {
     func schedulePreview(planID: UUID, selected: Set<UUID>, dayOffset: Int) throws -> [CoachScheduleChange] {
+        try Self.requireUniqueOccurrences(selected, among: context.fetch(FetchDescriptor<PlannedSession>()))
         guard let plan = try plans().first(where: { $0.id == planID }) else { throw CoachRepositoryError.missingRecord }
         let zone = Self.timeZone(plan)
         var calendar = Calendar(identifier: .gregorian); calendar.timeZone = zone
@@ -28,7 +29,9 @@ extension CoachRepository {
             guard let plan = try isolated.fetch(FetchDescriptor<TrainingPlan>()).first(where: { $0.id == planID }),
                   plan.updatedAt == expectedUpdatedAt else { throw CoachRepositoryError.revisionConflict }
             let zone = Self.timeZone(plan)
-            let rows = try isolated.fetch(FetchDescriptor<PlannedSession>()).filter { $0.plan?.id == planID }
+            let storedRows = try isolated.fetch(FetchDescriptor<PlannedSession>())
+            try Self.requireUniqueOccurrences(Set(changes.map(\.id)), among: storedRows)
+            let rows = storedRows.filter { $0.plan?.id == planID }
             let mappings = try isolated.fetch(FetchDescriptor<CoachCalendarMapping>())
             for change in changes {
                 guard let row = rows.first(where: { $0.id == change.id }), row.status == "pending", row.executionID == nil,
@@ -87,9 +90,11 @@ extension CoachRepository {
     func applyRevision(_ incoming: CoachValidatedProgram, planID: UUID, selected: Set<UUID>,
                        addSourceKeys: Set<String>, expectedRevisionID: UUID?, expectedUpdatedAt: Date,
                        exerciseSelections: [String: UUID] = [:], allowCustomExercises: Bool = false,
-                       applyNutritionTargetsFrom: Date? = nil) async throws {
+                       applyNutritionTargetsFrom: Date? = nil, restoreRemovedIDs: Set<UUID> = []) async throws {
         try requireLocal()
-        guard let current = try plans().first(where: { $0.id == planID }) else { throw CoachRepositoryError.missingRecord }
+        let currentMatches = try plans().filter { $0.id == planID }
+        guard currentMatches.count <= 1 else { throw CoachRepositoryError.ambiguousRecord }
+        guard let current = currentMatches.first else { throw CoachRepositoryError.missingRecord }
         let start = current.startDate, zone = Self.timeZone(current)
         let exerciseMappings = try self.exerciseMappings(for: incoming.document)
         for mapping in exerciseMappings {
@@ -99,12 +104,16 @@ extension CoachRepository {
         let expanded = try await Task.detached { try CoachSchedule.expand(incoming, startDate: start, timeZone: zone) }.value
         try Task.checkCancellation()
         try transaction { isolated in
-            guard let plan = try isolated.fetch(FetchDescriptor<TrainingPlan>()).first(where: { $0.id == planID }),
+            let planMatches = try isolated.fetch(FetchDescriptor<TrainingPlan>()).filter { $0.id == planID }
+            guard planMatches.count <= 1 else { throw CoachRepositoryError.ambiguousRecord }
+            guard let plan = planMatches.first,
                   plan.currentRevisionID == expectedRevisionID, plan.updatedAt == expectedUpdatedAt,
                   plan.sourceProgramID == incoming.document.programId, incoming.document.revision > plan.sourceRevision else { throw CoachRepositoryError.revisionConflict }
             let today = Self.civilDate(Date(), timeZone: zone)
             let rows = (plan.sessions ?? [])
-            guard selected.isSubset(of: Set(rows.map(\.id))), addSourceKeys.isSubset(of: Set(expanded.map(\.sourceKey))),
+            try Self.requireUniqueOccurrences(selected.union(restoreRemovedIDs), among: isolated.fetch(FetchDescriptor<PlannedSession>()))
+            guard selected.isDisjoint(with: restoreRemovedIDs),
+                  selected.union(restoreRemovedIDs).isSubset(of: Set(rows.map(\.id))), addSourceKeys.isSubset(of: Set(expanded.map(\.sourceKey))),
                   rows.count + addSourceKeys.count <= 5_824 else { throw CoachRepositoryError.invalidValue("existing selected sessions and a program within 5,824 occurrences") }
             let calendarMappings = try isolated.fetch(FetchDescriptor<CoachCalendarMapping>())
             var additions: [PlannedSession] = []
@@ -128,11 +137,17 @@ extension CoachRepository {
             }
             newRevision.exerciseMappingsData = try JSONEncoder().encode(resolvedMappings)
             isolated.insert(newRevision)
-            for row in rows where selected.contains(row.id) {
+            for row in rows where selected.contains(row.id) || restoreRemovedIDs.contains(row.id) {
                 for mapping in calendarMappings where mapping.plannedSessionID == row.id { mapping.pendingProjection = true }
-                guard row.status == "pending", row.executionID == nil, !row.localScheduleOverride,
-                      (row.currentCivilDate ?? "") >= today else { throw CoachRepositoryError.futureOnly }
-                guard let source = expanded.first(where: { $0.weekId == row.sourceWeekID && $0.slotId == row.sourceSlotID }) else {
+                let source = expanded.first { $0.weekId == row.sourceWeekID && $0.slotId == row.sourceSlotID }
+                if restoreRemovedIDs.contains(row.id) {
+                    guard let source, Self.canRestoreRemovedOccurrence(row, source: source, on: today) else { throw CoachRepositoryError.futureOnly }
+                    row.status = "pending"; row.completionProvenance = nil
+                } else {
+                    guard row.status == "pending", row.executionID == nil, !row.localScheduleOverride,
+                          (row.currentCivilDate ?? "") >= today else { throw CoachRepositoryError.futureOnly }
+                }
+                guard let source else {
                     // Removed future prescription remains a visible skipped row,
                     // retaining its source identity for backup and audit.
                     row.status = "skipped"; row.completionProvenance = "removed_by_reviewed_revision"; continue
@@ -174,6 +189,14 @@ extension CoachRepository {
             }
             for suggestion in try isolated.fetch(FetchDescriptor<CoachProgressionSuggestion>()) where suggestion.planID == planID && suggestion.statusRaw == "pending" { suggestion.statusRaw = "stale" }
         }
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: selected.map { "coach.session.\($0.uuidString)" })
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: selected.union(restoreRemovedIDs).map { "coach.session.\($0.uuidString)" })
+    }
+
+    static func canRestoreRemovedOccurrence(_ row: PlannedSession, source: CoachScheduledOccurrence, on today: String) -> Bool {
+        row.status == "skipped" && row.completionProvenance == "removed_by_reviewed_revision"
+            && row.executionID == nil && row.completedAt == nil
+            && row.completedWorkoutSessionID == nil && row.completedRunningSessionID == nil
+            && !row.localScheduleOverride && (row.currentCivilDate ?? "") >= today && source.civilDate >= today
+            && row.sourceWeekID == source.weekId && row.sourceSlotID == source.slotId
     }
 }

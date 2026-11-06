@@ -23,7 +23,6 @@ struct ContentView: View {
     @State private var presentedWorkoutRecoveryID: UUID?
     @State private var showWorkoutRecoveries = false
     @State private var restoreError: String?
-    @State private var migrationError: String?
     
     // Error handling moved to App level
     // @State private var showImportError: Bool = false
@@ -31,8 +30,35 @@ struct ContentView: View {
 
     var body: some View {
         Group {
+            if persistenceController.isPreparingStorage {
+                VStack(spacing: 16) {
+                    ProgressView()
+                    Text(persistenceController.isContinuingLocally ? "Opening local history…" : "Checking requested iCloud recovery…")
+                    Text("Your saved history stays on this device. You can skip the cloud check and continue locally.")
+                        .font(.subheadline).multilineTextAlignment(.center)
+                    Button("Continue Without iCloud Check") { persistenceController.continueWithoutCloudCheck() }
+                        .disabled(persistenceController.isContinuingLocally)
+                        .accessibilityIdentifier("storage.skipCloudCheck")
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(AppTheme.backgroundColor)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("storage.preparing")
+            } else {
             #if DEBUG
-            if launchConfiguration.usesIsolatedStore && launchConfiguration.fixtureName == "storage_integration_checks" {
+            if launchConfiguration.usesIsolatedStore && launchConfiguration.fixtureName == "recovery_lifecycle" {
+                RecoveryLifecycleAcceptanceView()
+            } else if launchConfiguration.usesIsolatedStore && launchConfiguration.fixtureName == "profile_reinstall_checks" {
+                profileReinstallProbe
+            } else if launchConfiguration.isUITest && ["user_record_map_probe", "active_record_map_probe"].contains(launchConfiguration.fixtureName ?? "") {
+                ActualHistoryCloudVerificationView()
+            } else if ProcessInfo.processInfo.environment["PP_USER_CLOUD_VERIFY"] == "1", persistenceController.storageError == nil {
+                ActualHistoryCloudVerificationView()
+            } else if let runID = launchConfiguration.liveCloudRunID {
+                LiveCloudSyncVerificationView(runID: runID, phase: launchConfiguration.liveCloudPhase)
+            } else if launchConfiguration.isUITest && launchConfiguration.fixtureName == "user_history_restore_checks" {
+                UserHistoryRestorationVerificationView()
+            } else if launchConfiguration.usesIsolatedStore && ["storage_integration_checks", "icloud_restoration_checks"].contains(launchConfiguration.fixtureName ?? "") {
                 StorageIntegrationAcceptanceView()
             } else if let error = persistenceController.storageError {
                 storageRecovery(error)
@@ -46,45 +72,40 @@ struct ContentView: View {
                 mainContent
             }
             #endif
+            }
         }
+        .task { await persistenceController.prepareStorageIfNeeded() }
     }
+
+    #if DEBUG
+    @ViewBuilder private var profileReinstallProbe: some View {
+        #if targetEnvironment(simulator)
+        UserProfileReinstallAcceptanceView()
+        #else
+        Text("Profile lifecycle verification is Simulator-only.")
+        #endif
+    }
+    #endif
 
     private func storageRecovery(_ error: String) -> some View {
         VStack(alignment: .leading, spacing: 20) {
             Image(systemName: "externaldrive.badge.exclamationmark")
                 .font(.largeTitle)
-            Text("Your history needs attention").font(.title.bold())
-            Text(error)
-            if persistenceController.needsLegacyMigration {
-                Text("Continue by making and verifying a protected local copy. Your original history is retained. New edits on this device will stay local and will not sync to other devices through the legacy iCloud store.")
-                Text("Existing cloud copies are not removed. Use a deliberate history backup to transfer or recover future local edits. Apple Health and your Photos library remain separate.")
-                    .foregroundStyle(.secondary)
-                if let migrationError { Text(migrationError).foregroundStyle(.red) }
-                Button {
-                    migrationError = nil
-                    Task { @MainActor in
-                        do { try await persistenceController.migrateLegacyHistory() }
-                        catch { migrationError = error.localizedDescription }
-                    }
-                } label: {
-                    HStack {
-                        if persistenceController.isMigratingHistory { ProgressView() }
-                        Text(persistenceController.isMigratingHistory
-                             ? "Verifying your local copy…" : "Copy History and Continue Locally")
-                    }
-                }
+            Text("Some history is unavailable").font(.title.bold())
+            Text("You can keep using Pace & Plates with new local history. Older entries will not appear in that history, but their original files will be kept. New entries will be saved on this device.")
+            Button("Continue with New Local History") { persistenceController.continueWithNewLocalHistory() }
                 .buttonStyle(.borderedProminent)
-                .disabled(persistenceController.isMigratingHistory)
-                .accessibilityIdentifier("storage.migrate")
-            } else {
-                Text("Close and reopen the app to retry. Your retained history has not been replaced or deleted.")
-            }
+                .accessibilityIdentifier("storage.continueLocal")
+            DisclosureGroup("Recovery details") { Text(error).font(.caption) }
+            Text("Keep the app installed to retain both histories. Export a backup before recovering or combining older records.")
+                .font(.caption).foregroundStyle(.secondary)
         }
         .padding(24)
         .frame(maxWidth: 640)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AppTheme.backgroundColor)
         .preferredColorScheme(appTheme.preferredColorScheme)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("storage.recovery")
     }
 
@@ -96,7 +117,30 @@ struct ContentView: View {
             // Nav bar buttons set their color explicitly via AppTheme.toolbarButtonColor
             // in each view's toolbar — inherited tints are dropped by NavigationStack
             // toolbars on tab revisits, which made button colors inconsistent.
-            NavigationStack { HomeView() }
+            NavigationStack {
+                HomeView()
+                    .safeAreaInset(edge: .top) {
+                        VStack(spacing: 0) {
+                            if persistenceController.cloudHistoryStatus.isEnabled,
+                               persistenceController.cloudHistoryStatus.phase != .importConfirmed {
+                                CloudHistoryStatusBanner(controller: persistenceController)
+                            }
+                            if let restoreError {
+                                HStack(alignment: .top) {
+                                    VStack(alignment: .leading) {
+                                        Text("A history restore needs attention").font(.subheadline.bold())
+                                        Text(restoreError).font(.caption)
+                                        Text("You can continue using your available history.").font(.caption)
+                                    }
+                                    Button("Dismiss") { self.restoreError = nil }
+                                        .accessibilityIdentifier("history.restore.dismiss")
+                                }
+                                .padding(12).background(.regularMaterial)
+                                .accessibilityIdentifier("history.restore.notice")
+                            }
+                        }
+                    }
+            }
                 .tabItem { Label("Home", systemImage: "house.fill") }
                 .tag(0)
 
@@ -253,6 +297,9 @@ struct ContentView: View {
                 }
             }
 
+            let userProfile = UserProfileStore.shared
+            userProfile.retryLoadingIfUnavailable()
+            userProfile.restoreUnitPreferences()
             // Check if user needs to see onboarding
             // Show onboarding if: 
             // 1. They haven't completed profile setup AND
@@ -267,8 +314,10 @@ struct ContentView: View {
                 didShowTutorial = true
                 showTutorial = false
             } else {
-                let hasProfileData = UserProfileStore.shared.hasBasicProfile
-                if !didCompleteProfileSetup && !hasProfileData {
+                let hasProfileData = userProfile.hasBasicProfile
+                if !userProfile.isAvailable {
+                    showTutorial = false
+                } else if !didCompleteProfileSetup && !hasProfileData {
                     showTutorial = true
                 } else {
                     // If onboarding was completed or profile data exists, mark as complete
@@ -285,14 +334,20 @@ struct ContentView: View {
 
             // No banner; we'll prompt for HK when appropriate
             // Align unit preferences to the global measurement selection
-            if measurementSystem == "imperial" {
-                if weightUnit != "lbs" { weightUnit = "lbs" }
-                if distanceUnit != "mi" { distanceUnit = "mi" }
-                if heightUnit != "in" { heightUnit = "in" }
-            } else {
-                if weightUnit != "kg" { weightUnit = "kg" }
-                if distanceUnit != "km" { distanceUnit = "km" }
-                if heightUnit != "cm" { heightUnit = "cm" }
+            if userProfile.isAvailable {
+                // Read the restored preference immediately; AppStorage may still
+                // hold its registered fallback during this first render.
+                let restoredSystem = UserDefaults.standard.string(forKey: "measurementSystem") ?? measurementSystem
+                measurementSystem = restoredSystem
+                if restoredSystem == "imperial" {
+                    if weightUnit != "lbs" { weightUnit = "lbs" }
+                    if distanceUnit != "mi" { distanceUnit = "mi" }
+                    if heightUnit != "in" { heightUnit = "in" }
+                } else {
+                    if weightUnit != "kg" { weightUnit = "kg" }
+                    if distanceUnit != "km" { distanceUnit = "km" }
+                    if heightUnit != "cm" { heightUnit = "cm" }
+                }
             }
 
             // Ensure the Game Center access point dot is hidden by default
@@ -327,9 +382,6 @@ struct ContentView: View {
                     .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { importedCoachProgram = nil } } }
             }
         }
-        .alert("History Restore Needs Attention", isPresented: Binding(get: { restoreError != nil }, set: { if !$0 { restoreError = nil } })) {
-            Button("OK", role: .cancel) { restoreError = nil }
-        } message: { Text(restoreError ?? "") }
 
     }
 }

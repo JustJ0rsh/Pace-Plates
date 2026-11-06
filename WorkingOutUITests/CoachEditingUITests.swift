@@ -88,7 +88,7 @@ final class CoachEditingUITests: XCTestCase {
         reveal(app.textFields["Calories"], in: app)
         XCTAssertEqual(app.textFields["Calories"].value as? String, "2000", "Returning from target editing must preserve unsaved totals")
         saveCheckIn("coach.nutrition.save", in: app)
-        openTargets(in: app)
+        openTargets(in: app, searchAbove: true)
         enter("2300", into: frontTextField("Calories", in: app), in: app, replacing: true)
         tap(app.navigationBars["Nutrition Targets"].buttons["Save"], in: app)
         let savedTarget = app.staticTexts["2200 kcal"]
@@ -255,12 +255,12 @@ final class CoachEditingUITests: XCTestCase {
     private func back(from title: String, in app: XCUIApplication) {
         tap(app.navigationBars[title].buttons.element(boundBy: 0), in: app)
     }
-    private func openTargets(in app: XCUIApplication) {
+    private func openTargets(in app: XCUIApplication, searchAbove: Bool = false) {
         let button = app.buttons["Edit Targets from an Effective Date"]
-        tap(button, in: app)
+        tap(button, in: app, searchAbove: searchAbove)
         let editor = app.navigationBars["Nutrition Targets"]
         if !editor.waitForExistence(timeout: 2) {
-            reveal(button, in: app)
+            reveal(button, in: app, searchAbove: searchAbove)
             button.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap()
         }
         XCTAssertTrue(editor.waitForExistence(timeout: 5), app.debugDescription)
@@ -270,9 +270,9 @@ final class CoachEditingUITests: XCTestCase {
         let button = app.buttons[identifier]
         reveal(button, in: app)
         XCTAssertTrue(waitForStableControl(button, in: app))
-        button.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap()
+        button.tap()
         let saved = app.staticTexts["coach.checkin.saved"]
-        reveal(saved, in: app, searchAbove: true)
+        reveal(saved, in: app)
         XCTAssertTrue(saved.exists)
     }
     private func frontTextField(_ title: String, in app: XCUIApplication) -> XCUIElement {
@@ -311,9 +311,9 @@ final class CoachEditingUITests: XCTestCase {
         let origin = scroller.coordinate(withNormalizedOffset: .zero)
         origin.withOffset(CGVector(dx: 35, dy: bottom - frame.minY)).press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: 35, dy: top - frame.minY)))
     }
-    private func tap(_ element: XCUIElement, in app: XCUIApplication) {
+    private func tap(_ element: XCUIElement, in app: XCUIApplication, searchAbove: Bool = false) {
         dismissKeyboard(in: app)
-        reveal(element, in: app)
+        reveal(element, in: app, searchAbove: searchAbove)
         XCTAssertTrue(waitForStableControl(element, in: app), "Control did not settle before tapping: \(element)")
         element.tap()
     }

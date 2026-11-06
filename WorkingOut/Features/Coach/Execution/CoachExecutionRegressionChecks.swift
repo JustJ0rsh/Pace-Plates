@@ -164,6 +164,7 @@ enum CoachExecutionRegressionChecks {
         try require(try CoachExecutionCoordinator.snapshot(runExecution).runRecoveryData == nil, "late active checkpoint cannot overwrite a terminal run")
         count += try await progressionChecks(container("progression.store"))
         count += try await CoachPlannedActivityRegressionChecks.run()
+        count += try CoachProgressionRecoveryRegressionChecks.run()
         return count
     }
 

@@ -52,6 +52,55 @@ extension CoachPersistenceRegressionChecks {
         try require(try reopenedFresh.container.mainContext.fetch(FetchDescriptor<WeightEntry>()).first?.id == freshWeight.id,
                     "fresh local selection reopens the same records")
 
+        // Use the historical model set with current model definitions to exercise
+        // missing tables through the actual migration and retry path.
+        let (oldRoot, oldURL) = try paths("older-schema")
+        let oldTypes: [any PersistentModel.Type] = [ExerciseDefinition.self, WorkoutSession.self, ExerciseLog.self,
+            RunningSession.self, RunningPlan.self, RunningPlanSession.self, WeightEntry.self,
+            AIConversation.self, WorkoutTemplate.self, TemplateExercise.self, HealthWorkoutInboxItem.self]
+        let oldSchema = Schema(oldTypes)
+        let oldStore = try ModelContainer(for: oldSchema, configurations: [ModelConfiguration("OldFixture", schema: oldSchema, url: oldURL, cloudKitDatabase: .none)])
+        let oldWorkout = WorkoutSession(date: Date(timeIntervalSince1970: 123), notes: "Preserve older history", title: "Old workout")
+        let oldExercise = ExerciseDefinition(name: "Older press", muscleGroup: "Chest", isUserDefined: true)
+        let oldLog = ExerciseLog(reps: 8, weight: 40, weightUnit: "kg", setNumber: 1, exerciseName: oldExercise.name, isCompleted: false)
+        oldLog.workoutSession = oldWorkout; oldLog.exerciseDefinition = oldExercise
+        let oldRoute = Data((0..<256_000).map { UInt8(truncatingIfNeeded: $0 &* 17) })
+        let oldRun = RunningSession(date: oldWorkout.date, distance: 2, distanceUnit: "km", duration: 700, locations: oldRoute)
+        let oldWeight = WeightEntry(date: oldWorkout.date, weight: 73, weightUnit: "kg")
+        oldStore.mainContext.insert(oldWorkout); oldStore.mainContext.insert(oldExercise); oldStore.mainContext.insert(oldLog)
+        oldStore.mainContext.insert(oldRun); oldStore.mainContext.insert(oldWeight); try oldStore.mainContext.save()
+        let oldID = oldWorkout.id
+        let oldLogID = oldLog.id
+        let oldRunID = oldRun.id
+        let oldWeightID = oldWeight.id
+        let oldCheckpoint = try CoachLocalOwnership.rawCheckpoint(oldURL)
+        let oldController = PersistenceController(storageRootForRegression: oldRoot, legacyStoreForRegression: oldURL)
+        do { try await oldController.migrateForStorageRegression(interruptAfter: "copied") } catch { }
+        guard let oldSchemaJournal = try CoachLocalOwnership.readJournal(root: oldRoot), oldSchemaJournal.phase == "copied" else {
+            throw CoachRepositoryError.invalidValue("older history was not staged")
+        }
+        let oldCopyURL = CoachLocalOwnership.destination(for: oldSchemaJournal, root: oldRoot)
+        let fullSchema = PersistenceController.coachSchema
+        let openedCopy = try ModelContainer(for: fullSchema, configurations: [ModelConfiguration(CoachPersistence.configurationName, schema: fullSchema, url: oldCopyURL, cloudKitDatabase: .none)])
+        let releaseAllowlist = Set(CoachPersistence.modelTypes.map { "Z" + String(describing: $0).uppercased() })
+        var reproduced = false
+        do { try CoachLocalOwnership.verifyRetainedColumns(oldCheckpoint, at: oldCopyURL, allowedNewTables: releaseAllowlist) }
+        catch { reproduced = error.localizedDescription.contains("unrecognized table") }
+        try require(reproduced, "2.5 rejects the already-opened older-schema copy")
+        try require(try CoachLocalOwnership.selectedStoreURL(root: oldRoot) == nil, "failed verification does not select the copy")
+        try await oldController.migrateForStorageRegression(interruptAfter: nil)
+        withExtendedLifetime(openedCopy) { }
+        let oldRows = try oldController.container.mainContext.fetch(FetchDescriptor<WorkoutSession>())
+        try require(oldController.isCoachLocal && oldRows.count == 1 && oldRows[0].id == oldID && oldRows[0].notes == "Preserve older history", "older schema migrates its original history")
+        let oldLogs = try oldController.container.mainContext.fetch(FetchDescriptor<ExerciseLog>())
+        let oldRuns = try oldController.container.mainContext.fetch(FetchDescriptor<RunningSession>())
+        let oldWeights = try oldController.container.mainContext.fetch(FetchDescriptor<WeightEntry>())
+        try require(oldLogs.count == 1 && oldLogs[0].id == oldLogID && oldLogs[0].workoutSession?.id == oldID && oldLogs[0].exerciseDefinition?.name == "Older press" && oldLogs[0].reps == 8 && !oldLogs[0].isCompleted, "older workout and exercise relationship survive")
+        try require(oldRuns.count == 1 && oldRuns[0].id == oldRunID && oldRuns[0].locations == oldRoute && oldWeights.count == 1 && oldWeights[0].id == oldWeightID && oldWeights[0].weight == 73, "older route and weight survive")
+        try require(try CoachLocalOwnership.rawCheckpoint(oldURL).identity == oldCheckpoint.identity, "older source is retained unchanged")
+        let reopenedOld = PersistenceController(storageRootForRegression: oldRoot, legacyStoreForRegression: oldURL)
+        try require(try reopenedOld.container.mainContext.fetch(FetchDescriptor<WorkoutSession>()).first?.id == oldID, "recovered history survives relaunch")
+
         let schema = Schema(PersistenceController.legacyModelTypes)
         for interruption in ["allocated", "copied", "verified", "selected"] {
             let (ownership, legacyURL) = try paths(interruption)

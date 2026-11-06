@@ -92,6 +92,15 @@ extension CoachPersistenceRegressionChecks {
         try mutate("UPDATE ZEXERCISELOG SET ZEXERCISEDEFINITION=(SELECT Z_PK FROM ZEXERCISEDEFINITION WHERE ZNAME='Synthetic B')")
         try reject("changing a relationship foreign key is rejected")
         try mutate("UPDATE ZEXERCISELOG SET ZEXERCISEDEFINITION=(SELECT Z_PK FROM ZEXERCISEDEFINITION WHERE ZNAME='Synthetic A')")
+        try mutate("CREATE TABLE ZTESTEXPECTED (VALUE INTEGER)")
+        try CoachLocalOwnership.verifyRetainedColumns(original, at: copyURL, allowedNewTables: PersistenceController.addedLocalSchemaTables.union(["ZTESTEXPECTED"]))
+        try require(true, "an explicitly allowed new table must be empty")
+        try mutate("INSERT INTO ZTESTEXPECTED VALUES (1)")
+        var populatedRejected = false
+        do { try CoachLocalOwnership.verifyRetainedColumns(original, at: copyURL, allowedNewTables: PersistenceController.addedLocalSchemaTables.union(["ZTESTEXPECTED"])) }
+        catch { populatedRejected = true }
+        try require(populatedRejected, "a populated new model table is rejected")
+        try mutate("DROP TABLE ZTESTEXPECTED")
         try mutate("CREATE TABLE ZZUNEXPECTED (VALUE INTEGER); INSERT INTO ZZUNEXPECTED VALUES (1)")
         try reject("an unknown destination table is rejected")
         try mutate("DROP TABLE ZZUNEXPECTED")

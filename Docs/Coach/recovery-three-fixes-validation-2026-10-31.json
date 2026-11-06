@@ -1,0 +1,302 @@
+{
+  "date": "2026-10-31",
+  "branch": "codex/recovery-hardening-20261031",
+  "base_commit": "fc6a0406388ccac1142d39a0618d5950cbd14acb",
+  "delivery": "Local, uncommitted, unpublished. No affected-user records or live CloudKit records changed.",
+  "fixes": {
+    "backup": "V6 archives preserve physical rows and exact links without changing app UUIDs; unique exports retain v5 behavior. Absent-version/v1\u2013v5 duplicate archives upgrade in memory when saved references resolve uniquely. Omitted fields use existing legacy defaults; unknown actual measurements stay nil. Ambiguous/missing/conflicting parent links reject before mutation, with guidance; original bytes and v5 stream manifests remain unchanged.",
+    "cloud": "Missing-record repair performs no app-directed record creation without an exact-set, one-use authorization. User reviews missing records and may schedule one restore for next launch; account/store/current payload are rechecked and a durable consumed receipt precedes any conditional creation. Newly missing IDs never join an approved set. Normal CloudKit synchronization remains enabled.",
+    "profile": "Height/goal weight retain units in encrypted Keychain payload. Erased preferences restore from tags; legacy unknown units preserve raw values behind review, with no guessed measurement exposed. Locked/corrupt storage and failed writes preserve existing data.",
+    "adjacent_data_safety": [
+      "Settings dedup requires matching content/actuals/provenance/physical parents; equal UUID alone is insufficient.",
+      "Migration handles independently moving main-app and shared app-group containers, including old journals and system path aliases.",
+      "Restore confirmation has an explicit Keep Records Local action."
+    ]
+  },
+  "native_installed_lifecycle": {
+    "simulator": "CDDCC807-F17A-41CB-8E2C-57FBF0328440",
+    "name": "Pace-Recovery-Lifecycle-20261031",
+    "runtime": "iOS26.5",
+    "legacy_25": "Installed app built from actual2c33bb1 release source; repeated native Copy History button reproduced unrecognized-table error.",
+    "legacy_251": "Installed over2.5 with actual table-allowlist-only patch; same staged history reproduced added-column rejection.",
+    "retained_patch": "Installed current patch over failed251. Ordinary startup reached Home with original workout visible. Separate disk probe verified all5 identities, original values, exact links and2.5MB route.",
+    "reinstall_branch": "Restored generated failed251 fixtures, repeated native failure, then used actual OS uninstall. Both main and shared containers were removed. Fresh installed251 reached Home empty, then scoped helper saved new88kg weight and150g protein Coach entry. Current patch retained both entries and kept old deleted IDs absent offline.",
+    "backup_branch": "Actual V6 export saved externally, OS uninstall removed both containers, fresh current container verified empty, actual public saved-file import restored original UUID duplicates/links/new entries, repeat was idempotent, and another installed update/process reopen preserved them.",
+    "receipts": {
+      "retained": {
+        "counts": "1,112,1,1,1,0",
+        "phase": "retained",
+        "result": "passed",
+        "scope": "Disposable Simulator; CloudKit disabled",
+        "verified": "Five historical identities, original values, exact links and 2.5 MB route preserved after actual installed updates."
+      },
+      "reinstalled251": {
+        "counts": "2,113,2,2,1,1",
+        "phase": "reinstalled251",
+        "result": "passed",
+        "scope": "Disposable Simulator; CloudKit disabled",
+        "verified": "Post-reinstall weight and Coach entry retained through update; original deleted records absent; duplicate graph seeded."
+      },
+      "export": {
+        "backupBytes": "173634",
+        "counts": "2,113,2,2,1,1",
+        "phase": "export",
+        "result": "passed",
+        "scope": "Disposable Simulator; CloudKit disabled",
+        "verified": "Actual backup export saved for copying outside the app before OS uninstall."
+      },
+      "empty": {
+        "counts": "0,0,0,0,0,0",
+        "phase": "empty",
+        "result": "passed",
+        "scope": "Disposable Simulator; CloudKit disabled",
+        "verified": "Actual OS uninstall removed old app-local records; fresh container opens empty."
+      },
+      "restore": {
+        "counts": "2,113,2,2,1,1",
+        "phase": "restore",
+        "result": "passed",
+        "scope": "Disposable Simulator; CloudKit disabled",
+        "verified": "Actual saved-file import restores UUID duplicates and exact relationships after OS reinstall; repeat import is idempotent."
+      },
+      "reopened": {
+        "counts": "2,113,2,2,1,1",
+        "phase": "reopened",
+        "result": "passed",
+        "scope": "Disposable Simulator; CloudKit disabled",
+        "verified": "Restored history and links survive another process launch and installed update."
+      }
+    },
+    "os_uninstall_receipts": [
+      {
+        "operation": "Actual simctl uninstall after installed 2.5.1 failed retry",
+        "main_container_removed": true,
+        "shared_container_removed": true,
+        "old_shared_store_exists": false
+      },
+      {
+        "main_container_removed": true,
+        "shared_container_removed": true,
+        "external_backup_retained": true,
+        "operation": "OS uninstall with tagged synthetic metric Keychain profile and exported v6 backup"
+      }
+    ],
+    "provenance": "/tmp/pace-three-recovery-fixes-20261031/lifecycle-simulator.json",
+    "scope": "Disposable synthetic history. Historical11model source9657448; release source2c33bb1 with scoped Debug inert/seed hooks. No TestFlight/App Store download, signed-device test or affected-user database.",
+    "final_binary_backup_replay": {
+      "result": "passed",
+      "uninstall": {
+        "operation": "Final built binary OS backup recovery replay",
+        "simulator": "CDDCC807-F17A-41CB-8E2C-57FBF0328440",
+        "main_container_removed": true,
+        "shared_container_removed": true
+      },
+      "empty": {
+        "counts": "0,0,0,0,0,0",
+        "phase": "empty",
+        "result": "passed",
+        "scope": "Disposable Simulator; CloudKit disabled",
+        "verified": "Actual OS uninstall removed old app-local records; fresh container opens empty."
+      },
+      "restore_and_repeat": {
+        "counts": "2,113,2,2,1,1",
+        "phase": "restore",
+        "result": "passed",
+        "scope": "Disposable Simulator; CloudKit disabled",
+        "verified": "Actual saved-file import restores UUID duplicates and exact relationships after OS reinstall; repeat import is idempotent."
+      },
+      "reopened_after_installed_update": {
+        "counts": "2,113,2,2,1,1",
+        "phase": "reopened",
+        "result": "passed",
+        "scope": "Disposable Simulator; CloudKit disabled",
+        "verified": "Restored history and links survive another process launch and installed update."
+      },
+      "provenance": {
+        "app": "/tmp/pace-recovery-hardening-derived-20261031/Build/Products/Debug-iphonesimulator/Pace & Plates.app",
+        "executable": "Pace & Plates",
+        "sha256": "09070a9ac8574d51def01133fbb1300f131d53c5860ba55f733391b99f21f5d6",
+        "restore": {
+          "counts": "2,113,2,2,1,1",
+          "phase": "restore",
+          "result": "passed",
+          "scope": "Disposable Simulator; CloudKit disabled",
+          "verified": "Actual saved-file import restores UUID duplicates and exact relationships after OS reinstall; repeat import is idempotent."
+        }
+      },
+      "scope": "Final Debug binary; actual OS uninstall removed both containers; externally held saved backup; real public import; no native Files picker selection or live CloudKit."
+    }
+  },
+  "profile_os_reinstall": {
+    "result": "passed",
+    "evidence": "/tmp/pace-three-recovery-fixes-20261031/profile-os-reinstall.json",
+    "verified": [
+      "Tagged metric profile180cm/80kg retained across actual OS uninstall with preferences erased",
+      "Tagged imperial profile70in/165lb retained across actual OS uninstall with preferences erased",
+      "Untagged profile raw180/80 retained in synthetic Keychain; public measurements zero and review required after actual OS reinstall",
+      "Real Tutorial displayed unknown-unit warning; Skip Setup preserved quarantine through another launch"
+    ],
+    "scope": "Real Security API, UUID-scoped synthetic Keychain services on isolated Simulator; no personal Keychain access."
+  },
+  "focused_checks": {
+    "backup_physical_legacy_revision_dedup": {
+      "checks": 122,
+      "result": "passed",
+      "breakdown": {
+        "saved_backup_with_legacy_upgrade": 93,
+        "ordinary_legacy_compatibility": 18,
+        "revision_conflict": 11
+      },
+      "evidence": "/tmp/pace-duplicate-backup-fix-20261031/final-receipt.json"
+    },
+    "cloud_workflow_receipts": {
+      "checks": 43,
+      "result": "passed"
+    },
+    "profile_storage": {
+      "checks": 30,
+      "result": "passed"
+    },
+    "migration_layout": {
+      "checks": 111,
+      "result": "passed_in_integrated_simulator",
+      "includes_new_main_group_layout_alias_checks": 28
+    }
+  },
+  "integrated_validation": {
+    "first_simulator_run": {
+      "passed": 6,
+      "failed": 1,
+      "bundle": "/tmp/pace-three-recovery-fixes-20261031/integrated-ui.xcresult",
+      "storage_checks": 272,
+      "coach_checks": 575,
+      "failure": "Test checked a lazy Form review row after scrolling it away."
+    },
+    "first_review_retry": {
+      "passed": 0,
+      "failed": 1,
+      "bundle": "/tmp/pace-three-recovery-fixes-20261031/review-ui-verified.xcresult",
+      "failure": "Platform confirmation popover did not expose an implicit Cancel button. Product UI now uses an explicit alert cancellation control."
+    },
+    "final_simulator_run": {
+      "result": "passed_across_two_targeted_runs",
+      "targeted_tests_passed": 7,
+      "unresolved_test_failures": 0,
+      "primary_bundle": "/tmp/pace-three-recovery-fixes-20261031/final-integrated-ui.xcresult",
+      "primary_bundle_passed": 6,
+      "primary_bundle_failed_before_test_query_correction": 1,
+      "corrected_review_test": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "bundle": "/tmp/pace-three-recovery-fixes-20261031/review-ui-final.xcresult",
+        "log": "/Users/joshua/Library/Developer/XcodeBuildMCP/workspaces/Pace-Plates-f9e8089431af/logs/test_sim_2026-10-31T20-24-37-533Z_pid17228_7f01decb.log"
+      },
+      "storage_checks": 274,
+      "coach_checks": 627,
+      "note": "Six targeted tests passed in the primary run. The remaining review/schedule/cancel test passed separately after correcting its ambiguous nested-alert-button query. No claim of a single all-green seven-test run."
+    },
+    "final_unsigned_ios_release": {
+      "result": "passed",
+      "exit_code": 0,
+      "log": "/tmp/pace-three-recovery-fixes-20261031/release-final-build.log"
+    },
+    "diff_check": "passed",
+    "final_backend_simulator": {
+      "passed": 6,
+      "failed": 0,
+      "storage_checks": 274,
+      "coach_checks": 627,
+      "bundle": "/tmp/pace-three-recovery-fixes-20261031/final-integrated-ui.xcresult",
+      "note": "Six targeted tests passed. The same bundle contains the separate review UI query failure, subsequently corrected and passed in review-ui-final.xcresult."
+    },
+    "second_review_retry": {
+      "bundle": "/tmp/pace-three-recovery-fixes-20261031/final-integrated-ui.xcresult",
+      "failure": "SDK exposes nested duplicate alert button nodes; ambiguous test query corrected to firstMatch, preserving disclosure/schedule/cancel assertions."
+    }
+  },
+  "limits": [
+    "Affected-user Production iCloud inventory/download and real multi-device CloudKit convergence remain unverified. Cloud race policy is exercised through the actual orchestrator with an injected server, not live network writes.",
+    "Saved external v6 backup and actual public import were verified through OS uninstall/reinstall. Optional native Files picker probe reached Settings Import confirmation but could not inspect the remote picker via UI automation; no new native file-selection success is claimed.",
+    "Deleted local-only data cannot be recreated without a surviving cloud, export or other intact copy. Automatic OS backups cannot be assumed to contain the previously excluded2.5 local store/Coach photos.",
+    "Legacy files with ambiguous duplicate parent references cannot restore exact missing relationships without additional information; reject without mutation rather than guessing.",
+    "Existing untagged profiles can only inherit explicit preferences that actually survived. If old software already recreated/changed preferences or reinterpreted measurements after reinstall, original units cannot be proven retrospectively from the untagged payload."
+  ],
+  "assessment": "All three fixes implemented locally and verified with synthetic persisted data, installed-update/reinstall flows, focused checks, and targeted Simulator UI checks. Affected-user Production history recovery is not established.",
+  "peer_review": {
+    "result": "no_blocker_found",
+    "verified": "Backup regression source hashes match current files; independent review of physical graph backup, one-use restore receipts and profile unit recovery; narrowing of sync and historical-profile claims applied."
+  },
+  "source_sha256": {
+    "WorkingOut/App/CloudHistoryStatusView.swift": "a063729ecb88430a905f6e325a36272e9f615afc503a1d1a6068d56f6fde7ca2",
+    "WorkingOut/App/ContentView.swift": "5a9fd8dff5338b804cc69c1b8ef88ae86a809e5b3cb5f51009f2d6042c02db6b",
+    "WorkingOut/Data/CloudHistoryCloudRecordEncoder.swift": "2aa2933422d3142182549b88f32b8e71467a79e0ba09e7fdeb7bc5d394a3e331",
+    "WorkingOut/Data/CloudHistoryEventObserver.swift": "75d9ea77ca9da26a9571829d8b91a8068cf685b494646af26cc659e4caeb5eae",
+    "WorkingOut/Data/CloudHistoryMissingRecordRepair.swift": "bc2bcb6b37e4404d7a7a20eefe3d88167f95d29dcdef19112ed400b12a05c70f",
+    "WorkingOut/Data/CloudHistoryRestorePlan.swift": "df5076865ee648c114c34b73979795d4aa77198e7dad1010df6bac4c3be8fcec",
+    "WorkingOut/Data/CloudHistoryRestoreWorkflow.swift": "f39aae6247f8ba391d2af2cd62950e62e5f208c61da33bb4d8ab0d4dd24fe76b",
+    "WorkingOut/Data/CloudHistorySyncState.swift": "71f9d0fc1ad4981855add765f0154549dc768fb2660b7a2ec564a85bc2d43445",
+    "WorkingOut/Data/CloudSyncRestoration.swift": "7a434f01ae29f1caa08cbbfe2403ef2b8d49e805ca605505f38a4973e54fd027",
+    "WorkingOut/Data/CoachLocalOwnership+Migration.swift": "c52720480590bdd84b981d72bb08e1fc4c11b35f987cd1f1fb65b4d41392be1a",
+    "WorkingOut/Data/CoachLocalOwnership+Verification.swift": "af8ed880e4c0aa26cf92c8862bb4a689aac89590560f986e35a8b9ffb6cd231e",
+    "WorkingOut/Data/PersistenceController.swift": "a09c35bfc83dc0bc2f2fd7acf833c3d489d110b46d1c14f4225627db96291945",
+    "WorkingOut/Features/Coach/CoachHomeView.swift": "bd4260c72b4362cd1604d3175cb5dc20239faa7aa46fb371d6afbec95e7a8404",
+    "WorkingOut/Features/Coach/CoachProgramViews.swift": "2815e5d9b160edba8d88e0c94cd295dfe243e23a18f79784f9e9a6a0bc96ef13",
+    "WorkingOut/Features/Coach/CoachRegressionChecks.swift": "6a1ed52fda04e9df297061ec98c2a87c5480c5078e380d3c98579f854cb4546e",
+    "WorkingOut/Features/Coach/Data/BackupPhysicalGraph.swift": "ea9652acf2d50a87e36bd80783a38b5eedd56c4661c051d8cfa39d79680afd1f",
+    "WorkingOut/Features/Coach/Data/CloudHistoryRestoreWorkflowRegressionChecks.swift": "40b6b7ae4d3b37353676987729a1c522a617bc9c38fa51a84d6bd8d12b23c3bf",
+    "WorkingOut/Features/Coach/Data/CloudHistorySyncRegressionChecks.swift": "13905341e6abcbfc4f3c1a9c7006e7c9b3096ba6a60bca7336a84a9d4bfc3518",
+    "WorkingOut/Features/Coach/Data/CloudSyncRestorationMigrationRegressionChecks.swift": "c1f0397e21691ba3baa79679c1e31d46a2d8faa7425e032da3d9bd0dfd5ac262",
+    "WorkingOut/Features/Coach/Data/CloudSyncRestorationRegressionChecks.swift": "abd0dc2d9119a4a983f7ec6d8e8b70a44a1758a12572706f26ae8c6f5feb96c5",
+    "WorkingOut/Features/Coach/Data/CoachBackupGraph.swift": "e711f43ecd5441047be8e810b2bd825dfcf1c9270e7daab1dd06203f4e098406",
+    "WorkingOut/Features/Coach/Data/CoachDuplicateBackupRegressionChecks.swift": "e93e72ad0d098c4b7ca741c179821741bf43c700a76dbd5013a82095c1625762",
+    "WorkingOut/Features/Coach/Data/CoachHistoryArchive.swift": "b521f29bf1f4265a1388a7b0b65e794ed6f37b1075b7af5806b973097d360d14",
+    "WorkingOut/Features/Coach/Data/CoachLegacyDuplicateBackupRegressionChecks.swift": "3bb298a2db798cbb3c72c1569b8483926acf9df04308d9c6f8afba6c340a44d5",
+    "WorkingOut/Features/Coach/Data/CoachPersistenceRegressionChecks+RevisionRestore.swift": "7f3f8b00800b15f81d08d1a8e35841938e6515f75bfc315b126e7180ec53ff9c",
+    "WorkingOut/Features/Coach/Data/CoachPersistenceRegressionChecks.swift": "3e33421fc11e0ba5b0edd527bf397086da79d4f36c213e1cb59283bc56724084",
+    "WorkingOut/Features/Coach/Data/CoachRepository+Schedule.swift": "19fa5fa3db00eb4f7d7f04416d79c29b021388872d9d06312631498b8d08fda1",
+    "WorkingOut/Features/Coach/Data/CoachRepository.swift": "90b113e388d4429eb2bed455eb2593318986309fd86e2ad8fa131533438dc6d0",
+    "WorkingOut/Features/Coach/Data/CoachSavedBackupRegressionChecks.swift": "a8ead866818171c7cf12e3d8300f0c42bab40701df77b40ca9cdf7efb86dc273",
+    "WorkingOut/Features/Coach/Data/RecoveryLifecycleAcceptanceView.swift": "5db6cdee2e3c614212047f0d7fd65ec7b7d3f3665eedb35462f244a340ccade1",
+    "WorkingOut/Features/Coach/Execution/CoachExecutionRegressionChecks.swift": "c08a9bdc2aea37c60e4dbbdc72859e741fa8abb178d4864627af304770520301",
+    "WorkingOut/Features/Coach/Execution/CoachPlanRecoveryRegressionChecks.swift": "c44b6443ab45cef14c95c6c949d63667a38bcc66827e9af5b931173e26ef0980",
+    "WorkingOut/Features/Coach/Execution/CoachPlannedActivityView.swift": "49bc961289c1e5af26f48fcdd94f8e515f232fefe9e1e5af7088be4b4ca5fae7",
+    "WorkingOut/Features/Coach/Execution/CoachProgressionEvaluator.swift": "d083589427a3a1a920a32617c53b855a0f99f89d87cf38147c17bd2033430d95",
+    "WorkingOut/Features/Coach/Execution/CoachProgressionRecoveryRegressionChecks.swift": "5cf16d6e4723c87853b555dbaa38ba8c638876149eb84778aa833215e1941e32",
+    "WorkingOut/Features/Coach/Execution/CoachScheduleRegressionChecks.swift": "549a87e780fcab91362b900d1673a55617d0f4fae38acfa6408d36dff7fb87c0",
+    "WorkingOut/Features/Onboarding/TutorialView.swift": "e6baa6108459595b0251d6f56fe6342a75e8659cf235945aad17adbce5039c8f",
+    "WorkingOut/Features/Onboarding/UserProfileReinstallAcceptanceView.swift": "27dfe6f0f42d14a69978b4099c5d9de3d31e4a83748f270d1773e89e704b9916",
+    "WorkingOut/Features/Runs/RunLogView.swift": "ab19b7f6050977ab447cc5c5e51f8c288ee4614162a245becfa5b7df85635579",
+    "WorkingOut/Features/Settings/SettingsView.swift": "031b7cb687e3602fcd7a882db8fce4db407add2ef21561468289ba860632428c",
+    "WorkingOut/Services/DataBackupService.swift": "c22c2d33871c36a37c639224075fb40a8bfc9f9e6cf4ed514df82338339ded11",
+    "WorkingOut/Services/DebugDataGenerator.swift": "a39885d257877a3bbab61b94bde04775f02915f3b9664d9cec6e40fcba9b378d",
+    "WorkingOut/Services/OptimizationRegressionChecks.swift": "82a31cf36a1bd78bd022fd074657d5c424d68aba8963c8878d885c033333c75a",
+    "WorkingOut/Services/RecordIdentityLookup.swift": "76d2399523fd5d8ee3ab3dcc20b78f94f1030d9dbde272cd3f285b2ae7bd9ed5",
+    "WorkingOut/Services/RestoredRecordConsumerRegressionChecks.swift": "bc20daef64a80075294594cd6105f253673f1b83e351e3cda3ee084c7771eaa4",
+    "WorkingOut/Services/RunHistoryStore.swift": "05924032bdabb2912079a330e5b8f85be4f77893f5e7b79950e7d4e6e00232fc",
+    "WorkingOut/Services/RunImportStore.swift": "1535055f94af09399a87687eb1920332f2c804ffcb2d79cdb91361dd726443f3",
+    "WorkingOut/Services/TrainingPlanService.swift": "c28a0b422591018d1d4aac8ff1e246cb6a55a5dbe7b022e2a0cd57ff270d53ae",
+    "WorkingOut/Services/UserProfileStore.swift": "38cb04a619435bc5e338f705ffc96059e664c8c9ec7142c0fb34664f8b6accad",
+    "WorkingOut/Services/UserProfileUnitRegressionChecks.swift": "a8c4b54ee0379b9e14c9d16d9403d6bab0e0da168fbf0232399e1fcf38f02ced",
+    "WorkingOut/Services/WorkoutCalendarPlan.swift": "7c538375e8366368abfbe25524f98226caad99ff548ee806bd0849c6b31faade",
+    "WorkingOut/Services/WorkoutCalendarPlanRegressionChecks.swift": "5c16d57827dc61e5b3fea69da4811d7b1f0bb1d938fe1ed0171de8c3e225c4b0",
+    "WorkingOut/Services/WorkoutCalendarService.swift": "52dc5d87aa9aac0e124f5758a34c78e8f9e91ae67808e526aac2d77f8cae1797",
+    "WorkingOut/Services/WorkoutWeightUnitConversion.swift": "1a8e61b4cec317bffd5e414e79d43d7b93348ec47b1d6b8eabf4dcde0b2b0ca0",
+    "WorkingOutUITests/CloudHistoryStatusUITests.swift": "26c4d79e5504ea7359d6b1fc43c61da250e94f2281e31773d333e6297eb6e3f3",
+    "WorkingOutUITests/CoachEditingUITests.swift": "3c9b2c05ac593c45847947049d516464e469c794ed3f60f1c74d1648c71e986f",
+    "WorkingOutUITests/RestoredHistoryUITests.swift": "bc839787d1251b848bf4a7e3881477235b1c975bc2dd58bdaaf2eb008280a287",
+    "WorkingOutUITests/WorkingOutUITests.swift": "2b2c76d9e3909c236cafda397a9a753c6d13a63cf8a98738e3d7b464e90efb60",
+    "scripts/test_workout_calendar.py": "07f4fc0b28bc6338bac3d547642d12b69723434d23737849194c453f963a7886",
+    "scripts/workout_calendar_test_main.swift": "d2f17b434546eebe396624b6d93df58d580d1e9b57fdde65eb580c8acc8fb120"
+  },
+  "artifact_sha256": {
+    "/tmp/pace-three-recovery-fixes-20261031/final-os-uninstall.json": "28f60a04a106fd3547db9145fd267cf376ec0d4d7702d96abc980db8d96d1f31",
+    "/tmp/pace-three-recovery-fixes-20261031/final-empty.json": "37423633e0492ad2af5b5c8e8186232f56ebd71b2e0d50e53b49fc02e59d7e41",
+    "/tmp/pace-three-recovery-fixes-20261031/final-restore.json": "f72bc8b3cc6db3a208a4bf4e7221ab28e912436f8893d38ed93aac2fa3277154",
+    "/tmp/pace-three-recovery-fixes-20261031/final-reopened.json": "51d2233df095dbd28e406bed7840ca741cda7c8339a9a316a1484acef271f138",
+    "/tmp/pace-three-recovery-fixes-20261031/final-os-backup-provenance.json": "af9d7d6df8a7e0ae1df6b73838bd19cc4511dc591d67db533c1f94c094fbbcde",
+    "/tmp/pace-three-recovery-fixes-20261031/profile-os-reinstall.json": "9f12ac789d846a477f28fd0f430901f29ae7f34b12ceff90fc380099988651b8",
+    "/tmp/pace-three-recovery-fixes-20261031/recovery-before-reinstall.pacebackup": "e5d9cfce616e1c084415875235a16cadd13b0fcf8e79a2a78081082ca661a9e0",
+    "/tmp/pace-three-recovery-fixes-20261031/release-final-build.log": "b12920baa6cba11c38fec5cce543d42bc7063d68b37117e5677ead37e2adb708"
+  }
+}

@@ -34,11 +34,12 @@ struct CoachActivationReview: Equatable, Sendable {
 }
 
 enum CoachRepositoryError: LocalizedError {
-    case localOwnershipRequired, missingRecord, invalidValue(String), ambiguousExercise(String), futureOnly, revisionConflict, dateCollision, activationReviewChanged
+    case localOwnershipRequired, missingRecord, ambiguousRecord, invalidValue(String), ambiguousExercise(String), futureOnly, revisionConflict, dateCollision, activationReviewChanged
     var errorDescription: String? {
         switch self {
         case .localOwnershipRequired: return "Review and enable local storage before saving Coach records."
         case .missingRecord: return "This record is no longer available."
+        case .ambiguousRecord: return "This identifier matches multiple saved records. Your history is preserved, but this action needs a duplicate-record review."
         case .invalidValue(let field): return "Enter a valid \(field). Blank fields can stay blank."
         case .ambiguousExercise(let name): return "Select the matching exercise for \(name) before importing."
         case .futureOnly: return "Only selected, unstarted future sessions can be changed."
@@ -53,6 +54,20 @@ enum CoachRepositoryError: LocalizedError {
 final class CoachRepository {
     let context: ModelContext
     init(context: ModelContext) { self.context = context }
+
+    static func uniqueOccurrence(id: UUID, context: ModelContext) throws -> PlannedSession {
+        var descriptor = FetchDescriptor<PlannedSession>(predicate: #Predicate { $0.id == id })
+        descriptor.fetchLimit = 2
+        let matches = try context.fetch(descriptor)
+        guard matches.count <= 1 else { throw CoachRepositoryError.ambiguousRecord }
+        guard let row = matches.first else { throw CoachRepositoryError.missingRecord }
+        return row
+    }
+
+    static func requireUniqueOccurrences(_ ids: Set<UUID>, among rows: [PlannedSession]) throws {
+        let groups = Dictionary(grouping: rows.filter { ids.contains($0.id) }, by: \.id)
+        guard groups.values.allSatisfy({ $0.count == 1 }) else { throw CoachRepositoryError.ambiguousRecord }
+    }
 
     func requireLocal() throws {
         guard CoachPersistence.isLocal(context) else { throw CoachRepositoryError.localOwnershipRequired }
@@ -231,7 +246,7 @@ final class CoachRepository {
             if activate {
                 for current in existingPlans where current.id != plan.id && current.status == "active" { current.status = "paused"; current.pausedAt = Date(); current.updatedAt = Date() }
                 plan.status = "active"; plan.activatedAt = Date()
-                try Self.createTargetPeriods(document: document, plan: plan, context: isolated)
+                try Self.activateTargetPeriods(document: document, plan: plan, context: isolated)
             }
             return plan.id
         }
@@ -241,14 +256,20 @@ final class CoachRepository {
         try transaction { isolated in
             let plans = try isolated.fetch(FetchDescriptor<TrainingPlan>())
             guard let plan = plans.first(where: { $0.id == planID }) else { throw CoachRepositoryError.missingRecord }
+            let switchesPlan = plans.contains { $0.id != planID && $0.status == "active" }
             for current in plans where current.id != planID && current.status == "active" { current.status = "paused"; current.pausedAt = Date(); current.updatedAt = Date() }
             let isFirstActivation = plan.activatedAt == nil
+            let today = Self.civilDate(Date(), timeZone: Self.timeZone(plan))
+            let remainingTargets = try isolated.fetch(FetchDescriptor<CoachNutritionTargetPeriod>())
+                .filter { $0.endCivilDate == nil || $0.endCivilDate! > today }
+            let retainsTargets = !remainingTargets.isEmpty && remainingTargets.allSatisfy { $0.planID == nil || $0.planID == planID }
             if let startDate { try Self.shiftUnstarted(plan: plan, to: startDate) }
             plan.status = "active"; plan.activatedAt = plan.activatedAt ?? Date(); plan.pausedAt = nil; plan.updatedAt = Date()
-            if isFirstActivation, let revisionID = plan.currentRevisionID,
+            if isFirstActivation || switchesPlan || startDate != nil || !retainsTargets,
+               let revisionID = plan.currentRevisionID,
                let revision = try isolated.fetch(FetchDescriptor<CoachPlanRevision>()).first(where: { $0.id == revisionID }) {
                 let document = try JSONDecoder().decode(CoachPlanDocument.self, from: revision.documentData)
-                try Self.createTargetPeriods(document: document, plan: plan, context: isolated)
+                try Self.activateTargetPeriods(document: document, plan: plan, context: isolated)
             }
         }
     }
@@ -263,7 +284,8 @@ final class CoachRepository {
 
     func moveSession(id: UUID, to date: Date, intraDayOrder: Int? = nil) throws {
         try transaction { isolated in
-            guard let session = try isolated.fetch(FetchDescriptor<PlannedSession>()).first(where: { $0.id == id }), let plan = session.plan else { throw CoachRepositoryError.missingRecord }
+            let session = try Self.uniqueOccurrence(id: id, context: isolated)
+            guard let plan = session.plan else { throw CoachRepositoryError.missingRecord }
             guard session.executionID == nil && session.status == "pending" else { throw CoachRepositoryError.futureOnly }
             session.currentCivilDate = Self.civilDate(date, timeZone: Self.timeZone(plan)); session.scheduledDate = try Self.date(session.currentCivilDate!, timeZone: Self.timeZone(plan))
             if let intraDayOrder { session.intraDayOrder = intraDayOrder }; session.scheduleRevision += 1; plan.updatedAt = Date()
@@ -280,7 +302,7 @@ final class CoachRepository {
             throw CoachRepositoryError.invalidValue("explanation for a manually recorded outcome")
         }
         try transaction { isolated in
-            guard let row = try isolated.fetch(FetchDescriptor<PlannedSession>()).first(where: { $0.id == id }) else { throw CoachRepositoryError.missingRecord }
+            let row = try Self.uniqueOccurrence(id: id, context: isolated)
             guard row.completionProvenance != "removed_by_reviewed_revision" else { throw CoachRepositoryError.invalidValue("session still included in this program") }
             guard row.executionID == nil else { throw CoachRepositoryError.invalidValue("session outcome in the workout logger") }
             if status == .pending && row.status != "skipped" { throw CoachRepositoryError.invalidValue("skipped session to return to pending") }
@@ -288,6 +310,12 @@ final class CoachRepository {
             row.status = status.rawValue; row.completionProvenance = "manual_attestation"
             row.completedAt = [.completed, .partial].contains(status) ? Date() : nil
             if let notes { row.notes = notes }
+            if let plan = row.plan {
+                if status == .pending {
+                    try Self.validateScheduleDays(try isolated.fetch(FetchDescriptor<PlannedSession>()).filter { $0.plan?.id == plan.id })
+                }
+                plan.updatedAt = Date()
+            }
             for mapping in try isolated.fetch(FetchDescriptor<CoachCalendarMapping>()) where mapping.plannedSessionID == id { mapping.pendingProjection = true }
         }
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["coach.session.\(id.uuidString)"])
@@ -332,7 +360,8 @@ final class CoachRepository {
 
     func beginExecution(occurrenceID: UUID) throws -> CoachSessionExecution {
         let executionID: UUID = try transaction { isolated in
-            guard let row = try isolated.fetch(FetchDescriptor<PlannedSession>()).first(where: { $0.id == occurrenceID }), row.activityType != "rest" else { throw CoachRepositoryError.missingRecord }
+            let row = try Self.uniqueOccurrence(id: occurrenceID, context: isolated)
+            guard row.activityType != "rest" else { throw CoachRepositoryError.missingRecord }
             guard row.completionProvenance != "removed_by_reviewed_revision" else { throw CoachRepositoryError.invalidValue("session still included in this program") }
             if let id = row.executionID, let current = try isolated.fetch(FetchDescriptor<CoachSessionExecution>()).first(where: { $0.id == id }) { return current.id }
             guard row.status == "pending" else { throw CoachRepositoryError.invalidValue("unstarted session") }
@@ -414,6 +443,24 @@ final class CoachRepository {
             row.scheduledDate = date; row.currentCivilDate = civilDate(date, timeZone: zone); row.scheduleRevision += 1
         }
         plan.startDate = startDate; plan.startCivilDate = civilDate(startDate, timeZone: zone)
+    }
+
+    private static func activateTargetPeriods(document: CoachPlanDocument, plan: TrainingPlan, context: ModelContext) throws {
+        let zone = timeZone(plan)
+        var calendar = Calendar(identifier: .gregorian); calendar.timeZone = zone
+        let today = civilDate(Date(), timeZone: zone)
+        let hasTargets = document.nutritionTargets != nil || document.phases.contains { $0.nutritionTargets != nil }
+        if hasTargets, let end = calendar.date(byAdding: .day, value: document.weeks.count * 7, to: plan.startDate),
+           civilDate(end, timeZone: zone) > max(plan.startCivilDate ?? civilDate(plan.startDate, timeZone: zone), today) {
+            try createTargetPeriods(document: document, plan: plan, context: context)
+        } else {
+            // An expired or target-free plan can still resume its activity history.
+            // Displaced plan guidance must not masquerade as this plan's targets.
+            for period in try context.fetch(FetchDescriptor<CoachNutritionTargetPeriod>()) where period.planID != nil && (period.endCivilDate == nil || period.endCivilDate! > today) {
+                if period.startCivilDate < today { period.endCivilDate = today }
+                else { context.delete(period) }
+            }
+        }
     }
 
     static func createTargetPeriods(document: CoachPlanDocument, plan: TrainingPlan, context: ModelContext, effectiveFrom: Date? = nil) throws {

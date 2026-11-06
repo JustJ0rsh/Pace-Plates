@@ -487,24 +487,18 @@ struct WorkoutLogView: View {
         
         // Optimize: Only process sessions within the window (plus a buffer if needed, but exact is fine for daily sum)
         // workoutSessions is sorted by date descending
-        let relevantSessions = workoutSessions.prefix { $0.date >= startOfWindow }
+        let relevantSessions = workoutSessions.prefix { $0.date >= startOfWindow }.filter { WorkoutStatistics.hasActivity($0) }
         
         let perSession: [(date: Date, volume: Double)] = relevantSessions.map { session in
-            let total = (session.exerciseLogs ?? []).reduce(0.0) { acc, log in
-                if selectedCategory != "All" {
-                    let group = (log.exerciseDefinition?.muscleGroup ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                    if group != selectedCategory { return acc }
-                }
-                let weightInPreferred = UnitConverter.weight(log.weight, from: log.weightUnit, to: preferredWeightUnit)
-                return acc + (Double(log.effectiveReps) * weightInPreferred)
-            }
+            let total = WorkoutStatistics.volume(for: session, unit: preferredWeightUnit,
+                category: selectedCategory == "All" ? nil : selectedCategory)
             return (date: session.date, volume: total)
         }
         
         let groupedVolume: [Date: Double] = Dictionary(grouping: perSession, by: { item in
             calendar.startOfDay(for: item.date)
         }).mapValues { dayItems in
-            dayItems.reduce(0.0) { $0 + $1.volume }
+            WorkoutStatistics.sumFiniteVolumes(dayItems.map(\.volume))
         }
         
         let dailyVolume: [(date: Date, value: Double)] = groupedVolume.keys.sorted().map { day in
@@ -515,7 +509,7 @@ struct WorkoutLogView: View {
     }
 
     private func workoutVolumeSummary(dailyVolume: [(date: Date, value: Double)]) -> String {
-        let total = dailyVolume.reduce(0) { $0 + $1.value }
+        let total = WorkoutStatistics.sumFiniteVolumes(dailyVolume.map(\.value))
         guard total > 0 else { return "Log a workout to see your volume trend." }
         let formatted = total.formatted(.number.precision(.fractionLength(0)).grouping(.automatic))
         return "You lifted \(formatted) \(preferredWeightUnit) in \(rangeDescription)."
@@ -615,10 +609,7 @@ private struct WorkoutQuickViewSheet: View {
     }
 
     private var totalVolume: Double {
-        logs.reduce(0) { partialResult, log in
-            let weight = UnitConverter.weight(log.weight, from: log.weightUnit, to: preferredWeightUnit)
-            return partialResult + (Double(log.effectiveReps) * weight)
-        }
+        WorkoutStatistics.volume(for: session, unit: preferredWeightUnit)
     }
 
     private var exerciseSummaries: [ExerciseSummary] {
@@ -627,10 +618,8 @@ private struct WorkoutQuickViewSheet: View {
         }
 
         return grouped.map { name, groupedLogs in
-            let volume = groupedLogs.reduce(0.0) { partialResult, log in
-                let weight = UnitConverter.weight(log.weight, from: log.weightUnit, to: preferredWeightUnit)
-                return partialResult + (Double(log.effectiveReps) * weight)
-            }
+            let volume = WorkoutStatistics.volume(for: session, unit: preferredWeightUnit,
+                logIDs: Set(groupedLogs.map(\.id)))
 
             return ExerciseSummary(
                 id: name,

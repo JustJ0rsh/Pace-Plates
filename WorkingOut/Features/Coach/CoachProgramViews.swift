@@ -11,7 +11,7 @@ struct CoachProgramLibraryView: View {
                 let matching = plans.filter { $0.status == status.rawValue }
                 if !matching.isEmpty {
                     Section(status == .draft ? "Ready to start" : status.rawValue.capitalized) {
-                        ForEach(matching) { plan in
+                        ForEach(matching, id: \.persistentModelID) { plan in
                             NavigationLink { CoachProgramDetailView(plan: plan) } label: {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(plan.title).font(.headline)
@@ -75,7 +75,7 @@ struct CoachProgramDetailView: View {
                     .accessibilityIdentifier("coach.program.week")
                 Text("Tap a workout or run to start it, log your results, or mark it as done.")
                     .font(.caption).foregroundStyle(.secondary)
-                ForEach(rows.filter { $0.weekIndex == selectedWeek && $0.completionProvenance != "removed_by_reviewed_revision" }) { CoachSessionRow(session: $0, showDate: true) }
+                ForEach(rows.filter { $0.weekIndex == selectedWeek && $0.completionProvenance != "removed_by_reviewed_revision" }, id: \.persistentModelID) { CoachSessionRow(session: $0, showDate: true) }
             }
             if !gates.filter({ $0.planID == plan.id }).isEmpty {
                 Section {
@@ -91,7 +91,7 @@ struct CoachProgramDetailView: View {
                                     if let notes = targets.notes { Text(notes) }
                                 }
                                 DisclosureGroup("Review this phase’s sessions") {
-                                    ForEach(rows.filter { $0.revisionID == gate.revisionID && $0.phaseID == gate.phaseID && $0.completionProvenance != "removed_by_reviewed_revision" }) { CoachSessionRow(session: $0, showDate: true) }
+                                    ForEach(rows.filter { $0.revisionID == gate.revisionID && $0.phaseID == gate.phaseID && $0.completionProvenance != "removed_by_reviewed_revision" }, id: \.persistentModelID) { CoachSessionRow(session: $0, showDate: true) }
                                 }
                                 Text(gate.statusRaw == "ready" ? "Readiness confirmed" : "Awaiting your review").foregroundStyle(.secondary)
                                 if gate.revisionID != plan.currentRevisionID { Text("Retained earlier prescription").font(.caption) }
@@ -217,7 +217,7 @@ struct CoachScheduleEditorView: View {
     var body: some View {
         List {
             Section("Choose unstarted sessions") {
-                ForEach(rows.filter { $0.status == "pending" && $0.executionID == nil }) { row in
+                ForEach(rows.filter { $0.status == "pending" && $0.executionID == nil }, id: \.persistentModelID) { row in
                     Toggle(isOn: Binding(get: { selected.contains(row.id) }, set: { if $0 { selected.insert(row.id) } else { selected.remove(row.id) }; preview = [] })) {
                         Text(row.title + " · " + (row.currentCivilDate ?? ""))
                     }
@@ -256,7 +256,7 @@ struct CoachScheduleEditorView: View {
                 DatePicker("New week begins", selection: $repeatDate, displayedComponents: .date)
                     .environment(\.timeZone, CoachRepository.timeZone(plan))
                 if !repeatWeekID.isEmpty {
-                    ForEach(rows.filter { $0.sourceWeekID == repeatWeekID && $0.completionProvenance != "removed_by_reviewed_revision" }) { row in
+                    ForEach(rows.filter { $0.sourceWeekID == repeatWeekID && $0.completionProvenance != "removed_by_reviewed_revision" }, id: \.persistentModelID) { row in
                         let date = repeatPreviewDate(row)
                         LabeledContent(row.title, value: CoachDate.civil(date, timeZone: CoachRepository.timeZone(plan)))
                     }
@@ -285,6 +285,7 @@ struct CoachRevisionReviewView: View {
     @State private var selected: Set<UUID> = []
     @State private var expanded: [CoachScheduledOccurrence] = []
     @State private var selectedAdditions: Set<String> = []
+    @State private var selectedRestorations: Set<UUID> = []
     @State private var exerciseMappings: [CoachExerciseMapping] = []
     @State private var exerciseSelections: [String: UUID] = [:]
     @State private var allowCustomExercises = false
@@ -329,7 +330,7 @@ struct CoachRevisionReviewView: View {
                 }
             }
             Section("Selected future occurrences") {
-                ForEach(rows.filter { $0.status == "pending" && $0.executionID == nil && !$0.localScheduleOverride && ($0.currentCivilDate ?? "") >= CoachDate.civil(Date(), timeZone: CoachRepository.timeZone(plan)) }) { row in
+                ForEach(rows.filter { $0.status == "pending" && $0.executionID == nil && !$0.localScheduleOverride && ($0.currentCivilDate ?? "") >= CoachDate.civil(Date(), timeZone: CoachRepository.timeZone(plan)) }, id: \.persistentModelID) { row in
                     Toggle(changeLabel(row), isOn: Binding(get: { selected.contains(row.id) }, set: { if $0 { selected.insert(row.id) } else { selected.remove(row.id) } }))
                 }
             }
@@ -338,6 +339,19 @@ struct CoachRevisionReviewView: View {
                     source.civilDate >= CoachDate.civil(Date(), timeZone: CoachRepository.timeZone(plan)) && !rows.contains { $0.sourceWeekID == source.weekId && $0.sourceSlotID == source.slotId }
                 }, id: \.sourceKey) { source in
                     Toggle(source.template.title + " · " + source.civilDate, isOn: Binding(get: { selectedAdditions.contains(source.sourceKey) }, set: { if $0 { selectedAdditions.insert(source.sourceKey) } else { selectedAdditions.remove(source.sourceKey) } }))
+                }
+            }
+            if !restorableRows.isEmpty {
+                Section("Restore removed future occurrences") {
+                    Text("Only the sessions you select will return to your schedule.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    ForEach(restorableRows, id: \.persistentModelID) { row in
+                        if let source = expanded.first(where: { $0.weekId == row.sourceWeekID && $0.slotId == row.sourceSlotID }) {
+                            Toggle("Restore " + source.template.title + " · " + source.civilDate,
+                                   isOn: Binding(get: { selectedRestorations.contains(row.id) }, set: { if $0 { selectedRestorations.insert(row.id) } else { selectedRestorations.remove(row.id) } }))
+                                .accessibilityIdentifier("coach.revision.restore.\(row.id.uuidString)")
+                        }
+                    }
                 }
             }
             Section("Review exercise mappings") {
@@ -357,7 +371,7 @@ struct CoachRevisionReviewView: View {
                 saveTask = Task { @MainActor in
                     defer { saving = false }
                     do {
-                        try await CoachRepository(context: context).applyRevision(incoming, planID: plan.id, selected: selected, addSourceKeys: selectedAdditions, expectedRevisionID: expectedRevision, expectedUpdatedAt: expectedUpdatedAt ?? plan.updatedAt, exerciseSelections: exerciseSelections, allowCustomExercises: allowCustomExercises, applyNutritionTargetsFrom: applyNutritionTargets ? targetsEffectiveDate : nil)
+                        try await CoachRepository(context: context).applyRevision(incoming, planID: plan.id, selected: selected, addSourceKeys: selectedAdditions, expectedRevisionID: expectedRevision, expectedUpdatedAt: expectedUpdatedAt ?? plan.updatedAt, exerciseSelections: exerciseSelections, allowCustomExercises: allowCustomExercises, applyNutritionTargetsFrom: applyNutritionTargets ? targetsEffectiveDate : nil, restoreRemovedIDs: selectedRestorations)
                         saved = true
                     } catch { self.error = error.localizedDescription }
                 }
@@ -376,6 +390,13 @@ struct CoachRevisionReviewView: View {
                 let start = plan.startDate, zone = CoachRepository.timeZone(plan)
                 expanded = try await Task.detached { try CoachSchedule.expand(incoming, startDate: start, timeZone: zone) }.value
             } catch { self.error = error.localizedDescription }
+        }
+    }
+    private var restorableRows: [PlannedSession] {
+        let today = CoachDate.civil(Date(), timeZone: CoachRepository.timeZone(plan))
+        return rows.filter { row in
+            guard let source = expanded.first(where: { $0.weekId == row.sourceWeekID && $0.slotId == row.sourceSlotID }) else { return false }
+            return CoachRepository.canRestoreRemovedOccurrence(row, source: source, on: today)
         }
     }
     private func changeLabel(_ row: PlannedSession) -> String {

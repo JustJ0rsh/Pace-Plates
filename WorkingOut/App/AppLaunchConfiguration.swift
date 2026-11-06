@@ -28,6 +28,8 @@ struct AppLaunchConfiguration {
     let shouldShowOnboardingForTesting: Bool
     /// A unique synthetic Keychain namespace; unavailable in Release or on devices.
     let naturalProfileTestScope: String?
+    let liveCloudRunID: UUID?
+    let liveCloudPhase: String
 
     init(processInfo: ProcessInfo) {
         // Automation hooks can wipe UserDefaults, swap in an in-memory store, and
@@ -37,6 +39,8 @@ struct AppLaunchConfiguration {
         #if DEBUG
         let environment = processInfo.environment
         let arguments = processInfo.arguments
+        liveCloudRunID = environment["PP_LIVE_CLOUD_RUN"].flatMap(UUID.init(uuidString:))
+        liveCloudPhase = environment["PP_LIVE_CLOUD_PHASE"] ?? "seed"
 
         let hasUITestFlag = environment["UITEST_MODE"] == "1"
             || arguments.contains("-ui_testing")
@@ -65,15 +69,17 @@ struct AppLaunchConfiguration {
         startTab = nil
         shouldShowOnboardingForTesting = false
         naturalProfileTestScope = nil
+        liveCloudRunID = nil
+        liveCloudPhase = ""
         #endif
     }
 
     var shouldSkipAutomationSideEffects: Bool {
-        isUITest
+        isUITest || liveCloudRunID != nil
     }
 
     var usesIsolatedStore: Bool {
-        isUITest
+        isUITest || liveCloudRunID != nil
     }
 
     var usesNaturalProfileForTesting: Bool {
