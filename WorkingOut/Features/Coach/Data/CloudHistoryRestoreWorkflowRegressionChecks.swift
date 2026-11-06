@@ -96,6 +96,39 @@ enum CloudHistoryRestoreWorkflowRegressionChecks {
             try require(rejected && server.saved.isEmpty, reason)
         }
 
+        // More than two CloudKit batches, deliberately presented newest first.
+        let orderedServer = Server(), orderedStore = MemoryStore()
+        for index in 0..<205 {
+            let row = record(String(format: "dated-%03d", index))
+            row["CD_date"] = Date(timeIntervalSince1970: Double(index)) as NSDate
+            orderedServer.local[row.recordID] = row
+        }
+        let startDated = record("start-dated")
+        startDated["CD_date"] = nil
+        startDated["CD_startDate"] = Date(timeIntervalSince1970: 45.5) as NSDate
+        orderedServer.local[startDated.recordID] = startDated
+        let createdDated = record("created-dated")
+        createdDated["CD_date"] = nil
+        createdDated["CD_createdAt"] = Date(timeIntervalSince1970: 46.5) as NSDate
+        orderedServer.local[createdDated.recordID] = createdDated
+        let undated = record("undated")
+        undated["CD_date"] = nil
+        orderedServer.local[undated.recordID] = undated
+        _ = try await CloudHistoryRestoreWorkflow.run(
+            localIDs: orderedServer.local.keys.sorted { $0.recordName > $1.recordName }, identity: orderedServer.identity,
+            store: orderedStore, dependencies: orderedServer.dependencies(store: orderedStore))
+        orderedStore.approve()
+        _ = try await CloudHistoryRestoreWorkflow.run(
+            localIDs: orderedServer.local.keys.sorted { $0.recordName > $1.recordName }, identity: orderedServer.identity,
+            store: orderedStore, dependencies: orderedServer.dependencies(store: orderedStore))
+        var expectedOrder = (0..<205).map { String(format: "dated-%03d", $0) }
+        expectedOrder.insert("start-dated", at: 46)
+        expectedOrder.insert("created-dated", at: 48)
+        expectedOrder.append("undated")
+        try require(orderedServer.saved.map(\.recordName) == expectedOrder,
+                    "reviewed uploads start with the oldest dated history and leave undated records last")
+        try require(orderedStore.consumed.count == 1, "ordered batches still require one-use approval")
+
         let race = Server(), raceStore = MemoryStore()
         let deleted = record("deleted-on-other-device"), kept = record("kept", weight: 90)
         race.local = [deleted.recordID: deleted, kept.recordID: kept]

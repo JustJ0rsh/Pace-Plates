@@ -59,7 +59,7 @@ enum CloudHistoryRestoreWorkflow {
                 try store.consume(reviewID: plan.review.id)
                 consumed = true
                 outcome.attempted = true
-                let missingPayloads = payloads.filter { !existing.contains($0.recordID) }
+                let missingPayloads = oldestFirst(payloads.filter { !existing.contains($0.recordID) })
                 for offset in stride(from: 0, to: missingPayloads.count, by: 100) {
                     let batch = Array(missingPayloads[offset..<min(offset + 100, missingPayloads.count)])
                     try dependencies.check()
@@ -106,6 +106,29 @@ enum CloudHistoryRestoreWorkflow {
         } else { try store.clearReview() }
         try store.finishInspection()
         return outcome
+    }
+
+    // These are the app-controlled uploads; Core Data controls automatic downloads.
+    // Undated records follow dated records, with stable ordering for equal dates.
+    private static func oldestFirst(_ records: [CKRecord]) -> [CKRecord] {
+        func date(_ record: CKRecord) -> Date? {
+            for key in ["CD_date", "CD_startDate", "CD_startedAt", "CD_createdAt"] {
+                if let value = record[key] as? Date { return value }
+            }
+            return nil
+        }
+        return records.sorted { lhs, rhs in
+            switch (date(lhs), date(rhs)) {
+            case let (left?, right?) where left != right: return left < right
+            case (_?, nil): return true
+            case (nil, _?): return false
+            default:
+                let left = lhs.recordID, right = rhs.recordID
+                if left.zoneID.ownerName != right.zoneID.ownerName { return left.zoneID.ownerName < right.zoneID.ownerName }
+                if left.zoneID.zoneName != right.zoneID.zoneName { return left.zoneID.zoneName < right.zoneID.zoneName }
+                return left.recordName < right.recordName
+            }
+        }
     }
 
     private static func validate(_ records: [CKRecord], expected: [CKRecord.ID]) throws {

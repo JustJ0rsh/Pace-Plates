@@ -23,9 +23,13 @@ sources += [ROOT / path for path in [
     'WorkingOut/Services/UnitConverter.swift', 'WorkingOut/Services/WorkoutStatistics.swift',
     'WorkingOut/Services/WorkoutStatisticsRegressionChecks.swift',
     'scripts/workout_statistics_checks.swift']]
+# This isolated statistics fixture never activates a continued-history store.
+stub = out / 'LocalHistoryContinuationFixture.swift'
+stub.write_text('import Foundation\nenum LocalHistoryContinuation { static var activeDirectory: URL? { nil } }\n')
+compile_sources = [*sources, stub]
 env = dict(os.environ, DEVELOPER_DIR='/Applications/Xcode.app/Contents/Developer')
 command = ['xcrun', 'swiftc', '-swift-version', '5', '-D', 'DEBUG', '-module-cache-path', str(out / 'module-cache'),
-           *map(str, sources), '-o', str(out / 'workout-statistics-checks')]
+           *map(str, compile_sources), '-o', str(out / 'workout-statistics-checks')]
 with (out / 'compile.log').open('w') as log:
     subprocess.run(command, env=env, stdout=log, stderr=subprocess.STDOUT, check=True)
 result = subprocess.run([str(out / 'workout-statistics-checks')], env=env, capture_output=True, text=True)

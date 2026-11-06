@@ -27,7 +27,12 @@ final class NonblockingHistoryUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         field.tap(); field.typeText("88")
         app.navigationBars["Log Weight"].buttons["Save"].tap()
-        XCTAssertTrue(app.navigationBars["Log Weight"].waitForNonExistence(timeout: 5))
+        let healthWarning = app.alerts["Saved in Pace & Plates"]
+        if healthWarning.waitForExistence(timeout: 10) {
+            XCTAssertTrue(healthWarning.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "not in Apple Health")).firstMatch.exists)
+            healthWarning.buttons["Done"].tap()
+        }
+        XCTAssertTrue(app.navigationBars["Log Weight"].waitForNonExistence(timeout: 10), app.debugDescription)
         app.tabBars.buttons["Weight"].tap()
         XCTAssertTrue(app.staticTexts["1 result"].waitForExistence(timeout: 10))
 
