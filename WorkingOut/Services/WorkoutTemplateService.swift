@@ -1015,27 +1015,6 @@ final class WorkoutTemplateService {
         return nil
     }
 
-    private func recommendedWeight(for name: String, reps: Int, unit: String, baselines: [String: ExerciseBaseline]) -> Double? {
-        let key = name.lowercased().trimmingCharacters(in: .whitespaces)
-        if let b = baselines[key] { return computeFromBaseline(b, reps: reps, unit: unit) }
-        if let b = baselines.first(where: { key.contains($0.key) || $0.key.contains(key) })?.value {
-            return computeFromBaseline(b, reps: reps, unit: unit)
-        }
-        return nil
-    }
-
-    private func computeFromBaseline(_ baseline: ExerciseBaseline, reps: Int, unit: String) -> Double {
-        // If we have a recent set at this rep target, use that value (no auto‑increase to avoid overshooting).
-        if let last = baseline.lastByReps[reps] {
-            return roundToPlates(last, unit: unit)
-        }
-        // Otherwise derive a conservative load from e1RM and round down to plates.
-        let loads = ExerciseRecommendationService.suggestedLoads(e1rm: baseline.e1rm, unit: unit, repTargets: [reps])
-        let aggressive = loads[reps] ?? (baseline.e1rm * 0.7)
-        let conservative = aggressive * 0.9 // nudge down to avoid overestimation
-        return roundDownToPlates(conservative, unit: unit)
-    }
-
     private func roundToPlates(_ value: Double, unit: String) -> Double {
         if unit.lowercased() == "kg" {
             return (value / 2.5).rounded() * 2.5

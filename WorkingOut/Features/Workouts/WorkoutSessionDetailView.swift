@@ -345,14 +345,6 @@ struct WorkoutSessionDetailView: View {
         }
     }
     
-    private func deleteExerciseLogs(offsets: IndexSet) {
-        guard var logs = session.exerciseLogs else { return }
-        for index in offsets { modelContext.delete(logs[index]) }
-        logs.remove(atOffsets: offsets)
-        session.exerciseLogs = logs
-        _ = PersistenceSave.commit(modelContext, action: "save changes")
-    }
-    
     private func deleteExerciseLog(_ log: ExerciseLog) {
         let name = log.exerciseName
         modelContext.delete(log)
@@ -394,20 +386,6 @@ struct WorkoutSessionDetailView: View {
         var group = (session.exerciseLogs ?? []).filter { ($0.exerciseName ?? "") == exerciseName }
         group.sort { $0.setNumber < $1.setNumber }
         for (idx, item) in group.enumerated() { item.setNumber = idx + 1 }
-    }
-    
-    private func saveNotes(_ newValue: String) {
-        if session.notes != newValue {
-            session.notes = newValue
-            _ = PersistenceSave.commit(modelContext, action: "save changes")
-        }
-    }
-    
-    private func deleteExerciseByName(_ name: String) {
-        let toDelete = (session.exerciseLogs ?? []).filter { ($0.exerciseName ?? "") == name }
-        for item in toDelete { modelContext.delete(item) }
-        if var arr = session.exerciseLogs { arr.removeAll { ($0.exerciseName ?? "") == name }; session.exerciseLogs = arr }
-        _ = PersistenceSave.commit(modelContext, action: "save changes")
     }
     
     /// Removes any empty sets (0 reps for strength, 0 duration for cardio)
@@ -476,8 +454,6 @@ struct WorkoutSessionDetailView: View {
         let sortedNames = groups.keys.sorted { name1, name2 in
             let order1 = groups[name1]?.map { $0.exerciseOrder }.min() ?? Int.min
             let order2 = groups[name2]?.map { $0.exerciseOrder }.min() ?? Int.min
-            // Same sort logic as view: higher order first (reversed in view logic? wait, let's check view logic)
-            // View logic: return order1 > order2. So higher order is first.
             if order1 != order2 {
                 return order1 > order2
             } else {

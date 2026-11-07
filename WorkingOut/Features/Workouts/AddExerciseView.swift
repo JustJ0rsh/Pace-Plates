@@ -380,17 +380,10 @@ struct AddExerciseView: View {
         log.workoutSession = workoutSession // Establish the inverse relationship
         if var arr = workoutSession.exerciseLogs { arr.append(log); workoutSession.exerciseLogs = arr } else { workoutSession.exerciseLogs = [log] }
 
-        // No need to insert log separately if relationship is set up correctly
-        // modelContext.insert(log)
-        
-        // Saving the context might be better done when the user confirms the session is complete,
-        // but saving here ensures the log is persisted immediately after adding.
         _ = PersistenceSave.commit(modelContext, action: "save changes")
         
         if let onAdd { onAdd(log) }
         
-        // Consider not dismissing automatically, allowing user to add multiple exercises?
-        // For now, keeping the original dismiss logic.
         dismiss()
     }
 
@@ -401,17 +394,10 @@ struct AddExerciseView: View {
             isUserDefined: true
         )
         modelContext.insert(newExercise)
-        // It's generally better to save changes together if possible
-        // _ = PersistenceSave.commit(modelContext, action: "save changes") // Save potentially here or defer
-
-        // Add the newly created exercise to the workout
-        // Wait for save to complete or handle potential errors?
-        // For simplicity, adding immediately.
         addExercise(newExercise) 
         
         // Reset sheet state
         newExerciseName = ""
         selectedMuscleGroup = "Chest"
-        // showingAddCustomExercise = false // Dismissal is handled by addExercise()
     }
 } 

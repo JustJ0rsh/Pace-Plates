@@ -399,40 +399,6 @@ struct AIConversationSheet: View {
         .opacity(isAssistant && isGeneratingBubble ? streamingOpacity : 1.0)
     }
     
-    // Subtle top/bottom fade overlays inside the chat tile to achieve a "liquid glass" edge blend
-    @ViewBuilder
-    private var tileFadeOverlays: some View {
-        VStack(spacing: 0) {
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(0.22),
-                    Color.white.opacity(0.10),
-                    .clear
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 18)
-            .blendMode(.plusLighter)
-            .allowsHitTesting(false)
-            Spacer(minLength: 0)
-            LinearGradient(
-                colors: [
-                    .clear,
-                    Color.white.opacity(0.08),
-                    Color.white.opacity(0.18)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 22)
-            .blendMode(.plusLighter)
-            .allowsHitTesting(false)
-        }
-        .compositingGroup()
-        .opacity(0.9)
-    }
-    
     private var citationsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Sources")
@@ -1090,10 +1056,6 @@ struct ConversationScrollOffsetPreferenceKey: PreferenceKey {
 private func parseCitations(from content: String) -> [AIConversationSheet.Citation] {
     // Web search disabled: do not resolve citations to sources
     return []
-}
-
-private func extractCitationsFromContent(_ content: String) -> [AIConversationSheet.Citation] {
-    return parseCitations(from: content)
 }
 
 // MARK: - Citation Tile

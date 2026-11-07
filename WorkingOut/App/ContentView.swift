@@ -4,7 +4,7 @@ import SwiftData
 import CoreData
 
 struct ContentView: View {
-    let persistenceController = PersistenceController.shared // Need access to this
+    let persistenceController = PersistenceController.shared
     private let launchConfiguration = AppLaunchConfiguration.current
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("didShowTutorial") private var didShowTutorial: Bool = false
@@ -23,10 +23,6 @@ struct ContentView: View {
     @State private var presentedWorkoutRecoveryID: UUID?
     @State private var showWorkoutRecoveries = false
     @State private var restoreError: String?
-    
-    // Error handling moved to App level
-    // @State private var showImportError: Bool = false
-    // @State private var importErrorMessage: String = ""
 
     var body: some View {
         Group {
@@ -113,7 +109,6 @@ struct ContentView: View {
     // storage is unavailable. A visual overlay does not fence background work.
     private var mainContent: some View {
         TabView(selection: $selectedTab) {
-            // Left side - Use Group to prevent unnecessary NavigationStack recreation
             // Nav bar buttons set their color explicitly via AppTheme.toolbarButtonColor
             // in each view's toolbar — inherited tints are dropped by NavigationStack
             // toolbars on tab revisits, which made button colors inconsistent.
@@ -152,7 +147,6 @@ struct ContentView: View {
                 .tabItem { Label("Coach", systemImage: "sparkles.rectangle.stack.fill") }
                 .tag(2)
 
-            // Right side
             NavigationStack { RunLogView() }
                 .tabItem { Label("Runs", systemImage: "figure.run") }
                 .tag(3)
@@ -272,9 +266,6 @@ struct ContentView: View {
             TrainingPlanService.shared.syncRunningPlans(
                 context: persistenceController.container.mainContext
             )
-            // Ensure legacy arm exercises are reclassified to Biceps/Triceps
-            // (idempotent)
-
             #if DEBUG
             DebugDataGenerator.hideLegacySampleMarkers(context: persistenceController.container.mainContext)
             if let fixtureName = launchConfiguration.fixtureName {
@@ -300,10 +291,6 @@ struct ContentView: View {
             let userProfile = UserProfileStore.shared
             userProfile.retryLoadingIfUnavailable()
             userProfile.restoreUnitPreferences()
-            // Check if user needs to see onboarding
-            // Show onboarding if: 
-            // 1. They haven't completed profile setup AND
-            // 2. They haven't filled out basic profile info (age, height)
             if launchConfiguration.shouldShowOnboardingForTesting {
                 didCompleteProfileSetup = false
                 didShowTutorial = false
@@ -320,7 +307,6 @@ struct ContentView: View {
                 } else if !didCompleteProfileSetup && !hasProfileData {
                     showTutorial = true
                 } else {
-                    // If onboarding was completed or profile data exists, mark as complete
                     didCompleteProfileSetup = true
                     didShowTutorial = true
 
@@ -332,7 +318,6 @@ struct ContentView: View {
                 ReminderService.scheduleIfEnabled()
             }
 
-            // No banner; we'll prompt for HK when appropriate
             // Align unit preferences to the global measurement selection
             if userProfile.isAvailable {
                 // Read the restored preference immediately; AppStorage may still
@@ -403,12 +388,9 @@ extension ContentView {
         didCompleteProfileSetup = true
         showTutorial = false
     }
-
-    // Removed debug-only sample run feature and top banner
 }
 
 #Preview {
     ContentView(importedWorkout: .constant(nil), importedCoachProgram: .constant(nil))
-        // Provide a container specifically for the preview
         .modelContainer(PersistenceController.preview.container)
 } 

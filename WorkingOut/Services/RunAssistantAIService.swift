@@ -632,35 +632,6 @@ Rules:
     }
     #endif
 
-    private func runPlanPreview(from payload: AIRunPlanPayload) -> String {
-        var lines: [String] = []
-        lines.append(payload.planName)
-        lines.append("\(payload.durationWeeks) weeks • \(payload.primaryGoal.capitalized) • \(payload.daysPerWeek) days/week")
-        lines.append("")
-
-        let sortedSessions = payload.sessions.sorted {
-            if $0.weekIndex == $1.weekIndex {
-                return $0.weekday < $1.weekday
-            }
-            return $0.weekIndex < $1.weekIndex
-        }
-
-        for session in sortedSessions.prefix(14) {
-            let week = session.weekIndex + 1
-            let weekday = weekdayAbbreviation(session.weekday)
-            var line = "Week \(week) • \(weekday) • \(session.sessionType.capitalized)"
-            if let miles = session.targetDistanceMiles, miles > 0 {
-                line += " • \(String(format: "%.1f", miles)) mi"
-            }
-            if let minutes = session.targetDurationMinutes, minutes > 0 {
-                line += " • \(Int(minutes.rounded())) min"
-            }
-            lines.append(line)
-        }
-
-        return lines.joined(separator: "\n")
-    }
-
     private func normalizePayload(_ payload: AIRunPlanPayload, profile: RunAssistantProfile) -> AIRunPlanPayload {
         var normalized = payload
         normalized.durationWeeks = max(1, min(payload.durationWeeks, 24))

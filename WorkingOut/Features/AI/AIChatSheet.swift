@@ -39,8 +39,6 @@ struct AIChatSheet: View {
     @State private var showClearConfirmation: Bool = false
     @State private var displayedText: String = ""
     @State private var fullBufferedText: String = ""
-    // Web search removed to reduce tokens and latency
-    // Web search removed
     @State private var scrollOffset: CGFloat = 0
     @State private var contentHeight: CGFloat = 0
     @State private var scrollViewHeight: CGFloat = 0
@@ -170,8 +168,6 @@ struct AIChatSheet: View {
                         if isStreaming && messages.last?.id != lastStreamedAssistantID {
                             typingRow().id("progress")
                         }
-                        
-                        // Web search results disabled
                     }
                     .padding()
                     .background(
@@ -274,7 +270,6 @@ struct AIChatSheet: View {
                         }
                     }
                 }
-                // Web search disabled – no source auto-scroll
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -296,10 +291,7 @@ struct AIChatSheet: View {
                         .disabled(messages.isEmpty)
                 }
             }
-            
-            // Center placeholder removed (web search disabled)
-            
-            // Right side - Save button
+
             ToolbarItem(placement: .topBarTrailing) {
                 Button { save() } label: { Image(systemName: "tray.and.arrow.down") }
                     .accessibilityLabel("Save")
@@ -338,12 +330,6 @@ struct AIChatSheet: View {
     private func prewarm() async {
         await WorkoutPlanGenerator.shared.prewarmIfPossible()
     }
-
-    // With @AppStorage, state syncs to UserDefaults automatically across views.
-    // No manual syncing needed to avoid feedback loops.
-    private func updateWebSearchState() { }
-
-    // Web search disabled; no toggle or detection needed
 
     private func send(template: QuickAskPrompt) {
         send(
@@ -421,16 +407,12 @@ struct AIChatSheet: View {
                     streamingOpacity = 1.0
                 }
 
-                // Web search disabled: no searching indicator
-
                 for try await chunk in WorkoutPlanGenerator.shared.generateAskStream(
                     request: req,
                     history: generationHistory
                 ) {
                     guard !Task.isCancelled else { return }
                     guard activeStreamToken == requestToken else { return }
-
-                    // Web search/tool indicators removed
 
                     if isFirstChunk {
                         waitingForFirstChunk = false
@@ -611,8 +593,6 @@ struct AIChatSheet: View {
             WorkoutPlanGenerator.shared.resetModelContext()
         }
     }
-
-    // Search results UI removed
 
     private var canSendDraftQuestion: Bool {
         !isStreaming && !draftQuestion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -888,6 +868,3 @@ struct ScrollOffsetPreferenceKey: PreferenceKey {
         value = nextValue()
     }
 }
-
-// MARK: - Clickable Source Card
-// Search source cards and shimmering dots removed

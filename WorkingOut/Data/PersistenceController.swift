@@ -34,7 +34,6 @@ class PersistenceController {
         return PersistenceController()
     }()
     
-    // Add a static instance for previews using an in-memory store
     static var preview: PersistenceController = {
         let controller = PersistenceController(inMemory: true, cloudKitMode: .none)
         let context = controller.container.mainContext
@@ -57,7 +56,6 @@ class PersistenceController {
         // Add sample workout session
         let workout = WorkoutSession(date: Date().addingTimeInterval(-172800)) // Day before yesterday
         context.insert(workout)
-        // You could add sample ExerciseLogs to the workout here too
         
         do {
             try context.save()
@@ -743,9 +741,6 @@ class PersistenceController {
         reclassifyArmExercises()
     }
     
-    // Remove duplicated exercise definitions (same name + muscle group),
-    // preferring built-ins over user-defined. Reassign any logs pointing
-    // at duplicates to the kept definition before deletion.
     // Remove duplicated exercise definitions (same name, ignoring case/whitespace),
     // preferring built-ins over user-defined. Reassign any logs pointing
     // at duplicates to the kept definition before deletion.
@@ -778,11 +773,6 @@ class PersistenceController {
         var changed = false
         
         for (_, items) in groups where items.count > 1 {
-            // Determine keeper:
-            // 1. Built-in (isUserDefined == false)
-            // 2. If multiple built-ins (unlikely) or all user-defined, pick the one with the most logs (if we could check easily) or just the oldest created (by ID sorting or similar stability).
-            // For now: Prefer built-in, then first one found.
-            
             let builtIn = items.first(where: { !$0.isUserDefined })
             let keeper = builtIn ?? items.first!
             

@@ -1,10 +1,5 @@
-import Foundation
-import SwiftUI
 #if canImport(UIKit)
 import UIKit
-#endif
-#if canImport(CoreHaptics)
-import CoreHaptics
 #endif
 
 enum Haptics {
@@ -21,10 +16,8 @@ enum Haptics {
         case .light: generator = UIImpactFeedbackGenerator(style: .light)
         case .medium: generator = UIImpactFeedbackGenerator(style: .medium)
         case .heavy: generator = UIImpactFeedbackGenerator(style: .heavy)
-        case .soft:
-            if #available(iOS 13.0, *) { generator = UIImpactFeedbackGenerator(style: .soft) } else { generator = UIImpactFeedbackGenerator(style: .light) }
-        case .rigid:
-            if #available(iOS 13.0, *) { generator = UIImpactFeedbackGenerator(style: .rigid) } else { generator = UIImpactFeedbackGenerator(style: .heavy) }
+        case .soft: generator = UIImpactFeedbackGenerator(style: .soft)
+        case .rigid: generator = UIImpactFeedbackGenerator(style: .rigid)
         }
         generator.prepare()
         generator.impactOccurred()
@@ -43,26 +36,4 @@ enum Haptics {
         #endif
     }
 
-    // MARK: - Advanced Core Haptics pattern (optional)
-    // This method safely attempts to play a custom Core Haptics pattern on supported hardware.
-    static func playTransientTap() {
-        #if canImport(CoreHaptics)
-        if !CHHapticEngine.capabilitiesForHardware().supportsHaptics { return }
-        var engine: CHHapticEngine?
-        do {
-            engine = try CHHapticEngine()
-            try engine?.start()
-
-            let intensity = CHHapticEventParameter(parameterID: .hapticIntensity, value: 1.0)
-            let sharpness = CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.8)
-            let event = CHHapticEvent(eventType: .hapticTransient, parameters: [intensity, sharpness], relativeTime: 0)
-            let pattern = try CHHapticPattern(events: [event], parameters: [])
-            let player = try engine?.makePlayer(with: pattern)
-            try player?.start(atTime: 0)
-        } catch {
-            // Silently ignore on unsupported devices or simulator
-            // print("Haptics: Core Haptics unavailable: \(error)")
-        }
-        #endif
-    }
 }

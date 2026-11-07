@@ -125,27 +125,6 @@ final class WorkoutPlanGenerator {
         )
     }
 
-    private static func normalizeCoachAnswer(_ raw: String) -> String {
-        var text = raw
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        // Keep numbered and bulleted content readable when the model compresses lines.
-        text = text.replacingOccurrences(
-            of: #"(?<=\S)\s+(\d+\.)\s+"#,
-            with: "\n\n$1 ",
-            options: .regularExpression
-        )
-        text = text.replacingOccurrences(
-            of: #"(?<=\S)\s+([•\-])\s+"#,
-            with: "\n$1 ",
-            options: .regularExpression
-        )
-        text = text.replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
-        text = text.replacingOccurrences(of: #"[ \t]{2,}"#, with: " ", options: .regularExpression)
-        return text
-    }
     #endif
 
     // Availability check: iOS 26+ devices with Apple Intelligence can run on‑device.
@@ -186,8 +165,6 @@ final class WorkoutPlanGenerator {
         #endif
     }
 
-    // Tool-enabled session and prewarming removed (web search disabled)
-    
     /// Reset/offload the model sessions to clear context and free memory
     @MainActor
     func resetModelContext(preserveConversationSummary: Bool = false) {
@@ -240,7 +217,6 @@ final class WorkoutPlanGenerator {
         return nil
     }
 
-    // Streams the generated plan. Uses on‑device model when available, else template fallback.
     // Pass a per-request `token` to retrieve this request's structured plan JSON race-free via
     // `takeStructuredPlanJSON(for:)` once the stream finishes. Overlapping generations with distinct
     // tokens never clobber each other's result.
@@ -315,7 +291,6 @@ final class WorkoutPlanGenerator {
                         // Clamp prompt size defensively to avoid context window overflow
                         let safePrompt = Self.clampPrompt(prompt)
 
-                        // Web search/tool calls disabled
                         #if canImport(FoundationModels)
                         if #available(iOS 26, *) {
                             do {
@@ -382,21 +357,19 @@ final class WorkoutPlanGenerator {
                 }
             }
             #else
-            return generatePlanStreamFromTemplate(request: request)
+            return unavailableStream()
             #endif
         }
         #endif
-        return generatePlanStreamFromTemplate(request: request)
+        return unavailableStream()
     }
 
-    private func unavailableStream(message: String) -> AsyncThrowingStream<String, Error> {
+    private func unavailableStream(message: String = "AI is currently unavailable. Please try again later.") -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             continuation.yield(message)
             continuation.finish()
         }
     }
-
-    // Web search disabled - always false
 
     private static func conversationContext(
         for currentQuestion: String,
@@ -538,7 +511,7 @@ final class WorkoutPlanGenerator {
                         continuation.finish()
                         return
                         #else
-                        let fallback = self.generatePlanStreamFromTemplate(request: request)
+                        let fallback = self.unavailableStream()
                         for try await chunk in fallback { continuation.yield(chunk) }
                         continuation.finish()
                         #endif
@@ -564,17 +537,7 @@ final class WorkoutPlanGenerator {
             }
         }
         #endif
-        return generatePlanStreamFromTemplate(request: request)
-    }
-
-    // MARK: Fallback Template (Non‑AI devices)
-    private func generatePlanStreamFromTemplate(request: WorkoutPlanRequest) -> AsyncThrowingStream<String, Error> {
-        // No manual templates: return a minimal message only.
-        let message = "AI is currently unavailable. Please try again later."
-        return AsyncThrowingStream { continuation in
-            continuation.yield(message)
-            continuation.finish()
-        }
+        return unavailableStream()
     }
 
     // MARK: - Stats Aggregation
@@ -1286,15 +1249,4 @@ final class WorkoutPlanGenerator {
         return nil
     }
     #endif
-    
-    private static func calculatePace(distance: Double, duration: TimeInterval, unit: String) -> String {
-        guard distance > 0 else { return "N/A" }
-        // duration is in seconds, so convert to minutes per unit
-        let paceMinutesPerUnit = (duration / 60.0) / distance
-        let mins = Int(paceMinutesPerUnit)
-        let secs = Int((paceMinutesPerUnit - Double(mins)) * 60)
-        return String(format: "%d:%02d per %@", mins, secs, unit)
-    }
-
-    // Tool calling removed
 }
