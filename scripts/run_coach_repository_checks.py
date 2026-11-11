@@ -8,7 +8,11 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from persistence_controller_shim import write_shim
 
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
@@ -21,6 +25,12 @@ shutil.copy2(schema, out / schema.name)
 models = sorted(p for p in (ROOT / 'WorkingOut/Models').glob('*.swift') if '@Model' in p.read_text())
 sources = models + [ROOT / p for p in [
     'WorkingOut/Data/CoachPersistence.swift',
+    'WorkingOut/Data/LocalHistoryContinuation.swift',
+    'WorkingOut/Data/CoachLocalOwnership.swift',
+    'WorkingOut/Data/CoachLocalOwnership+Assets.swift',
+    'WorkingOut/Data/CoachLocalOwnership+Migration.swift',
+    'WorkingOut/Data/CoachSQLiteReadSnapshot.swift',
+    'WorkingOut/Services/RunRecoveryStore.swift',
     'WorkingOut/Models/ScheduledRunTarget.swift',
     'WorkingOut/Features/Coach/Execution/CoachExecutionState.swift',
     'WorkingOut/Features/Coach/Domain/CoachProgramDocument.swift',
@@ -41,6 +51,7 @@ for source in sources:
         compiled.append(str(copy))
     else:
         compiled.append(str(source))
+compiled.append(str(write_shim(ROOT, out)))
 env = dict(os.environ, DEVELOPER_DIR='/Applications/Xcode.app/Contents/Developer')
 command = ['xcrun', 'swiftc', '-swift-version', '5', '-D', 'DEBUG', '-module-cache-path',
            str(out / 'module-cache'), *compiled, '-o', str(out / 'repository-checks')]

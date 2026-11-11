@@ -34,6 +34,13 @@ typealias WorkoutTemplate = RouteMigrationProbe
 typealias TemplateExercise = RouteMigrationProbe
 typealias HealthWorkoutInboxItem = RouteMigrationProbe
 typealias CardioWorkoutInboxItem = RouteMigrationProbe
+// verifySplitColumns reads the app schema lists; these probes stand in for them.
+enum PersistenceController {
+    static var legacyModelTypes: [any PersistentModel.Type] { [RouteMigrationProbe.self, ChildMigrationProbe.self] }
+}
+enum CoachPersistence {
+    static var modelTypes: [any PersistentModel.Type] { [] }
+}
 
 @main struct MigrationTests {
     @MainActor static func main() throws {
