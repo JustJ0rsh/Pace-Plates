@@ -21,10 +21,9 @@ import SQLite3
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let url = directory.appendingPathComponent("fixture.store")
-        let schema = Schema([ExerciseDefinition.self, WorkoutSession.self, ExerciseLog.self,
-            RunningSession.self, RunningPlan.self, RunningPlanSession.self, TrainingPlan.self,
-            PlannedSession.self, WeightEntry.self, AIConversation.self, WorkoutTemplate.self,
-            TemplateExercise.self, HealthWorkoutInboxItem.self, CardioWorkoutInboxItem.self] + CoachPersistence.modelTypes)
+        // Same composition as the app's coachSchema; the runner generates
+        // PersistenceController.legacyModelTypes from the production source.
+        let schema = Schema(PersistenceController.legacyModelTypes + CoachPersistence.modelTypes)
         let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(CoachPersistence.configurationName,
             schema: schema, url: url, cloudKitDatabase: .none)])
         var checks = 0

@@ -34,6 +34,15 @@ typealias WorkoutTemplate = RouteMigrationProbe
 typealias TemplateExercise = RouteMigrationProbe
 typealias HealthWorkoutInboxItem = RouteMigrationProbe
 typealias CardioWorkoutInboxItem = RouteMigrationProbe
+// Link-only: CoachLocalOwnership.verifySplitColumns names the app's schema
+// lists, and this probe never calls it. The stubs stop the run if that changes,
+// because probe types cannot describe the real legacy and Coach table ownership.
+enum PersistenceController {
+    static var legacyModelTypes: [any PersistentModel.Type] { fatalError("Split-store verification is not covered by this file-copy probe") }
+}
+enum CoachPersistence {
+    static var modelTypes: [any PersistentModel.Type] { fatalError("Split-store verification is not covered by this file-copy probe") }
+}
 
 @main struct MigrationTests {
     @MainActor static func main() throws {
