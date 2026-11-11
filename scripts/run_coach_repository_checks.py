@@ -12,7 +12,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from persistence_controller_shim import write_shim
+from persistence_controller_shim import SOURCE as SHIM_SOURCE, write_shim
 
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
@@ -51,6 +51,9 @@ for source in sources:
         compiled.append(str(copy))
     else:
         compiled.append(str(source))
+# The app's PersistenceController cannot be compiled on the host; the shim
+# carries only its legacyModelTypes list, read from the production source.
+shim_source = ROOT / SHIM_SOURCE
 compiled.append(str(write_shim(ROOT, out)))
 env = dict(os.environ, DEVELOPER_DIR='/Applications/Xcode.app/Contents/Developer')
 command = ['xcrun', 'swiftc', '-swift-version', '5', '-D', 'DEBUG', '-module-cache-path',
@@ -64,8 +67,10 @@ match = re.search(r'Coach repository: (\d+) checks passed', result.stdout)
 assert match, result.stdout
 report = {'result': 'passed', 'checks': int(match.group(1)),
           'scope': 'Actual production repository/domain/model code; disposable macOS SwiftData stores',
-          'adapters': ['inert notification delivery', 'inert storage-generation gate'],
-          'source_sha256': {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sources + [schema]},
+          'adapters': ['inert notification delivery', 'inert storage-generation gate',
+                       'generated PersistenceController exposing only legacyModelTypes'],
+          'source_sha256': {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
+                            for p in sources + [shim_source, schema]},
           'device_access': False, 'simulators': 0, 'real_records': False}
 (out / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
 print(json.dumps({k: v for k, v in report.items() if k != 'source_sha256'}, indent=2))
