@@ -109,6 +109,8 @@ extension CoachRepository {
             guard let plan = planMatches.first,
                   plan.currentRevisionID == expectedRevisionID, plan.updatedAt == expectedUpdatedAt,
                   plan.sourceProgramID == incoming.document.programId, incoming.document.revision > plan.sourceRevision else { throw CoachRepositoryError.revisionConflict }
+            // A new revision here would repoint the synced plan at a revision the other device lacks.
+            guard try !Self.isFromAnotherDevice(plan, context: isolated) else { throw CoachRepositoryError.planFromAnotherDevice }
             let today = Self.civilDate(Date(), timeZone: zone)
             let rows = (plan.sessions ?? [])
             try Self.requireUniqueOccurrences(selected.union(restoreRemovedIDs), among: isolated.fetch(FetchDescriptor<PlannedSession>()))

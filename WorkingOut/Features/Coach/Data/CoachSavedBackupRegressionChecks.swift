@@ -97,6 +97,10 @@ enum CoachSavedBackupRegressionChecks {
         try require(try CoachLocalOwnership.snapshotDigest(restored.mainContext) == expectedDigest,
                     "public restore preserves the complete model graph exactly")
         try require(try Data(contentsOf: photoURL) == photoBytes, "public restore recovers the exact synthetic image bytes")
+        let restoredPhoto = try restored.mainContext.fetch(FetchDescriptor<CoachProgressPhoto>()).first
+        try require(try restoredPhoto.map { CoachPhotoStore.digest(try Data(contentsOf: photoURL)) == $0.digest
+                                        && $0.digest == CoachPhotoStore.digest(photoBytes) } == true,
+                    "restored image digest equals the exported photo record's digest")
         let restoredGraph = try DataBackupService.capture(context: restored.mainContext).coach
         try require(restoredGraph?.plannedSessions.first?.id == occurrence.id && restoredGraph?.executions.first?.id == execution.id,
                     "canonical occurrence and execution identities survive")
@@ -109,6 +113,38 @@ enum CoachSavedBackupRegressionChecks {
         let restoredExecution = try restored.mainContext.fetch(FetchDescriptor<CoachSessionExecution>()).first!
         try require(try CoachExecutionCoordinator.snapshot(restoredExecution).setResults == actual.setResults,
                     "entered actuals survive the saved-file pipeline")
+
+        // Second device: iCloud brought the plan and schedule, but no Coach
+        // records or photo files. The plan reads as created elsewhere until
+        // the backup from the first device is restored.
+        let second = try store("second-device.store")
+        try await DataBackupService.import(from: savedURL, context: second.mainContext)
+        let secondContext = second.mainContext
+        for row in try secondContext.fetch(FetchDescriptor<CoachPlanRevision>()) { secondContext.delete(row) }
+        for row in try secondContext.fetch(FetchDescriptor<CoachSessionExecution>()) { secondContext.delete(row) }
+        for row in try secondContext.fetch(FetchDescriptor<CoachProgressionSuggestion>()) { secondContext.delete(row) }
+        for row in try secondContext.fetch(FetchDescriptor<CoachNutritionTargetPeriod>()) { secondContext.delete(row) }
+        for row in try secondContext.fetch(FetchDescriptor<CoachNutritionLog>()) { secondContext.delete(row) }
+        for row in try secondContext.fetch(FetchDescriptor<CoachRecoveryCheckIn>()) { secondContext.delete(row) }
+        for row in try secondContext.fetch(FetchDescriptor<CoachWaistMeasurement>()) { secondContext.delete(row) }
+        for row in try secondContext.fetch(FetchDescriptor<CoachProgressPhoto>()) { secondContext.delete(row) }
+        for row in try secondContext.fetch(FetchDescriptor<CoachPhaseReview>()) { secondContext.delete(row) }
+        for row in try secondContext.fetch(FetchDescriptor<CoachCalendarMapping>()) { secondContext.delete(row) }
+        try secondContext.save()
+        try files.removeItem(at: photoURL)
+        try? files.removeItem(at: thumbnailURL)
+        guard let syncedPlan = try secondContext.fetch(FetchDescriptor<TrainingPlan>()).first(where: { $0.id == planID }) else {
+            throw CoachRepositoryError.invalidValue("saved backup regression: second-device plan")
+        }
+        try require(try CoachRepository(context: secondContext).isFromAnotherDevice(syncedPlan),
+                    "a synced plan without its revision reads as created on another device")
+        try await DataBackupService.import(from: savedURL, context: secondContext)
+        try require(try !CoachRepository(context: secondContext).isFromAnotherDevice(syncedPlan),
+                    "restoring the first device's backup brings the plan details over")
+        try require(try CoachLocalOwnership.snapshotDigest(secondContext) == expectedDigest,
+                    "second-device restore matches the first device's complete graph")
+        try require(CoachPhotoStore.digest(try Data(contentsOf: photoURL)) == CoachPhotoStore.digest(photoBytes),
+                    "second-device restore recovers the photo with the same digest")
 
         let reopened = try store("restored.store")
         try require(try CoachLocalOwnership.snapshotDigest(reopened.mainContext) == expectedDigest,

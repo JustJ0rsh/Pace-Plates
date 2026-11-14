@@ -161,6 +161,25 @@ import SQLite3
         let resumed = try repository().beginExecution(occurrenceID: occurrence.id)
         try require(execution.id == resumed.id && (try fresh().fetchCount(FetchDescriptor<CoachSessionExecution>())) == 1,
                     "valid occurrence starts once and resumes the same execution")
+        // A plan synced from another device names a revision this store lacks.
+        let localPlan = try fresh().fetch(FetchDescriptor<TrainingPlan>()).first { $0.id == draftID }!
+        try require(try !repository().isFromAnotherDevice(localPlan), "a plan whose revision is here is local")
+        let synced = fresh()
+        let remote = TrainingPlan(title: "Synced", goal: "From another device", source: "coach", status: "draft", startDate: start)
+        remote.currentRevisionID = UUID()
+        synced.insert(remote); try synced.save()
+        before = try digest()
+        try require(try repository().isFromAnotherDevice(remote), "a plan whose revision is missing came from another device")
+        try require(try digest() == before, "the other-device check changes no stored values")
+        do {
+            _ = try await repository().importPlan(document: document("remote", revision: 9), startDate: start,
+                activate: false, replacingDraftID: remote.id, expectedRevisionID: remote.currentRevisionID,
+                expectedDraftUpdatedAt: remote.updatedAt)
+            throw Failure("replacing another device's plan accepted")
+        } catch CoachRepositoryError.planFromAnotherDevice { checks += 1 }
+        try require(try digest() == before, "a refused other-device replacement changes no stored values")
+        let unrevised = TrainingPlan(title: "Legacy", goal: "No revision", source: "manual", status: "draft", startDate: start)
+        try require(try !repository().isFromAnotherDevice(unrevised), "a plan with no revision is not flagged")
         print("Coach repository: \(checks) checks passed")
     }
     struct Failure: Error { let message: String; init(_ message: String) { self.message = message } }

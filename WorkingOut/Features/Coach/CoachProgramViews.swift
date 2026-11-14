@@ -46,6 +46,7 @@ struct CoachProgramDetailView: View {
     @State private var startDate = Date()
     @State private var confirmingDelete = false
     @State private var deleting = false
+    @State private var fromAnotherDevice = false
     @Query private var calendarMappings: [CoachCalendarMapping]
     private var rows: [PlannedSession] { allSessions.filter { $0.plan?.id == plan.id }.sorted { ($0.scheduledDate, $0.intraDayOrder) < ($1.scheduledDate, $1.intraDayOrder) } }
     private var weeks: [Int] { Array(Set(rows.map(\.weekIndex)).union(0..<max(0, plan.durationWeeks))).sorted() }
@@ -61,6 +62,15 @@ struct CoachProgramDetailView: View {
                 if plan.timeZoneIdentifier != TimeZone.current.identifier, !plan.timeZoneIdentifier.isEmpty {
                     Text("This program keeps its dates in \(plan.timeZoneIdentifier). Your device is now in \(TimeZone.current.identifier). Review future dates and reminders before changing the schedule.").font(.caption)
                 }
+            }
+            if fromAnotherDevice {
+                Section {
+                    Label(CoachRepository.otherDeviceTitle, systemImage: "iphone.and.arrow.forward")
+                        .font(.headline)
+                    Text(CoachRepository.otherDeviceNotice)
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+                .accessibilityIdentifier("coach.plan.other_device")
             }
             if plan.status != "active" {
                 Section {
@@ -128,7 +138,7 @@ struct CoachProgramDetailView: View {
         }
         .navigationTitle("Your Plan")
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: plan.currentRevisionID) { do { document = try CoachRepository(context: context).document(for: plan); startDate = plan.startDate; selectedWeek = currentWeek } catch { self.error = error.localizedDescription } }
+        .task(id: plan.currentRevisionID) { do { let repository = CoachRepository(context: context); fromAnotherDevice = try repository.isFromAnotherDevice(plan); document = try repository.document(for: plan); startDate = plan.startDate; selectedWeek = currentWeek } catch { self.error = error.localizedDescription } }
         .confirmationDialog("Delete this program?", isPresented: $confirmingDelete, titleVisibility: .visible) {
             if calendarMappings.contains(where: { mapping in rows.contains { $0.id == mapping.plannedSessionID } }) {
                 Button("Remove App Calendar Events and Delete", role: .destructive) { deleteProgram(keepCalendarEvents: false) }
@@ -277,6 +287,7 @@ struct CoachScheduleEditorView: View {
 }
 
 struct CoachRevisionReviewView: View {
+    @State private var planFromAnotherDevice = false
     let plan: TrainingPlan
     let incoming: CoachValidatedProgram
     @Environment(\.modelContext) private var context
@@ -375,7 +386,7 @@ struct CoachRevisionReviewView: View {
                         saved = true
                     } catch { self.error = error.localizedDescription }
                 }
-            }.disabled(incoming.document.revision <= plan.sourceRevision || saved || saving || expectedUpdatedAt == nil)
+            }.disabled(planFromAnotherDevice || incoming.document.revision <= plan.sourceRevision || saved || saving || expectedUpdatedAt == nil)
             if saved { Text("Reviewed revision saved. Previous results were preserved.") }
             if let error { Text(error).foregroundStyle(.red) }
         }
@@ -384,6 +395,8 @@ struct CoachRevisionReviewView: View {
         .task {
             do {
                 let repository = CoachRepository(context: context)
+                // Saving would be refused; say so before the user reviews everything.
+                if try repository.isFromAnotherDevice(plan) { planFromAnotherDevice = true; error = CoachRepository.otherDeviceNotice; return }
                 previous = try repository.document(for: plan); rows = try repository.occurrences(planID: plan.id)
                 expectedUpdatedAt = plan.updatedAt; expectedRevision = plan.currentRevisionID
                 exerciseMappings = try repository.exerciseMappings(for: incoming.document)
