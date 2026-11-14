@@ -21,12 +21,17 @@ enum CoachBackupReminder {
         defaults.set(date.timeIntervalSince1970, forKey: lastExportKey)
     }
 
-    /// A reminder is due when there is Coach data and no export in the last
-    /// `staleAfterDays` days. A clock moved backwards never hides the reminder
-    /// for longer than the stale window.
-    static func isDue(lastExport: Date?, hasCoachRecords: Bool, now: Date = Date()) -> Bool {
+    static let newRecordThreshold = 20
+
+    /// A reminder is due when there is Coach data and either nothing was
+    /// exported in the last `staleAfterDays` days or at least
+    /// `newRecordThreshold` Coach records were added since the last export. A
+    /// clock moved backwards never hides the reminder for longer than the
+    /// stale window.
+    static func isDue(lastExport: Date?, hasCoachRecords: Bool, newRecordsSinceExport: Int = 0, now: Date = Date()) -> Bool {
         guard hasCoachRecords else { return false }
         guard let lastExport else { return true }
+        if newRecordsSinceExport >= newRecordThreshold { return true }
         let age = now.timeIntervalSince(lastExport)
         return age < 0 ? -age > Double(staleAfterDays) * 86_400 : age >= Double(staleAfterDays) * 86_400
     }
@@ -38,5 +43,5 @@ enum CoachBackupReminder {
         return "Last backup exported \(formatter.localizedString(for: lastExport, relativeTo: now))."
     }
 
-    static let onDeviceOnlyNotice = "Coach programs, results, nutrition, recovery check-ins, waist measurements, and progress photos are stored only on this iPhone. They are not in iCloud and not in iPhone backups. Export a backup to keep them if you delete the app or move to a new phone."
+    static let onDeviceOnlyNotice = "Coach plans, results, nutrition, check-ins, measurements, and photos are on this iPhone only. They’re not in iCloud or iPhone backups. Export a backup to keep them."
 }

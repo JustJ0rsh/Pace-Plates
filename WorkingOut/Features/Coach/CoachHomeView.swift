@@ -63,7 +63,7 @@ struct CoachTodayView: View {
     @Query(sort: \TrainingPlan.updatedAt, order: .reverse) private var plans: [TrainingPlan]
     @Query private var occurrences: [PlannedSession]
     @State private var checkIn: CoachCheckInDestination?
-    @State private var hasCoachRecords = false
+    @State private var backupActivity = CoachBackupStatusSection.Activity()
     @AppStorage(CoachBackupReminder.lastExportKey) private var lastExportStored: Double = 0
     var compact = false
     var body: some View {
@@ -79,15 +79,18 @@ struct CoachTodayView: View {
             }
         }
         .sheet(item: $checkIn) { destination in CoachCheckInView(destination: destination) }
-        .task(id: occurrences.count) { hasCoachRecords = CoachBackupStatusSection.hasCoachRecords(modelContext) }
+        .task(id: [Double(occurrences.count), lastExportStored]) {
+            backupActivity = CoachBackupStatusSection.activity(modelContext, since: CoachBackupReminder.date(fromStored: lastExportStored))
+        }
     }
 
     @ViewBuilder private var backupReminder: some View {
         if !compact, CoachBackupReminder.isDue(lastExport: CoachBackupReminder.date(fromStored: lastExportStored),
-                                               hasCoachRecords: hasCoachRecords) {
+                                               hasCoachRecords: backupActivity.hasRecords,
+                                               newRecordsSinceExport: backupActivity.newSinceExport) {
             VStack(alignment: .leading, spacing: 4) {
                 Label("Back up your Coach data", systemImage: "externaldrive.badge.exclamationmark").font(.headline)
-                Text("Coach records and photos are stored only on this iPhone. Export a backup in Settings → Backup & Data so they aren’t lost if you delete the app or move to a new phone.")
+                Text("Your Coach data is on this iPhone only. Export a backup in Settings → Backup & Data to keep it.")
                     .font(.callout).foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -107,7 +110,8 @@ struct CoachTodayView: View {
                         Text(plan.title).font(.title2.bold()).foregroundStyle(.primary)
                         Label("View Plan", systemImage: "calendar").font(.subheadline)
                         if (try? CoachRepository(context: modelContext).isFromAnotherDevice(plan)) == true {
-                            Text("Set up on another device. Plan details stay there.").font(.caption).foregroundStyle(.secondary)
+                            Text(CoachRepository.otherDeviceNotice).font(.caption).foregroundStyle(.secondary)
+                                .multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading)
                         }
                         Text(Date(), format: .dateTime.weekday(.wide).month().day()).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity, alignment: .leading)
@@ -142,7 +146,7 @@ struct CoachTodayView: View {
                     Text("Your workouts, ready to follow").font(.title2.bold())
                     Text("Add a plan to schedule workouts and runs, then check them off as you go.")
                         .foregroundStyle(.secondary)
-                    Text("Coach data is stored only on this iPhone. You can back it up in Settings → Backup & Data.")
+                    Text("Coach data is on this iPhone only, not in iCloud or iPhone backups. Export a backup in Settings → Backup & Data to keep it.")
                         .font(.caption).foregroundStyle(.secondary)
                     NavigationLink { CoachAddPlanView() } label: { Label("Add Plan", systemImage: "plus") }
                         .buttonStyle(.borderedProminent).accessibilityIdentifier("coach.add_plan")

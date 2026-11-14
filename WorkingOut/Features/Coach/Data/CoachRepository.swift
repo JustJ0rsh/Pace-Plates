@@ -34,7 +34,7 @@ struct CoachActivationReview: Equatable, Sendable {
 }
 
 enum CoachRepositoryError: LocalizedError {
-    case localOwnershipRequired, missingRecord, ambiguousRecord, invalidValue(String), ambiguousExercise(String), futureOnly, revisionConflict, dateCollision, activationReviewChanged
+    case localOwnershipRequired, missingRecord, ambiguousRecord, invalidValue(String), ambiguousExercise(String), futureOnly, revisionConflict, dateCollision, activationReviewChanged, planFromAnotherDevice
     var errorDescription: String? {
         switch self {
         case .localOwnershipRequired: return "Review and enable local storage before saving Coach records."
@@ -46,6 +46,7 @@ enum CoachRepositoryError: LocalizedError {
         case .revisionConflict: return "Review the changed revision, then choose a draft replacement, selected future sessions, or a new plan."
         case .dateCollision: return "More than one entry exists on this date. Select the entry to edit before merging these records."
         case .activationReviewChanged: return "The active plan changed while saving. Review which plan will pause, then start again."
+        case .planFromAnotherDevice: return CoachRepository.otherDeviceNotice
         }
     }
 }
@@ -144,9 +145,15 @@ final class CoachRepository {
     /// device that created it. A plan that names a revision this store does not
     /// have came from another device; its details are not available here.
     func isFromAnotherDevice(_ plan: TrainingPlan) throws -> Bool {
+        try Self.isFromAnotherDevice(plan, context: context)
+    }
+
+    static func isFromAnotherDevice(_ plan: TrainingPlan, context: ModelContext) throws -> Bool {
         guard let revisionID = plan.currentRevisionID else { return false }
         return try !context.fetch(FetchDescriptor<CoachPlanRevision>()).contains { $0.id == revisionID }
     }
+
+    static let otherDeviceNotice = "This program was created on another device. Restore a backup from that device to see it here."
 
     func exerciseMappings(for document: CoachPlanDocument) throws -> [CoachExerciseMapping] {
         let definitions = try context.fetch(FetchDescriptor<ExerciseDefinition>())
@@ -204,6 +211,8 @@ final class CoachRepository {
             let plan: TrainingPlan
             if let replacement = replacingDraftID {
                 guard let draft = existingPlans.first(where: { $0.id == replacement }), draft.status == "draft" else { throw CoachRepositoryError.revisionConflict }
+                // Replacing it here would repoint the synced plan at a revision the other device lacks.
+                guard try !Self.isFromAnotherDevice(draft, context: isolated) else { throw CoachRepositoryError.planFromAnotherDevice }
                 guard expectedRevisionID == draft.currentRevisionID,
                       let expectedDraftUpdatedAt, expectedDraftUpdatedAt == draft.updatedAt,
                       document.revision > draft.sourceRevision else { throw CoachRepositoryError.revisionConflict }

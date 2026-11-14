@@ -171,6 +171,13 @@ import SQLite3
         before = try digest()
         try require(try repository().isFromAnotherDevice(remote), "a plan whose revision is missing came from another device")
         try require(try digest() == before, "the other-device check changes no stored values")
+        do {
+            _ = try await repository().importPlan(document: document("remote", revision: 9), startDate: start,
+                activate: false, replacingDraftID: remote.id, expectedRevisionID: remote.currentRevisionID,
+                expectedDraftUpdatedAt: remote.updatedAt)
+            throw Failure("replacing another device's plan accepted")
+        } catch CoachRepositoryError.planFromAnotherDevice { checks += 1 }
+        try require(try digest() == before, "a refused other-device replacement changes no stored values")
         let unrevised = TrainingPlan(title: "Legacy", goal: "No revision", source: "manual", status: "draft", startDate: start)
         try require(try !repository().isFromAnotherDevice(unrevised), "a plan with no revision is not flagged")
         print("Coach repository: \(checks) checks passed")

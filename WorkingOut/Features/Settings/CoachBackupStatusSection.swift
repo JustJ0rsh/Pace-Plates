@@ -6,7 +6,7 @@ import SwiftData
 struct CoachBackupStatusSection: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage(CoachBackupReminder.lastExportKey) private var lastExportStored: Double = 0
-    @State private var hasCoachRecords = false
+    @State private var activity = Activity()
 
     private var lastExport: Date? { CoachBackupReminder.date(fromStored: lastExportStored) }
 
@@ -16,7 +16,8 @@ struct CoachBackupStatusSection: View {
                 .font(.headline)
             Text(CoachBackupReminder.onDeviceOnlyNotice)
                 .font(.callout).foregroundStyle(.secondary)
-            let due = CoachBackupReminder.isDue(lastExport: lastExport, hasCoachRecords: hasCoachRecords)
+            let due = CoachBackupReminder.isDue(lastExport: lastExport, hasCoachRecords: activity.hasRecords,
+                                                newRecordsSinceExport: activity.newSinceExport)
             Label(CoachBackupReminder.statusText(lastExport: lastExport),
                   systemImage: due ? "exclamationmark.triangle.fill" : "checkmark.circle")
                 .font(.callout)
@@ -25,20 +26,35 @@ struct CoachBackupStatusSection: View {
         } header: {
             Text("Coach data")
         } footer: {
-            Text("Workouts, runs, weight, and plan schedules sync through iCloud when it’s on.")
+            Text("Workouts, runs, weight, and plan schedules sync with iCloud when it’s on.")
         }
         .accessibilityIdentifier("backup.coach.status")
-        .task { hasCoachRecords = Self.hasCoachRecords(modelContext) }
+        .task(id: lastExportStored) { activity = Self.activity(modelContext, since: lastExport) }
     }
 
-    static func hasCoachRecords(_ context: ModelContext) -> Bool {
-        guard CoachPersistence.isLocal(context) else { return false }
-        func any<T: PersistentModel>(_ type: T.Type) -> Bool {
-            var descriptor = FetchDescriptor<T>(); descriptor.fetchLimit = 1
-            return ((try? context.fetchCount(descriptor)) ?? 0) > 0
+    struct Activity: Equatable { var hasRecords = false; var newSinceExport = 0 }
+
+    /// Counts Coach records by their creation dates. Calendar mappings and
+    /// suggestions are derived, so they don't count as data to back up.
+    static func activity(_ context: ModelContext, since lastExport: Date?) -> Activity {
+        guard CoachPersistence.isLocal(context) else { return Activity() }
+        let since = lastExport ?? .distantPast
+        func count<T: PersistentModel>(_ predicate: Predicate<T>?) -> Int {
+            (try? context.fetchCount(FetchDescriptor<T>(predicate: predicate))) ?? 0
         }
-        return any(CoachPlanRevision.self) || any(CoachSessionExecution.self) || any(CoachNutritionLog.self)
-            || any(CoachRecoveryCheckIn.self) || any(CoachWaistMeasurement.self) || any(CoachProgressPhoto.self)
-            || any(CoachPhaseReview.self)
+        let totals = [
+            count(nil as Predicate<CoachPlanRevision>?), count(nil as Predicate<CoachSessionExecution>?),
+            count(nil as Predicate<CoachNutritionLog>?), count(nil as Predicate<CoachRecoveryCheckIn>?),
+            count(nil as Predicate<CoachWaistMeasurement>?), count(nil as Predicate<CoachProgressPhoto>?),
+            count(nil as Predicate<CoachPhaseReview>?)]
+        guard totals.contains(where: { $0 > 0 }) else { return Activity() }
+        let fresh = [
+            count(#Predicate<CoachPlanRevision> { $0.createdAt > since }),
+            count(#Predicate<CoachSessionExecution> { $0.startedAt > since }),
+            count(#Predicate<CoachNutritionLog> { $0.createdAt > since }),
+            count(#Predicate<CoachRecoveryCheckIn> { $0.createdAt > since }),
+            count(#Predicate<CoachWaistMeasurement> { $0.observedAt > since }),
+            count(#Predicate<CoachProgressPhoto> { $0.createdAt > since })]
+        return Activity(hasRecords: true, newSinceExport: fresh.reduce(0, +))
     }
 }

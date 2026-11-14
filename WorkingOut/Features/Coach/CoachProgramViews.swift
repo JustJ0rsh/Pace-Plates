@@ -65,9 +65,9 @@ struct CoachProgramDetailView: View {
             }
             if fromAnotherDevice {
                 Section {
-                    Label("Set up on another device", systemImage: "iphone.and.arrow.forward")
+                    Label("Created on another device", systemImage: "iphone.and.arrow.forward")
                         .font(.headline)
-                    Text("This plan’s schedule syncs through iCloud, but its plan details, phase reviews, and progression are stored only on the device where it was set up. To see them here, export a backup on that device in Settings → Backup & Data, then import it on this device.")
+                    Text(CoachRepository.otherDeviceNotice)
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 .accessibilityIdentifier("coach.plan.other_device")

@@ -15,6 +15,8 @@ import Foundation
         try require(CoachBackupReminder.isDue(lastExport: now.addingTimeInterval(-14 * day), hasCoachRecords: true, now: now), "14-day-old export is due")
         try require(!CoachBackupReminder.isDue(lastExport: now.addingTimeInterval(2 * day), hasCoachRecords: true, now: now), "small clock skew is tolerated")
         try require(CoachBackupReminder.isDue(lastExport: now.addingTimeInterval(30 * day), hasCoachRecords: true, now: now), "far-future export date cannot hide the reminder")
+        try require(!CoachBackupReminder.isDue(lastExport: now.addingTimeInterval(-day), hasCoachRecords: true, newRecordsSinceExport: 19, now: now), "19 new records after a recent export is not due")
+        try require(CoachBackupReminder.isDue(lastExport: now.addingTimeInterval(-day), hasCoachRecords: true, newRecordsSinceExport: 20, now: now), "20 new records since the last export is due")
 
         let suite = "CoachBackupReminderTests-\(UUID())"
         let defaults = UserDefaults(suiteName: suite)!
