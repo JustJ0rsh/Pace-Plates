@@ -32,6 +32,11 @@ struct CoachBackupStatusSection: View {
         .task(id: lastExportStored) { activity = Self.activity(modelContext, since: lastExport) }
     }
 
+    static func hasPhotos(_ context: ModelContext) -> Bool {
+        guard CoachPersistence.isLocal(context) else { return false }
+        return ((try? context.fetchCount(FetchDescriptor<CoachProgressPhoto>())) ?? 0) > 0
+    }
+
     struct Activity: Equatable { var hasRecords = false; var newSinceExport = 0 }
 
     /// Counts Coach records by their creation dates. Calendar mappings and
@@ -50,11 +55,14 @@ struct CoachBackupStatusSection: View {
         guard totals.contains(where: { $0 > 0 }) else { return Activity() }
         let fresh = [
             count(#Predicate<CoachPlanRevision> { $0.createdAt > since }),
-            count(#Predicate<CoachSessionExecution> { $0.startedAt > since }),
+            // Results logged after an export count even when the session started before it.
+            count(#Predicate<CoachSessionExecution> { $0.updatedAt > since }),
             count(#Predicate<CoachNutritionLog> { $0.createdAt > since }),
             count(#Predicate<CoachRecoveryCheckIn> { $0.createdAt > since }),
             count(#Predicate<CoachWaistMeasurement> { $0.observedAt > since }),
-            count(#Predicate<CoachProgressPhoto> { $0.createdAt > since })]
+            count(#Predicate<CoachProgressPhoto> { $0.createdAt > since }),
+            count(#Predicate<CoachPhaseReview> { review in
+                if let reviewedAt = review.reviewedAt { reviewedAt > since } else { false } })]
         return Activity(hasRecords: true, newSinceExport: fresh.reduce(0, +))
     }
 }

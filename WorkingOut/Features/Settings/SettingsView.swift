@@ -569,7 +569,11 @@ struct SettingsView: View {
             }
         }) { item in
             ShareSheet(items: [item.url]) { completed in
-                if completed { CoachBackupReminder.recordExport() }
+                // A backup without photos doesn't cover Coach photos, so it
+                // only counts when there are no photos to lose.
+                if completed, includeCoachPhotosInBackup || !CoachBackupStatusSection.hasPhotos(modelContext) {
+                    CoachBackupReminder.recordExport()
+                }
             }
         }
         .alert("Backup & Data", isPresented: $showAlert) {
@@ -588,8 +592,8 @@ struct SettingsView: View {
             Button("Import") { showImporter = true }
         } message: {
             Text("Records from the backup are added to your history. Items that already exist here are kept and not overwritten. Workouts, runs, weight, and plans can sync through iCloud when enabled; additional Coach records and photos stay on this device."
-                 + (PersistenceController.shared.cloudHistoryStatus.phase == .waitingForDownload
-                    ? " iCloud history hasn’t finished downloading to this device yet. Importing now can add copies of workouts that arrive from iCloud later. Waiting until it finishes is safer."
+                 + (importMayDuplicateCloudHistory
+                    ? " iCloud history hasn’t downloaded to this device yet. Importing now can add copies of workouts that arrive from iCloud later. Waiting until your history appears is safer."
                     : ""))
         }
         .alert("Remove Duplicates?", isPresented: $confirmDedup) {
@@ -674,6 +678,18 @@ struct SettingsView: View {
     // Bind the share sheet to its file so the first presentation has content.
     @State private var exportURL: IdentifiableURL? = nil
     @State private var includeCoachPhotosInBackup = true
+
+    /// "Waiting for download" is the normal state on every launch until that
+    /// launch's first iCloud check finishes, so it only signals a real risk of
+    /// duplicates when this device has no history yet (a new or reinstalled app).
+    private var importMayDuplicateCloudHistory: Bool {
+        let controller = PersistenceController.shared
+        guard controller.isCloudBacked, controller.cloudHistoryStatus.phase == .waitingForDownload else { return false }
+        let local = ((try? modelContext.fetchCount(FetchDescriptor<WorkoutSession>())) ?? 0)
+            + ((try? modelContext.fetchCount(FetchDescriptor<RunningSession>())) ?? 0)
+            + ((try? modelContext.fetchCount(FetchDescriptor<WeightEntry>())) ?? 0)
+        return local == 0
+    }
     @State private var lastExportedBackupURL: URL? = nil
     @State private var showAlert: Bool = false
     @State private var alertMessage: String = ""

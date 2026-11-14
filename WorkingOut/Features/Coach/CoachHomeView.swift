@@ -65,7 +65,15 @@ struct CoachTodayView: View {
     @State private var checkIn: CoachCheckInDestination?
     @State private var backupActivity = CoachBackupStatusSection.Activity()
     @AppStorage(CoachBackupReminder.lastExportKey) private var lastExportStored: Double = 0
+    @State private var planFromAnotherDevice = false
+    @State private var appearances = 0
     var compact = false
+
+    /// Changes whenever Coach records may have been added here: a session's
+    /// status changes, a check-in sheet closes, or a backup is exported.
+    private struct BackupRefreshKey: Hashable {
+        var statuses: [String]; var checkInOpen: Bool; var lastExport: Double
+    }
     var body: some View {
         let _ = (plans.map(\.updatedAt), occurrences.map(\.status))
         let result = Result { try CoachRepository(context: modelContext).today() }
@@ -79,9 +87,14 @@ struct CoachTodayView: View {
             }
         }
         .sheet(item: $checkIn) { destination in CoachCheckInView(destination: destination) }
-        .task(id: [Double(occurrences.count), lastExportStored]) {
-            backupActivity = CoachBackupStatusSection.activity(modelContext, since: CoachBackupReminder.date(fromStored: lastExportStored))
+        .task(id: BackupRefreshKey(statuses: occurrences.map(\.status), checkInOpen: checkIn != nil, lastExport: lastExportStored)) {
+            refreshBackupActivity()
         }
+        .onAppear { appearances += 1; refreshBackupActivity() }
+    }
+
+    private func refreshBackupActivity() {
+        backupActivity = CoachBackupStatusSection.activity(modelContext, since: CoachBackupReminder.date(fromStored: lastExportStored))
     }
 
     @ViewBuilder private var backupReminder: some View {
@@ -109,12 +122,16 @@ struct CoachTodayView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(plan.title).font(.title2.bold()).foregroundStyle(.primary)
                         Label("View Plan", systemImage: "calendar").font(.subheadline)
-                        if (try? CoachRepository(context: modelContext).isFromAnotherDevice(plan)) == true {
+                        if planFromAnotherDevice {
                             Text(CoachRepository.otherDeviceNotice).font(.caption).foregroundStyle(.secondary)
                                 .multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading)
                         }
                         Text(Date(), format: .dateTime.weekday(.wide).month().day()).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity, alignment: .leading)
+                    // Rechecked on each appearance so a restored backup clears the notice.
+                    .task(id: "\(plan.currentRevisionID?.uuidString ?? "")-\(appearances)") {
+                        planFromAnotherDevice = (try? CoachRepository(context: modelContext).isFromAnotherDevice(plan)) == true
+                    }
                 }
                 .accessibilityIdentifier("coach.plan.current")
                 Text("Today").font(.headline)

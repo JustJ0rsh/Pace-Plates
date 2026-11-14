@@ -65,7 +65,7 @@ struct CoachProgramDetailView: View {
             }
             if fromAnotherDevice {
                 Section {
-                    Label("Created on another device", systemImage: "iphone.and.arrow.forward")
+                    Label(CoachRepository.otherDeviceTitle, systemImage: "iphone.and.arrow.forward")
                         .font(.headline)
                     Text(CoachRepository.otherDeviceNotice)
                         .font(.callout).foregroundStyle(.secondary)
@@ -287,6 +287,7 @@ struct CoachScheduleEditorView: View {
 }
 
 struct CoachRevisionReviewView: View {
+    @State private var planFromAnotherDevice = false
     let plan: TrainingPlan
     let incoming: CoachValidatedProgram
     @Environment(\.modelContext) private var context
@@ -385,7 +386,7 @@ struct CoachRevisionReviewView: View {
                         saved = true
                     } catch { self.error = error.localizedDescription }
                 }
-            }.disabled(incoming.document.revision <= plan.sourceRevision || saved || saving || expectedUpdatedAt == nil)
+            }.disabled(planFromAnotherDevice || incoming.document.revision <= plan.sourceRevision || saved || saving || expectedUpdatedAt == nil)
             if saved { Text("Reviewed revision saved. Previous results were preserved.") }
             if let error { Text(error).foregroundStyle(.red) }
         }
@@ -394,6 +395,8 @@ struct CoachRevisionReviewView: View {
         .task {
             do {
                 let repository = CoachRepository(context: context)
+                // Saving would be refused; say so before the user reviews everything.
+                if try repository.isFromAnotherDevice(plan) { planFromAnotherDevice = true; error = CoachRepository.otherDeviceNotice; return }
                 previous = try repository.document(for: plan); rows = try repository.occurrences(planID: plan.id)
                 expectedUpdatedAt = plan.updatedAt; expectedRevision = plan.currentRevisionID
                 exerciseMappings = try repository.exerciseMappings(for: incoming.document)
