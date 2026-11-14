@@ -1,6 +1,6 @@
 # Coach data: iCloud sync or backup — recommendation (2026-11-14)
 
-Status: design only. Nothing here is implemented. Read against `origin/main` @ 44e80e3 (2.5.3).
+Status: option (b) and the other-device guard are implemented on `claude/admiring-noyce-e7f406`. Option (a) is not. Read against `origin/main` @ 44e80e3 (2.5.3).
 
 ## Where things stand
 

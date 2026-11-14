@@ -140,6 +140,14 @@ final class CoachRepository {
         return try JSONDecoder().decode(CoachPlanDocument.self, from: revision.documentData)
     }
 
+    /// `TrainingPlan` syncs through iCloud, but `CoachPlanRevision` stays on the
+    /// device that created it. A plan that names a revision this store does not
+    /// have came from another device; its details are not available here.
+    func isFromAnotherDevice(_ plan: TrainingPlan) throws -> Bool {
+        guard let revisionID = plan.currentRevisionID else { return false }
+        return try !context.fetch(FetchDescriptor<CoachPlanRevision>()).contains { $0.id == revisionID }
+    }
+
     func exerciseMappings(for document: CoachPlanDocument) throws -> [CoachExerciseMapping] {
         let definitions = try context.fetch(FetchDescriptor<ExerciseDefinition>())
         var seen = Set<String>()

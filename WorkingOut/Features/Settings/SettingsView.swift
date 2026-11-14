@@ -528,6 +528,8 @@ struct SettingsView: View {
                 .disabled(isProcessingBackup)
             }
 
+            CoachBackupStatusSection()
+
             Section("Backup contents") {
                 Toggle("Include progress photos", isOn: $includeCoachPhotosInBackup)
                 Text(includeCoachPhotosInBackup ? "History backup includes app-owned photos and their metadata." : "History backup excludes progress photos. Your app copies remain on this device.")
@@ -566,7 +568,9 @@ struct SettingsView: View {
                 lastExportedBackupURL = nil
             }
         }) { item in
-            ShareSheet(items: [item.url])
+            ShareSheet(items: [item.url]) { completed in
+                if completed { CoachBackupReminder.recordExport() }
+            }
         }
         .alert("Backup & Data", isPresented: $showAlert) {
             Button("OK", role: .cancel) {}
@@ -577,13 +581,16 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) {}
             Button("Export") { exportTapped() }
         } message: {
-            Text("This creates an unencrypted backup file containing your workouts, runs with GPS routes, body weight history, and AI coach conversations. Only share or store it somewhere you trust.")
+            Text("This creates an unencrypted backup file containing your workouts, runs with GPS routes, body weight history, AI coach conversations, and Coach plans, results, nutrition, recovery check-ins, and measurements\(includeCoachPhotosInBackup ? ", plus progress photos" : "")." + " Only share or store it somewhere you trust.")
         }
         .alert("Import Data?", isPresented: $confirmImport) {
             Button("Cancel", role: .cancel) {}
             Button("Import") { showImporter = true }
         } message: {
-            Text("Records from the backup are added to your history. Items that already exist here are kept and not overwritten. Workouts, runs, weight, and plans can sync through iCloud when enabled; additional Coach records and photos stay on this device.")
+            Text("Records from the backup are added to your history. Items that already exist here are kept and not overwritten. Workouts, runs, weight, and plans can sync through iCloud when enabled; additional Coach records and photos stay on this device."
+                 + (PersistenceController.shared.cloudHistoryStatus.phase == .waitingForDownload
+                    ? " iCloud history hasn’t finished downloading to this device yet. Importing now can add copies of workouts that arrive from iCloud later. Waiting until it finishes is safer."
+                    : ""))
         }
         .alert("Remove Duplicates?", isPresented: $confirmDedup) {
             Button("Cancel", role: .cancel) {}

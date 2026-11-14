@@ -46,6 +46,7 @@ struct CoachProgramDetailView: View {
     @State private var startDate = Date()
     @State private var confirmingDelete = false
     @State private var deleting = false
+    @State private var fromAnotherDevice = false
     @Query private var calendarMappings: [CoachCalendarMapping]
     private var rows: [PlannedSession] { allSessions.filter { $0.plan?.id == plan.id }.sorted { ($0.scheduledDate, $0.intraDayOrder) < ($1.scheduledDate, $1.intraDayOrder) } }
     private var weeks: [Int] { Array(Set(rows.map(\.weekIndex)).union(0..<max(0, plan.durationWeeks))).sorted() }
@@ -61,6 +62,15 @@ struct CoachProgramDetailView: View {
                 if plan.timeZoneIdentifier != TimeZone.current.identifier, !plan.timeZoneIdentifier.isEmpty {
                     Text("This program keeps its dates in \(plan.timeZoneIdentifier). Your device is now in \(TimeZone.current.identifier). Review future dates and reminders before changing the schedule.").font(.caption)
                 }
+            }
+            if fromAnotherDevice {
+                Section {
+                    Label("Set up on another device", systemImage: "iphone.and.arrow.forward")
+                        .font(.headline)
+                    Text("This plan’s schedule syncs through iCloud, but its plan details, phase reviews, and progression are stored only on the device where it was set up. To see them here, export a backup on that device in Settings → Backup & Data, then import it on this device.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+                .accessibilityIdentifier("coach.plan.other_device")
             }
             if plan.status != "active" {
                 Section {
@@ -128,7 +138,7 @@ struct CoachProgramDetailView: View {
         }
         .navigationTitle("Your Plan")
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: plan.currentRevisionID) { do { document = try CoachRepository(context: context).document(for: plan); startDate = plan.startDate; selectedWeek = currentWeek } catch { self.error = error.localizedDescription } }
+        .task(id: plan.currentRevisionID) { do { let repository = CoachRepository(context: context); fromAnotherDevice = try repository.isFromAnotherDevice(plan); document = try repository.document(for: plan); startDate = plan.startDate; selectedWeek = currentWeek } catch { self.error = error.localizedDescription } }
         .confirmationDialog("Delete this program?", isPresented: $confirmingDelete, titleVisibility: .visible) {
             if calendarMappings.contains(where: { mapping in rows.contains { $0.id == mapping.plannedSessionID } }) {
                 Button("Remove App Calendar Events and Delete", role: .destructive) { deleteProgram(keepCalendarEvents: false) }
