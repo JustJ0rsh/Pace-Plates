@@ -34,7 +34,7 @@ struct CoachActivationReview: Equatable, Sendable {
 }
 
 enum CoachRepositoryError: LocalizedError {
-    case localOwnershipRequired, missingRecord, ambiguousRecord, invalidValue(String), ambiguousExercise(String), futureOnly, revisionConflict, dateCollision, activationReviewChanged
+    case localOwnershipRequired, missingRecord, ambiguousRecord, invalidValue(String), ambiguousExercise(String), futureOnly, revisionConflict, dateCollision, activationReviewChanged, planFromAnotherDevice
     var errorDescription: String? {
         switch self {
         case .localOwnershipRequired: return "Review and enable local storage before saving Coach records."
@@ -46,6 +46,7 @@ enum CoachRepositoryError: LocalizedError {
         case .revisionConflict: return "Review the changed revision, then choose a draft replacement, selected future sessions, or a new plan."
         case .dateCollision: return "More than one entry exists on this date. Select the entry to edit before merging these records."
         case .activationReviewChanged: return "The active plan changed while saving. Review which plan will pause, then start again."
+        case .planFromAnotherDevice: return CoachRepository.otherDeviceNotice
         }
     }
 }
@@ -136,9 +137,34 @@ final class CoachRepository {
 
     func document(for plan: TrainingPlan) throws -> CoachPlanDocument? {
         guard let revisionID = plan.currentRevisionID,
-              let revision = try context.fetch(FetchDescriptor<CoachPlanRevision>()).first(where: { $0.id == revisionID }) else { return nil }
+              let revision = try Self.revision(revisionID, context: context) else { return nil }
         return try JSONDecoder().decode(CoachPlanDocument.self, from: revision.documentData)
     }
+
+    /// The one place that looks up a plan's revision by ID.
+    static func revision(_ id: UUID, context: ModelContext) throws -> CoachPlanRevision? {
+        var descriptor = FetchDescriptor<CoachPlanRevision>(predicate: #Predicate { $0.id == id })
+        descriptor.fetchLimit = 1
+        return try context.fetch(descriptor).first
+    }
+
+    /// `TrainingPlan` syncs through iCloud, but `CoachPlanRevision` stays on the
+    /// device that created it. A plan that names a revision this store does not
+    /// have came from another device, or from before the app was reinstalled;
+    /// its details are not available here. (Name kept for existing callers.)
+    func isFromAnotherDevice(_ plan: TrainingPlan) throws -> Bool {
+        try Self.isFromAnotherDevice(plan, context: context)
+    }
+
+    static func isFromAnotherDevice(_ plan: TrainingPlan, context: ModelContext) throws -> Bool {
+        guard let revisionID = plan.currentRevisionID else { return false }
+        var descriptor = FetchDescriptor<CoachPlanRevision>(predicate: #Predicate { $0.id == revisionID })
+        descriptor.fetchLimit = 1
+        return try context.fetchCount(descriptor) == 0
+    }
+
+    static let otherDeviceTitle = "Plan details aren’t on this iPhone"
+    static let otherDeviceNotice = "This plan came from another device or from before the app was reinstalled. Restore a Backup & Data export that includes it to see its details here."
 
     func exerciseMappings(for document: CoachPlanDocument) throws -> [CoachExerciseMapping] {
         let definitions = try context.fetch(FetchDescriptor<ExerciseDefinition>())
@@ -196,6 +222,8 @@ final class CoachRepository {
             let plan: TrainingPlan
             if let replacement = replacingDraftID {
                 guard let draft = existingPlans.first(where: { $0.id == replacement }), draft.status == "draft" else { throw CoachRepositoryError.revisionConflict }
+                // Replacing it here would repoint the synced plan at a revision the other device lacks.
+                guard try !Self.isFromAnotherDevice(draft, context: isolated) else { throw CoachRepositoryError.planFromAnotherDevice }
                 guard expectedRevisionID == draft.currentRevisionID,
                       let expectedDraftUpdatedAt, expectedDraftUpdatedAt == draft.updatedAt,
                       document.revision > draft.sourceRevision else { throw CoachRepositoryError.revisionConflict }

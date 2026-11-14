@@ -66,6 +66,7 @@ enum CoachProgressionEvaluator {
     static func generate(plan: TrainingPlan, context: ModelContext) throws -> (suggestions: [CoachProgressionSuggestion], holds: [String]) {
         try CoachRepository(context: context).requireLocal()
         try invalidateChangedEvidence(context: context)
+        if try CoachRepository.isFromAnotherDevice(plan, context: context) { return ([], [CoachRepository.otherDeviceNotice]) }
         guard let document = try CoachRepository(context: context).document(for: plan) else { return ([], ["No authored progression rules are available."]) }
         let evidence = try evidence(context: context, planID: plan.id)
         let checks = try context.fetch(FetchDescriptor<CoachRecoveryCheckIn>())
