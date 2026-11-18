@@ -292,15 +292,25 @@ final class TrainingPlanService {
         }
     }
 
+    /// Runs on every return to the app, so it fetches only legacy-linked runs
+    /// and the rows sharing their IDs instead of all runs and sessions.
+    /// Fetching by ID keeps every duplicate of an ID, so the uniqueness
+    /// checks match a full fetch.
     func reconcileTrackedRuns(context: ModelContext) {
-        let planned = (try? context.fetch(FetchDescriptor<PlannedSession>())) ?? []
+        let linked = (try? context.fetch(FetchDescriptor<RunningSession>(predicate: #Predicate {
+            $0.canonicalPlannedSessionID == nil && $0.plannedSessionID != nil
+        }))) ?? []
+        guard !linked.isEmpty else { return }
+        let runIDs = Set(linked.map(\.id))
+        let plannedIDs = Set(linked.compactMap(\.plannedSessionID))
+        let planned = (try? context.fetch(FetchDescriptor<PlannedSession>(predicate: #Predicate { plannedIDs.contains($0.id) }))) ?? []
         let byID = RecordIdentityLookup.uniqueIndex(planned, by: \.id)
-        let runs = (try? context.fetch(FetchDescriptor<RunningSession>())) ?? []
+        let runs = (try? context.fetch(FetchDescriptor<RunningSession>(predicate: #Predicate { runIDs.contains($0.id) }))) ?? []
         let uniqueRuns = RecordIdentityLookup.uniqueIndex(runs, by: \.id)
-        let uniqueLinks = RecordIdentityLookup.uniqueIndex(runs.filter { $0.canonicalPlannedSessionID == nil && $0.plannedSessionID != nil }, by: \.plannedSessionID)
+        let uniqueLinks = RecordIdentityLookup.uniqueIndex(linked, by: \.plannedSessionID)
         var changed = false
 
-        for run in runs {
+        for run in linked {
             guard run.canonicalPlannedSessionID == nil, let plannedID = run.plannedSessionID,
                   uniqueRuns[run.id] != nil, uniqueLinks[plannedID] != nil,
                   let session = byID[plannedID],

@@ -236,10 +236,17 @@ struct ContentView: View {
         } message: {
             Text((workoutSaveRecoveries.recovery(id: presentedWorkoutRecoveryID)?.message ?? "") + " Your draft remains available under Retry unsaved workouts. Retry before closing the app.")
         }
-        .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange).receive(on: RunLoop.main)) { _ in
+        // Saves and iCloud imports post this in bursts, especially on resume.
+        // One check after the burst settles does the same upkeep.
+        .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)
+            .debounce(for: .seconds(2), scheduler: RunLoop.main)) { _ in
             persistenceController.reconcileExerciseLibraryIfNeeded()
         }
         .task {
+            // Let the first frame draw before library and plan maintenance.
+            // These used to run in onAppear and held the launch screen up.
+            await Task.yield()
+            runLaunchMaintenance()
             if persistenceController.isCoachLocal {
                 do {
                     try CoachRepository(context: persistenceController.container.mainContext).recoverPhotoImports()
@@ -268,35 +275,6 @@ struct ContentView: View {
                 AIProviderManager.cleanUpLegacyOpenRouterArtifacts()
                 DataBackupService.removeStaleExportFiles()
             }
-            persistenceController.reconcileExerciseLibraryIfNeeded()
-            TrainingPlanService.shared.syncRunningPlans(
-                context: persistenceController.container.mainContext
-            )
-            // Ensure legacy arm exercises are reclassified to Biceps/Triceps
-            // (idempotent)
-
-            #if DEBUG
-            DebugDataGenerator.hideLegacySampleMarkers(context: persistenceController.container.mainContext)
-            if let fixtureName = launchConfiguration.fixtureName {
-                DebugDataGenerator.generateUITestFixture(
-                    named: fixtureName,
-                    context: persistenceController.container.mainContext
-                )
-            }
-            #endif
-            
-            
-            // Seed built-in workout templates (idempotent)
-            Task { @MainActor in
-                do {
-                    try await TemplateSeeder.shared.seedBuiltInTemplates(
-                        context: persistenceController.container.mainContext
-                    )
-                } catch {
-                    print("❌ Failed to seed built-in templates: \(error)")
-                }
-            }
-
             let userProfile = UserProfileStore.shared
             userProfile.retryLoadingIfUnavailable()
             userProfile.restoreUnitPreferences()
@@ -390,6 +368,28 @@ extension ContentView {
     private var hasRecoverableRun: Bool {
         let tracker = RunTracker.shared
         return tracker.isRunning || (tracker.duration > 0 && tracker.startDate != nil)
+    }
+
+    /// Idempotent library, plan and fixture upkeep, run once per storage
+    /// generation after the first frame.
+    @MainActor
+    private func runLaunchMaintenance() {
+        let context = persistenceController.container.mainContext
+        persistenceController.reconcileExerciseLibraryIfNeeded()
+        TrainingPlanService.shared.syncRunningPlans(context: context)
+        #if DEBUG
+        DebugDataGenerator.hideLegacySampleMarkers(context: context)
+        if let fixtureName = launchConfiguration.fixtureName {
+            DebugDataGenerator.generateUITestFixture(named: fixtureName, context: context)
+        }
+        #endif
+        Task { @MainActor in
+            do {
+                try await TemplateSeeder.shared.seedBuiltInTemplates(context: context)
+            } catch {
+                print("❌ Failed to seed built-in templates: \(error)")
+            }
+        }
     }
 
     private func reconcileLiveActivities() {

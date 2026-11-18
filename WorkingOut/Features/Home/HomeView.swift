@@ -316,58 +316,50 @@ struct HomeView: View {
 
     // Activity streaks
     private var activityDailyStreakDays: Int {
-        let calendar = Calendar.current
-        let runDays = runningSessions.map { calendar.startOfDay(for: $0.date) }
-        let workoutDays = workoutSessions.filter { WorkoutStatistics.hasActivity($0) }.map { calendar.startOfDay(for: $0.date) }
-        let activityDays = Set(runDays + workoutDays)
-        guard !activityDays.isEmpty else { return 0 }
-        let today = calendar.startOfDay(for: Date())
-        let yesterday = calendar.date(byAdding: .day, value: -1, to: today) ?? today
-        // A daily streak remains current through the day after the last
-        // activity, but older streaks have expired.
-        let startAnchor: Date
-        if activityDays.contains(today) {
-            startAnchor = today
-        } else if activityDays.contains(yesterday) {
-            startAnchor = yesterday
-        } else {
-            return 0
-        }
-        var streak = 0
-        var day = startAnchor
-        while activityDays.contains(day) {
-            streak += 1
-            guard let prev = calendar.date(byAdding: .day, value: -1, to: day) else { break }
-            day = prev
-        }
-        return streak
+        activityStreak(component: .day) { Calendar.current.startOfDay(for: $0) }
     }
 
     private var activityWeeklyStreakWeeks: Int {
+        activityStreak(component: .weekOfYear) { Calendar.current.startOfWeek(for: $0) }
+    }
+
+    /// Counts consecutive periods with a run or an active workout, starting
+    /// from this period or the one before it; older streaks have expired.
+    /// Checking a workout loads its exercise logs, so this looks at recent
+    /// sessions first and widens the window only while the streak reaches
+    /// its edge. Both arrays are sorted newest first.
+    private func activityStreak(component: Calendar.Component, period: (Date) -> Date) -> Int {
         let calendar = Calendar.current
-        let allDates = runningSessions.map { $0.date } + workoutSessions.filter { WorkoutStatistics.hasActivity($0) }.map { $0.date }
-        guard !allDates.isEmpty else { return 0 }
-        let weeksWithActivity: Set<Date> = Set(allDates.map { calendar.startOfWeek(for: $0) })
-        let thisWeek = calendar.startOfWeek(for: Date())
-        let previousWeek = calendar.date(byAdding: .weekOfYear, value: -1, to: thisWeek) ?? thisWeek
-        // As with daily streaks, the immediately previous period can still be
-        // extended; a gap longer than that expires the current streak.
-        let startAnchor: Date
-        if weeksWithActivity.contains(thisWeek) {
-            startAnchor = thisWeek
-        } else if weeksWithActivity.contains(previousWeek) {
-            startAnchor = previousWeek
-        } else {
-            return 0
+        let current = period(Date())
+        let previous = calendar.date(byAdding: component, value: -1, to: current) ?? current
+        var windowDays = 60
+        while true {
+            let lower = calendar.date(byAdding: .day, value: -windowDays, to: calendar.startOfDay(for: Date())) ?? .distantPast
+            let runs = runningSessions.prefix { $0.date >= lower }
+            let workouts = workoutSessions.prefix { $0.date >= lower }
+            let periods = Set(runs.map { period($0.date) }
+                + workouts.filter { WorkoutStatistics.hasActivity($0) }.map { period($0.date) })
+            let startAnchor: Date
+            if periods.contains(current) {
+                startAnchor = current
+            } else if periods.contains(previous) {
+                startAnchor = previous
+            } else {
+                return 0
+            }
+            var streak = 0
+            var day = startAnchor
+            while periods.contains(day) {
+                streak += 1
+                guard let prev = calendar.date(byAdding: component, value: -1, to: day) else { return streak }
+                day = prev
+            }
+            let hasOlder = runs.count < runningSessions.count || workouts.count < workoutSessions.count
+            // The period that ended the streak lies partly before the window,
+            // so older sessions could still extend it.
+            guard day < lower, hasOlder else { return streak }
+            windowDays *= 2
         }
-        var streak = 0
-        var week = startAnchor
-        while weeksWithActivity.contains(week) {
-            streak += 1
-            guard let prev = calendar.date(byAdding: .weekOfYear, value: -1, to: week) else { break }
-            week = prev
-        }
-        return streak
     }
 
     private var streakDisplayText: String {
